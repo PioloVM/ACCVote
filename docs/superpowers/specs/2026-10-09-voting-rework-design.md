@@ -21,6 +21,7 @@ solo-candidate positions work end-to-end, and substantially speeds up the site.
 |---|---|
 | Implementation approach | **Approach 1**: rework the existing server-rendered ballot branch (`dashboard.php?page=vote&election_id=X`, lines 311–886) in place. No SPA migration. |
 | Empty ballot submit | **Allowed.** Zero picks anywhere = valid abstention; the election locks as voted (409 on re-vote), no `votes` rows inserted. |
+| Abstention lock storage | **New `ballot_submissions(user_id, election_id, submitted_at)` table** (PK `user_id, election_id`) in both schema files, written on every submit. All already-voted detection switches from "has `votes` rows" to this table. |
 | Panel switch mid-ballot | Sidebar navigation works freely (no exit-guard modal). **Selections reset on switch** — nothing persisted. |
 | Drafts | Remove the Save & Exit **option** and all draft reading. No **new** draft-cleanup code; the pre-existing `DELETE FROM vote_drafts` on submit stays as-is, the `draft.php` endpoint file remains untouched, and old draft rows are simply never read again. |
 | Database | Local dev uses **local MySQL** (never Neon). Deliver a validated **fresh-install Postgres schema** for a **new** Neon database after deploy. Current Neon DB must not be modified. |
@@ -59,7 +60,13 @@ Add/change:
 
 - **Delete** the all-positions-required rejection (`vote.php:146–149`, "Please select a candidate for
   every position"). Positions with zero picks are skipped; a fully empty ballot submits and locks
-  the election as voted (`users.has_voted = 1`, no `votes` rows).
+  the election as voted via **`ballot_submissions`** (no `votes` rows).
+- **Already-voted detection moves to `ballot_submissions`** everywhere: `vote.php:86–95`,
+  `dashboard-data.php userHasVotedInElection()` (`:60–69`), and the ballot page's `hasVoted`
+  (`dashboard.php:48–57`). A row is inserted in `vote.php` on **every** successful submit (empty or
+  not), inside the same transaction. The admin per-student **vote reset** must clear
+  `ballot_submissions` alongside `votes`, or reset students stay locked out. Legacy
+  `users.has_voted = 1` keeps being set as today (no other behavior changes).
 - Retain: login/POST/CSRF/rate-limit guards, `syncElectionStatuses`, ongoing+date window check,
   DSG department eligibility, already-voted 409, year-restriction filter, per-position
   `winner_count` cap, and candidate-belongs-to-position validation for any picks provided.
@@ -136,9 +143,9 @@ uncontested positions (admin `computeWinners`, "Uncontested" label at `admin/das
 **Neon deliverable:**
 
 - A validated **fresh-install Postgres schema** file for a new Neon database: audit `schema.sql`
-  against actual code usage for drift, add the B3 indexes, verify table-for-table parity with
-  `schema.mysql.sql`, and provide it as the import file for post-deploy setup. The existing Neon
-  database is never touched.
+  against actual code usage for drift, add the B3 indexes **and the `ballot_submissions` table**,
+  verify table-for-table parity with `schema.mysql.sql`, and provide it as the import file for
+  post-deploy setup. The existing Neon database is never touched.
 
 ### B3. Performance (ordered by impact)
 
