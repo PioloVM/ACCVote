@@ -10,9 +10,11 @@
  *   studentId  <-> student_id
  *   fullName   <-> name
  *   department <-> department
- *   major      <-> major
- *   section    <-> section
- *   yearLevel  <-> year_level
+ *   yearLevel  <-> year_level (computed from schoolYear vs. the active
+ *                 school year — see computeYearLevel() in functions.php;
+ *                 not directly hand-edited here)
+ *   schoolYear <-> school_year_id (FK to school_years — the year the
+ *                 student started)
  *   email      <-> email
  *   status     <-> registration_status  ('unregistered' | 'active' | 'suspended')
  *   hasVoted   <-> has_voted            (0 / 1)
@@ -54,9 +56,7 @@ function checkFieldLengths(array $fields): ?string
     $limits = [
         'Student ID' => [$fields['student_id'] ?? null, 20],
         'Full name' => [$fields['fullName'] ?? null, 100],
-        'Department' => [$fields['department'] ?? null, 50],
-        'Major' => [$fields['major'] ?? null, 100],
-        'Section' => [$fields['section'] ?? null, 20],
+        'Faculty' => [$fields['department'] ?? null, 150],
         'Year level' => [$fields['yearLevel'] ?? null, 20],
         'Email' => [$fields['email'] ?? null, 100],
     ];
@@ -68,15 +68,61 @@ function checkFieldLengths(array $fields): ?string
     return null;
 }
 
+// Resolves the year level to store for a student. Rule (admins may use all
+// six statuses, so resolveYearDeclaration() is deliberately NOT used here):
+//   - status 'normal'  -> year level is ALWAYS computed from the school year;
+//                         any yearLevel in the payload is ignored.
+//   - any other status -> year level is taken from the payload (admin-chosen),
+//                         validated against year_levels, never recomputed.
+// Returns ['ok'=>bool, 'error'=>?string, 'year_level'=>?string, 'keep'=>bool]
+// 'keep' = leave the stored value untouched (nothing valid to write).
+function resolveAdminYearLevel(PDO $pdo, string $status, ?int $startYear, ?string $payloadLevel, ?string $existingLevel): array
+{
+    $yearLevelNames = $pdo->query('SELECT name FROM year_levels ORDER BY sort_order, name')->fetchAll(PDO::FETCH_COLUMN);
+    $payloadLevel = trim((string) $payloadLevel);
+
+    if ($status === 'normal') {
+        if ($startYear === null) {
+            return ['ok' => true, 'error' => null, 'year_level' => null, 'keep' => true];
+        }
+        $computed = computeYearLevel($startYear, currentSchoolYearStartYear(), $yearLevelNames);
+        if ($computed['label'] === null) {
+            // Past the configured levels: nothing sensible to compute, so don't clobber what's stored.
+            return ['ok' => true, 'error' => null, 'year_level' => null, 'keep' => true];
+        }
+        return ['ok' => true, 'error' => null, 'year_level' => $computed['label'], 'keep' => false];
+    }
+
+    if ($payloadLevel !== '') {
+        if (!in_array($payloadLevel, $yearLevelNames, true)) {
+            return ['ok' => false, 'error' => 'That year level does not exist.', 'year_level' => null, 'keep' => false];
+        }
+        return ['ok' => true, 'error' => null, 'year_level' => $payloadLevel, 'keep' => false];
+    }
+
+    // No level supplied for a non-normal student: keep what's stored. If nothing
+    // is stored yet (new record), a level is required.
+    if ($existingLevel === null || $existingLevel === '') {
+        return ['ok' => false, 'error' => 'Select a year level for this student.', 'year_level' => null, 'keep' => false];
+    }
+    return ['ok' => true, 'error' => null, 'year_level' => null, 'keep' => true];
+}
+
+// validateStudentIdFormat() now lives in includes/functions.php — shared
+// with student/register.php, since students can now self-register
+// directly instead of only activating an admin-pre-created row.
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 // ---------- GET: list all students ----------
 if ($method === 'GET') {
     $stmt = $pdo->query('
-        SELECT id, student_id, name, department, major, section, year_level,
-               email, has_voted, registration_status
-        FROM users
-        ORDER BY name ASC
+        SELECT u.id, u.student_id, u.name, u.department, u.year_level,
+               u.email, u.has_voted, u.registration_status, u.account_status,
+               u.school_year_id, sy.label AS school_year_label
+        FROM users u
+        LEFT JOIN school_years sy ON sy.id = u.school_year_id
+        ORDER BY u.name ASC
     ');
     $rows = $stmt->fetchAll();
 
@@ -100,12 +146,13 @@ if ($method === 'GET') {
             'student_id' => $r['student_id'],
             'name' => $r['name'],
             'department' => $r['department'],
-            'major' => $r['major'],
-            'section' => $r['section'],
             'year_level' => $r['year_level'],
+            'school_year_id' => $r['school_year_id'] !== null ? (int) $r['school_year_id'] : null,
+            'school_year_label' => $r['school_year_label'],
             'email' => $r['email'],
             'has_voted' => (int) $r['has_voted'],
             'status' => $r['registration_status'] ?: 'unregistered',
+            'account_status' => $r['account_status'] ?: 'normal',
             'voted_election_ids' => $voteMap[(int) $r['id']] ?? [],
         ];
     }, $rows);
@@ -119,135 +166,54 @@ if (!verifyCsrfToken($body['csrf_token'] ?? null)) {
     respond(['error' => 'Your session expired. Please refresh and try again.'], 403);
 }
 
-// ---------- POST: create a new student, OR bulk-import from CSV ----------
+// Per-admin rate limit on every write (same policy as the other admin APIs).
+$adminWriteKey = 'admin_write:admin:' . (int) ($_SESSION['admin_id'] ?? 0);
+if (isRateLimitedKey($pdo, $adminWriteKey, 120, 60)) {
+    respond(['error' => 'Too many requests. Please slow down.'], 429);
+}
+recordAttemptKey($pdo, $adminWriteKey);
+
+// ---------- POST: create a new student ----------
+// Bulk CSV import was removed — students self-register directly now
+// (see student/register.php), which covers the case this used to exist
+// for. This endpoint only ever creates one student at a time.
 if ($method === 'POST') {
-    // Bulk import — rows are parsed client-side (see parseCSV()/
-    // rowsToStudentRecords() in dashboard.php) and sent here as plain
-    // JSON, one object per row. This is a best-effort import: rows that
-    // fail validation are SKIPPED (with a reason reported back), not
-    // treated as a reason to fail the whole batch — losing 3 rows out of
-    // 300 to a typo shouldn't block the other 297 from being imported.
-    // Imported students always land as 'unregistered' with no password
-    // (self-activation flow), matching what happens when the single
-    // Register Student form is submitted with no password — bulk import
-    // deliberately never accepts passwords over CSV.
-    if (!empty($body['bulkImport'])) {
-        $rows = $body['rows'] ?? [];
-        if (!is_array($rows) || empty($rows)) {
-            respond(['error' => 'No rows to import.'], 400);
-        }
-        if (count($rows) > 2000) {
-            respond(['error' => 'Too many rows in one import (max 2000) — split into smaller files.'], 400);
-        }
+    $studentId    = trim($body['student_id'] ?? '');
+    $name         = trim($body['fullName'] ?? '');
+    $department   = trim($body['department'] ?? '');
+    $schoolYearId = (int) ($body['schoolYearId'] ?? 0);
+    $email        = trim($body['email'] ?? '');
+    $password     = (string) ($body['password'] ?? '');
 
-        // Department/Major/Year Level are validated against the actual
-        // managed lists (see admin/api/settings.php) — this is the one
-        // place those lists are enforced, since a typo here silently
-        // creates a value that will never appear in any dropdown/filter
-        // afterward.
-        $validDepartments = $pdo->query('SELECT code FROM departments')->fetchAll(PDO::FETCH_COLUMN);
-        $validYearLevels = $pdo->query('SELECT name FROM year_levels')->fetchAll(PDO::FETCH_COLUMN);
-        $majorsByDept = [];
-        foreach ($pdo->query('SELECT department_code, name FROM majors')->fetchAll() as $m) {
-            $majorsByDept[$m['department_code']][] = $m['name'];
-        }
-
-        $existingIds = array_flip($pdo->query('SELECT student_id FROM users')->fetchAll(PDO::FETCH_COLUMN));
-
-        $seenInFile = [];
-        $toInsert = [];
-        $skipped = [];
-
-        foreach ($rows as $i => $row) {
-            $rowNum = $i + 1;
-            $studentId = trim((string) ($row['student_id'] ?? ''));
-            $name = trim((string) ($row['fullName'] ?? ''));
-            $department = trim((string) ($row['department'] ?? ''));
-            $major = trim((string) ($row['major'] ?? ''));
-            $section = trim((string) ($row['section'] ?? ''));
-            $yearLevel = trim((string) ($row['yearLevel'] ?? ''));
-            $email = trim((string) ($row['email'] ?? ''));
-
-            $reason = null;
-            if ($studentId === '' || $name === '' || $department === '' || $major === '' || $section === '' || $yearLevel === '') {
-                $reason = 'Missing a required field.';
-            } elseif (mb_strlen($studentId) > 20) {
-                $reason = 'Student ID too long (max 20 characters).';
-            } elseif (mb_strlen($name) > 100) {
-                $reason = 'Name too long (max 100 characters).';
-            } elseif (mb_strlen($section) > 20) {
-                $reason = 'Section too long (max 20 characters).';
-            } elseif ($email !== '' && mb_strlen($email) > 100) {
-                $reason = 'Email too long (max 100 characters).';
-            } elseif (isset($existingIds[$studentId])) {
-                $reason = 'Student ID already registered.';
-            } elseif (isset($seenInFile[$studentId])) {
-                $reason = 'Duplicate Student ID within this file.';
-            } elseif (!in_array($department, $validDepartments, true)) {
-                $reason = "Unknown department \"$department\" — add it in Settings first.";
-            } elseif (!in_array($major, $majorsByDept[$department] ?? [], true)) {
-                $reason = "Unknown major \"$major\" for department \"$department\" — add it in Settings first.";
-            } elseif (!in_array($yearLevel, $validYearLevels, true)) {
-                $reason = "Unknown year level \"$yearLevel\" — add it in Settings first.";
-            }
-
-            if ($reason !== null) {
-                $skipped[] = ['row' => $rowNum, 'student_id' => $studentId !== '' ? $studentId : '(blank)', 'reason' => $reason];
-                continue;
-            }
-
-            $seenInFile[$studentId] = true;
-            $toInsert[] = compact('studentId', 'name', 'department', 'major', 'section', 'yearLevel', 'email');
-        }
-
-        $imported = 0;
-        if ($toInsert) {
-            try {
-                $pdo->beginTransaction();
-                $stmt = $pdo->prepare('
-                    INSERT INTO users (student_id, name, department, major, section, year_level, email, password, registration_status, has_voted)
-                    VALUES (:student_id, :name, :department, :major, :section, :year_level, :email, NULL, \'unregistered\', 0)
-                ');
-                foreach ($toInsert as $row) {
-                    $stmt->execute([
-                        'student_id' => $row['studentId'],
-                        'name' => $row['name'],
-                        'department' => $row['department'],
-                        'major' => $row['major'],
-                        'section' => $row['section'],
-                        'year_level' => $row['yearLevel'],
-                        'email' => $row['email'] !== '' ? $row['email'] : null,
-                    ]);
-                    $imported++;
-                }
-                $pdo->commit();
-            } catch (Throwable $e) {
-                if ($pdo->inTransaction()) $pdo->rollBack();
-                error_log('Bulk student import failed: ' . $e->getMessage());
-                respond(['error' => 'Import failed partway through — no rows from this batch were saved.'], 500);
-            }
-        }
-
-        respond(['success' => true, 'imported' => $imported, 'skipped' => $skipped]);
+    if ($studentId === '' || $name === '' || $department === '' || $schoolYearId <= 0) {
+        respond(['error' => 'Student ID, name, faculty, and school year are all required.'], 400);
     }
-
-    $studentId  = trim($body['student_id'] ?? '');
-    $name       = trim($body['fullName'] ?? '');
-    $department = trim($body['department'] ?? '');
-    $major      = trim($body['major'] ?? '');
-    $section    = trim($body['section'] ?? '');
-    $yearLevel  = trim($body['yearLevel'] ?? '');
-    $email      = trim($body['email'] ?? '');
-    $password   = (string) ($body['password'] ?? '');
-
-    if ($studentId === '' || $name === '' || $department === '' || $major === '' || $section === '' || $yearLevel === '') {
-        respond(['error' => 'All required fields must be filled.'], 400);
-    }
-    if ($lengthError = checkFieldLengths(['student_id' => $studentId, 'fullName' => $name, 'department' => $department, 'major' => $major, 'section' => $section, 'yearLevel' => $yearLevel, 'email' => $email])) {
+    if ($lengthError = checkFieldLengths(['student_id' => $studentId, 'fullName' => $name, 'department' => $department, 'email' => $email])) {
         respond(['error' => $lengthError], 400);
     }
-    if ($password !== '' && strlen($password) < 6) {
-        respond(['error' => 'Password should be at least 6 characters.'], 400);
+
+    $syCheck = $pdo->prepare('SELECT start_year FROM school_years WHERE id = :id');
+    $syCheck->execute(['id' => $schoolYearId]);
+    $syRow = $syCheck->fetch();
+    if (!$syRow) {
+        respond(['error' => 'That school year does not exist.'], 404);
+    }
+    $validAccountStatuses = ['normal', 'repeating', 'undergrad_repeating', 'suspended_repeating', 'dropped', 'graduated'];
+    $accountStatus = in_array($body['accountStatus'] ?? '', $validAccountStatuses, true) ? $body['accountStatus'] : 'normal';
+
+    $levelResult = resolveAdminYearLevel($pdo, $accountStatus, (int) $syRow['start_year'], $body['yearLevel'] ?? null, null);
+    if (!$levelResult['ok']) {
+        respond(['error' => $levelResult['error']], 400);
+    }
+    $yearLevel = $levelResult['year_level']; // null only for a 'normal' student past the configured levels
+    if (!validateStudentIdFormat($studentId)) {
+        respond(['error' => 'Student ID must be exactly 9 digits.'], 400);
+    }
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        respond(['error' => 'Please enter a valid email address.'], 400);
+    }
+    if ($password !== '' && ($policyError = passwordPolicyError($password)) !== null) {
+        respond(['error' => $policyError], 400);
     }
 
     $check = $pdo->prepare('SELECT id FROM users WHERE student_id = :id');
@@ -263,19 +229,19 @@ if ($method === 'POST') {
     $status = $password !== '' ? 'active' : 'unregistered';
 
     $stmt = $pdo->prepare('
-        INSERT INTO users (student_id, name, department, major, section, year_level, email, password, registration_status, has_voted)
-        VALUES (:student_id, :name, :department, :major, :section, :year_level, :email, :password, :status, 0)
+        INSERT INTO users (student_id, name, department, school_year_id, year_level, email, password, registration_status, account_status, has_voted)
+        VALUES (:student_id, :name, :department, :school_year_id, :year_level, :email, :password, :status, :account_status, 0)
     ');
     $stmt->execute([
         'student_id' => $studentId,
         'name' => $name,
         'department' => $department,
-        'major' => $major,
-        'section' => $section,
+        'school_year_id' => $schoolYearId,
         'year_level' => $yearLevel,
         'email' => $email !== '' ? $email : null,
         'password' => $hash,
         'status' => $status,
+        'account_status' => $accountStatus,
     ]);
 
     respond(['success' => true, 'id' => (int) $pdo->lastInsertId()]);
@@ -288,7 +254,7 @@ if ($method === 'PUT') {
         respond(['error' => 'Invalid student ID.'], 400);
     }
 
-    $existing = $pdo->prepare('SELECT id, student_id FROM users WHERE id = :id');
+    $existing = $pdo->prepare('SELECT id, student_id, account_status, year_level, school_year_id FROM users WHERE id = :id');
     $existing->execute(['id' => $id]);
     $current = $existing->fetch();
     if (!$current) {
@@ -311,6 +277,13 @@ if ($method === 'PUT') {
               AND position_id IN (SELECT position_id FROM election_positions WHERE election_id = :eid)
         ')->execute(['uid' => $id, 'eid' => $eid]);
 
+        // Drop the submission lock too — without this the student would
+        // stay locked out of the election even though their votes are gone
+        // (the lock, not the votes, is what vote.php checks).
+        $pdo->prepare(
+            'DELETE FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
+        )->execute(['uid' => $id, 'eid' => $eid]);
+
         // Keep the legacy "voted somewhere, ever" flag consistent: only
         // true if the student still has at least one vote left in any
         // election after this reset.
@@ -330,9 +303,6 @@ if ($method === 'PUT') {
         'student_id'  => 'student_id',
         'fullName'    => 'name',
         'department'  => 'department',
-        'major'       => 'major',
-        'section'     => 'section',
-        'yearLevel'   => 'year_level',
         'email'       => 'email',
         'status'      => 'registration_status',
     ];
@@ -341,11 +311,64 @@ if ($method === 'PUT') {
         respond(['error' => $lengthError], 400);
     }
 
+    $validAccountStatuses = ['normal', 'repeating', 'undergrad_repeating', 'suspended_repeating', 'dropped', 'graduated'];
+    if (array_key_exists('accountStatus', $body)) {
+        if (!in_array($body['accountStatus'], $validAccountStatuses, true)) {
+            respond(['error' => 'Invalid account status.'], 400);
+        }
+        $fields[] = 'account_status = :account_status';
+        $values['account_status'] = $body['accountStatus'];
+    }
+
+    $newSchoolYearId = $current['school_year_id'] !== null ? (int) $current['school_year_id'] : null;
+    if (array_key_exists('schoolYearId', $body)) {
+        $newSchoolYearId = (int) $body['schoolYearId'];
+        $syCheck = $pdo->prepare('SELECT id FROM school_years WHERE id = :id');
+        $syCheck->execute(['id' => $newSchoolYearId]);
+        if (!$syCheck->fetch()) {
+            respond(['error' => 'That school year does not exist.'], 404);
+        }
+        $fields[] = 'school_year_id = :school_year_id';
+        $values['school_year_id'] = $newSchoolYearId;
+    }
+
+    // Year level: only touched when something that affects it was sent.
+    //   normal      -> recomputed from the (new or existing) school year, payload ignored
+    //   non-normal  -> admin-chosen level from the payload; NEVER recomputed on a
+    //                  school-year change (repeaters would be silently overwritten)
+    if (array_key_exists('accountStatus', $body) || array_key_exists('schoolYearId', $body) || array_key_exists('yearLevel', $body)) {
+        $effectiveStatus = array_key_exists('accountStatus', $body) ? $body['accountStatus'] : ($current['account_status'] ?: 'normal');
+        $startYear = null;
+        if ($newSchoolYearId !== null) {
+            $syStmt = $pdo->prepare('SELECT start_year FROM school_years WHERE id = :id');
+            $syStmt->execute(['id' => $newSchoolYearId]);
+            $syYear = $syStmt->fetchColumn();
+            $startYear = $syYear !== false ? (int) $syYear : null;
+        }
+        $levelResult = resolveAdminYearLevel($pdo, $effectiveStatus, $startYear, $body['yearLevel'] ?? null, $current['year_level']);
+        if (!$levelResult['ok']) {
+            respond(['error' => $levelResult['error']], 400);
+        }
+        if (!$levelResult['keep']) {
+            $fields[] = 'year_level = :year_level';
+            $values['year_level'] = $levelResult['year_level'];
+        }
+    }
+
     if (isset($body['student_id']) && trim($body['student_id']) !== $current['student_id']) {
+        if (!validateStudentIdFormat(trim($body['student_id']))) {
+            respond(['error' => 'Student ID must be exactly 9 digits.'], 400);
+        }
         $dupCheck = $pdo->prepare('SELECT id FROM users WHERE student_id = :sid AND id != :id');
         $dupCheck->execute(['sid' => trim($body['student_id']), 'id' => $id]);
         if ($dupCheck->fetch()) {
             respond(['error' => 'That Student ID is already registered.'], 409);
+        }
+    }
+    if (array_key_exists('email', $body)) {
+        $email = trim((string) $body['email']);
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            respond(['error' => 'Please enter a valid email address.'], 400);
         }
     }
 
@@ -363,8 +386,8 @@ if ($method === 'PUT') {
 
     if (!empty($body['password'])) {
         $password = (string) $body['password'];
-        if (strlen($password) < 6) {
-            respond(['error' => 'Password should be at least 6 characters.'], 400);
+        if (($policyError = passwordPolicyError($password)) !== null) {
+            respond(['error' => $policyError], 400);
         }
         $fields[] = 'password = :password';
         $values['password'] = password_hash($password, PASSWORD_DEFAULT);
@@ -387,17 +410,17 @@ if ($method === 'PUT') {
 }
 
 // ---------- DELETE: remove a student ----------
+// DELETE is intentionally disabled — the admin panel no longer offers a
+// way to delete a student record (removed from the Students panel UI).
+// Deleting a real voter record is destructive (cascades to their votes,
+// permanently altering historical tallies) and the lifecycle model added
+// alongside school years — suspended / dropped / graduated via
+// account_status, or Suspended via registration_status — already covers
+// every legitimate reason to retire an account, without losing the
+// underlying data. Left as an explicit 405 rather than silently removed,
+// so a stray client-side call fails loudly instead of doing nothing.
 if ($method === 'DELETE') {
-    $id = (int) ($body['id'] ?? 0);
-    if ($id <= 0) {
-        respond(['error' => 'Invalid student ID.'], 400);
-    }
-
-    // votes.user_id has ON DELETE CASCADE, so their votes go with them.
-    $stmt = $pdo->prepare('DELETE FROM users WHERE id = :id');
-    $stmt->execute(['id' => $id]);
-
-    respond(['success' => true]);
+    respond(['error' => 'Deleting students is not supported. Use Suspended status or a Lifecycle flag instead.'], 405);
 }
 
 respond(['error' => 'Method not allowed.'], 405);

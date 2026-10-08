@@ -59,16 +59,27 @@ foreach ($draftStmt->fetchAll() as $draftRow) {
 
 function userHasVotedInElection(PDO $pdo, int $userId, int $electionId): bool
 {
-    $stmt = $pdo->prepare('
-        SELECT COUNT(*) FROM votes v
-        JOIN election_positions ep ON ep.position_id = v.position_id
-        WHERE v.user_id = :uid AND ep.election_id = :eid
-    ');
+    // ballot_submissions, not votes: a submitted ballot may be empty
+    // (abstention), so "voted" must mean "a submission exists", which is
+    // exactly the lock vote.php enforces.
+    $stmt = $pdo->prepare(
+        'SELECT 1 FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
+    );
     $stmt->execute(['uid' => $userId, 'eid' => $electionId]);
-    return (int) $stmt->fetchColumn() > 0;
+    return (bool) $stmt->fetch();
 }
 
-$rawElections = $pdo->query("SELECT * FROM elections WHERE status != 'draft' ORDER BY start_date ASC")->fetchAll();
+// 'draft' elections aren't visible to students yet; 'archived' elections
+// are past cycles the admin has explicitly tucked away (same as they
+// disappear from the admin's own Elections list) — neither belongs on a
+// student's dashboard or vote picker.
+$rawElections = $pdo->query("
+    SELECT e.*, sy.label AS target_school_year_label
+    FROM elections e
+    LEFT JOIN school_years sy ON sy.id = e.target_school_year_id
+    WHERE e.status NOT IN ('draft', 'archived')
+    ORDER BY e.start_date ASC
+")->fetchAll();
 $elections = [];
 $ssgLogo = getSiteSetting($pdo, 'ssg_logo');
 $departmentLogos = getDepartmentLogos($pdo);
@@ -102,13 +113,13 @@ foreach ($rawElections as $e) {
         $pid = (int) $p['position_id'];
 
         $candStmt = $pdo->prepare('
-            SELECT c.id, c.name, c.photo, c.party, c.course,
+            SELECT c.id, c.name, c.photo, c.party, c.department,
                    c.candidate_year AS year_level, c.platform,
                    COUNT(v.id) AS vote_count
             FROM candidates c
             LEFT JOIN votes v ON v.candidate_id = c.id
             WHERE c.position_id = :pid
-            GROUP BY c.id, c.name, c.photo, c.party, c.course, c.candidate_year, c.platform
+            GROUP BY c.id, c.name, c.photo, c.party, c.department, c.candidate_year, c.platform
             ORDER BY c.name ASC
         ');
         $candStmt->execute(['pid' => $pid]);
@@ -147,6 +158,7 @@ foreach ($rawElections as $e) {
             'start_date' => $e['start_date'],
             'end_date' => $e['end_date'],
             'results_visibility' => $e['results_visibility'],
+            'target_school_year_label' => $e['target_school_year_label'],
             'accent' => $e['type'] === 'SSG' ? '#3b82f6' : '#f97316',
             'icon' => electionLogoHtml($e['type'], $e['department'], $ssgLogo, $departmentLogos),
             'subtitle' => $e['type'] === 'SSG' ? 'Supreme Student Government' : 'Department Student Government' . ($e['department'] ? ' — ' . $e['department'] : ''),

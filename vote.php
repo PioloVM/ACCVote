@@ -21,13 +21,24 @@ if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
 }
 
 $userId = (int) $_SESSION['user_id'];
+
+// Per-user rate limit. vote.php opens a transaction with SELECT ... FOR
+// UPDATE per call, so an unbounded loop of submissions (stuck client,
+// scripted abuse, double-click storms) would translate directly into DB
+// lock contention. 10 submissions/minute is far above any legitimate
+// ballot — a real ballot is one submission per election.
+$pdo = getDbConnection();
+if (isRateLimitedKey($pdo, 'vote_submit:user:' . $userId, 10, 60)) {
+    jsonResponse(['success' => false, 'message' => 'Too many vote attempts. Please wait a minute and try again.'], 429);
+}
+recordAttemptKey($pdo, 'vote_submit:user:' . $userId);
+
 $electionId = (int) ($_POST['election_id'] ?? 0);
 
 if ($electionId <= 0) {
     jsonResponse(['success' => false, 'message' => 'Missing election.'], 400);
 }
 
-$pdo = getDbConnection();
 syncElectionStatuses($pdo);
 
 try {
@@ -70,15 +81,15 @@ try {
         jsonResponse(['success' => false, 'message' => 'You are not eligible to vote in this election.'], 403);
     }
 
-    // Already voted in this specific election? (all-or-nothing: a completed
-    // ballot means at least one recorded vote against one of its positions.)
-    $votedStmt = $pdo->prepare('
-        SELECT COUNT(*) FROM votes v
-        JOIN election_positions ep ON ep.position_id = v.position_id
-        WHERE v.user_id = :uid AND ep.election_id = :eid
-    ');
+    // Already voted in this specific election? Checked against
+    // ballot_submissions — the per-election submission lock — because a
+    // ballot may be submitted with zero picks (abstention), which leaves
+    // no rows in `votes` for the old join-based check to find.
+    $votedStmt = $pdo->prepare(
+        'SELECT 1 FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
+    );
     $votedStmt->execute(['uid' => $userId, 'eid' => $electionId]);
-    if ((int) $votedStmt->fetchColumn() > 0) {
+    if ($votedStmt->fetch()) {
         $pdo->rollBack();
         jsonResponse(['success' => false, 'message' => 'You have already voted in this election.'], 409);
     }
@@ -132,9 +143,12 @@ try {
             return $id > 0;
         })));
 
+        // Every position is skippable: no pick here is a legitimate
+        // abstention for this position, not an error. An entirely empty
+        // ballot still submits and locks the election (see the
+        // ballot_submissions insert below).
         if (empty($selectedIds)) {
-            $pdo->rollBack();
-            jsonResponse(['success' => false, 'message' => 'Please select a candidate for every position.'], 400);
+            continue;
         }
 
         if (count($selectedIds) > $winnerCount) {
@@ -165,8 +179,8 @@ try {
     }
 
     // Legacy "has voted somewhere at least once" convenience flag, kept for
-    // login.php's post-login redirect. Per-election status is derived from
-    // the votes themselves (see userHasVotedInElection() in dashboard.php).
+    // login.php's post-login redirect. Per-election status comes from
+    // ballot_submissions (userHasVotedInElection() reads that table).
     $updateStmt = $pdo->prepare('UPDATE users SET has_voted = 1 WHERE id = :id');
     $updateStmt->execute(['id' => $userId]);
 
@@ -175,9 +189,59 @@ try {
     $pdo->prepare('DELETE FROM vote_drafts WHERE user_id = :uid AND election_id = :eid')
         ->execute(['uid' => $userId, 'eid' => $electionId]);
 
+    // The submission lock — written on EVERY successful submit, empty
+    // ballot or not. This is what makes "already voted" answerable when
+    // zero rows landed in `votes`, and the PK makes a re-submit 409.
+    $submitStmt = $pdo->prepare(
+        'INSERT INTO ballot_submissions (user_id, election_id, submitted_at) VALUES (:uid, :eid, CURRENT_TIMESTAMP)'
+    );
+    $submitStmt->execute(['uid' => $userId, 'eid' => $electionId]);
+
+    // Chain data for the "Vote All" flow: every election this student can
+    // still vote in right now, in the same order dashboard-data.php lists
+    // them (ORDER BY start_date), so the client's next stop always equals
+    // the next card it would have shown. Excludes the election just
+    // submitted (its lock row was inserted above, inside this transaction).
+    $chainStmt = $pdo->prepare("
+        SELECT e.id, e.name
+        FROM elections e
+        WHERE e.status = 'ongoing'
+          AND e.start_date <= CURRENT_TIMESTAMP
+          AND e.end_date >= CURRENT_TIMESTAMP
+          AND e.id <> :eid
+          AND NOT EXISTS (
+              SELECT 1 FROM ballot_submissions bs
+              WHERE bs.election_id = e.id AND bs.user_id = :uid
+          )
+          AND (e.type <> 'DSG' OR e.department = :dept)
+          AND EXISTS (
+              SELECT 1 FROM election_positions ep
+              WHERE ep.election_id = e.id
+                AND (ep.year_restriction IS NULL OR ep.year_restriction = ''
+                     OR ep.year_restriction = :year)
+          )
+        ORDER BY e.start_date ASC, e.id ASC
+    ");
+    $chainStmt->execute([
+        'eid' => $electionId,
+        'uid' => $userId,
+        'dept' => $voter['department'],
+        'year' => $voter['year_level'],
+    ]);
+    $chain = $chainStmt->fetchAll();
+    $nextElection = $chain[0] ?? null;
+
     $pdo->commit();
 
-    jsonResponse(['success' => true, 'message' => 'Your vote has been recorded. Thank you for voting!']);
+    jsonResponse([
+        'success' => true,
+        'message' => 'Your vote has been recorded. Thank you for voting!',
+        'next_election' => $nextElection === null ? null : [
+            'id' => (int) $nextElection['id'],
+            'name' => $nextElection['name'],
+        ],
+        'remaining' => count($chain),
+    ]);
 } catch (PDOException $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();

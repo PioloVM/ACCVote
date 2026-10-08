@@ -42,18 +42,17 @@
     /**
      * Whether this student has already cast a ballot in a SPECIFIC election.
      * (users.has_voted is only a legacy "voted at least once, anywhere" flag —
-     * with multiple elections we need a per-election answer, derived from the
-     * votes actually on file for that election's positions.)
+     * with multiple elections we need a per-election answer, and it must be
+     * ballot_submissions rather than votes: a submitted ballot can be empty,
+     * in which case votes holds nothing to count.)
      */
     function userHasVotedInElection(PDO $pdo, int $userId, int $electionId): bool
     {
-        $stmt = $pdo->prepare('
-            SELECT COUNT(*) FROM votes v
-            JOIN election_positions ep ON ep.position_id = v.position_id
-            WHERE v.user_id = :uid AND ep.election_id = :eid
-        ');
+        $stmt = $pdo->prepare(
+            'SELECT 1 FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
+        );
         $stmt->execute(['uid' => $userId, 'eid' => $electionId]);
-        return (int) $stmt->fetchColumn() > 0;
+        return (bool) $stmt->fetch();
     }
 
     /**
@@ -213,7 +212,16 @@
     $electionData = [];
     $ssgLogo = getSiteSetting($pdo, 'ssg_logo');
     $departmentLogos = getDepartmentLogos($pdo);
-    $rawElections = $pdo->query("SELECT * FROM elections WHERE status != 'draft' ORDER BY start_date ASC")->fetchAll();
+    // 'draft' elections aren't visible to students yet; 'archived'
+    // elections are past cycles the admin has explicitly tucked away —
+    // neither belongs on a student's dashboard or ballot picker.
+    $rawElections = $pdo->query("
+        SELECT e.*, sy.label AS target_school_year_label
+        FROM elections e
+        LEFT JOIN school_years sy ON sy.id = e.target_school_year_id
+        WHERE e.status NOT IN ('draft', 'archived')
+        ORDER BY e.start_date ASC
+    ")->fetchAll();
 
     foreach ($rawElections as $e) {
         if ($e['type'] === 'DSG' && $e['department'] !== $user['department']) {
@@ -245,13 +253,13 @@
             // across elections), so position_id alone is enough to scope
             // this query correctly.
             $candStmt = $pdo->prepare('
-                SELECT c.id, c.position_id, c.name, c.photo, c.party, c.course,
+                SELECT c.id, c.position_id, c.name, c.photo, c.party, c.course, c.department,
                        c.candidate_year AS year_level, c.platform,
                        COUNT(v.id) AS vote_count
                 FROM candidates c
                 LEFT JOIN votes v ON v.candidate_id = c.id
                 WHERE c.position_id = :pid
-                GROUP BY c.id, c.position_id, c.name, c.photo, c.party, c.course, c.candidate_year, c.platform
+                GROUP BY c.id, c.position_id, c.name, c.photo, c.party, c.course, c.department, c.candidate_year, c.platform
                 ORDER BY c.name ASC
             ');
             foreach ($positions as $p) {
@@ -270,6 +278,7 @@
                 'start_date' => $e['start_date'],
                 'end_date' => $e['end_date'],
                 'results_visibility' => $e['results_visibility'],
+                'target_school_year_label' => $e['target_school_year_label'],
                 'accent' => $e['type'] === 'SSG' ? '#3b82f6' : '#f97316',
                 'icon' => electionLogoHtml($e['type'], $e['department'], $ssgLogo, $departmentLogos),
                 'subtitle' => $e['type'] === 'SSG' ? 'Supreme Student Government' : 'Department Student Government' . ($e['department'] ? ' — ' . $e['department'] : ''),
@@ -306,8 +315,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>Vote | School Elections</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link rel="stylesheet" href="assets/dashboard-app.css">
+    <link rel="stylesheet" href="<?= assetV('assets/style.css') ?>">
+    <link rel="stylesheet" href="<?= assetV('assets/dashboard-app.css') ?>">
     <script>
     (function () {
         var saved = localStorage.getItem('studentTheme');
@@ -341,6 +350,9 @@
                     <div class="name"><?= h($user['name']) ?></div>
                     <div class="role"><?= h($user['department'] ?: 'Student') ?><?= $user['year_level'] ? ' · ' . h($user['year_level']) : '' ?></div>
                 </div>
+            </div>
+            <div class="update-year-link">
+                <a href="update-account.php"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span>Update Year Level</span></a>
             </div>
             <div class="logout-link">
                 <a href="logout.php"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span><span>Log Out</span></a>
@@ -380,7 +392,12 @@
                     <div class="ballot-shell">
                         <div class="ballot-header">
                             <div class="ballot-header-top">
-                                <h2 class="ballot-title"><?= h($config['name']) ?></h2>
+                                <div>
+                                    <h2 class="ballot-title"><?= h($config['name']) ?></h2>
+                                    <?php if (!empty($config['target_school_year_label'])): ?>
+                                        <p class="position-note" style="margin:.2rem 0 0;">🎓 Election for school year <?= h($config['target_school_year_label']) ?></p>
+                                    <?php endif; ?>
+                                </div>
                                 <div class="ballot-header-actions">
                                     <button type="button" class="ballot-save-exit" id="ballotSaveExitBtn" onclick="saveDraftAndExit()">💾 Save &amp; Exit</button>
                                     <a href="dashboard.php?page=vote" class="ballot-exit" onclick="return handleBallotExitClick(event);">Exit</a>
@@ -433,12 +450,13 @@
                                                 $isPreChecked = in_array((int) $candidate['id'], $draftPicks, true);
                                             ?>
                                                 <label class="ballot-candidate">
-                                                    <input type="<?= $inputType ?>" class="ballot-radio-input" name="<?= $inputName ?>" value="<?= (int) $candidate['id'] ?>" <?= $isPreChecked ? 'checked' : '' ?> data-candidate-name="<?= h($candidate['name']) ?>" data-candidate-photo="<?= h(!empty($candidate['photo']) ? $candidate['photo'] : 'assets/default-avatar.png') ?>">
+                                                    <input type="<?= $inputType ?>" class="ballot-radio-input" name="<?= $inputName ?>" value="<?= (int) $candidate['id'] ?>" <?= $isPreChecked ? 'checked' : '' ?> data-candidate-name="<?= h($candidate['name']) ?>" data-candidate-photo="<?= h(!empty($candidate['photo']) ? $candidate['photo'] : 'assets/default-avatar.svg') ?>">
                                                     <span class="ballot-bubble<?= $isMulti ? ' multi' : '' ?>" aria-hidden="true"><span class="ballot-bubble-fill"></span></span>
                                                     <span class="ballot-candidate-body">
                                                         <span class="ballot-candidate-name"><?= h($candidate['name']) ?></span>
                                                         <span class="ballot-candidate-party"><?= h($partyLabel) ?></span>
                                                         <span class="ballot-candidate-meta">
+                                                            <?php if (!empty($candidate['department'])): ?><span><?= h($candidate['department']) ?></span><?php endif; ?>
                                                             <?php if (!empty($candidate['course'])): ?><span><?= h($candidate['course']) ?></span><?php endif; ?>
                                                             <?php if (!empty($candidate['year_level'])): ?><span><?= h($candidate['year_level']) ?></span><?php endif; ?>
                                                         </span>
@@ -446,7 +464,7 @@
                                                             <span class="ballot-candidate-platform"><strong>Platform:</strong> <?= h($candidate['platform']) ?></span>
                                                         <?php endif; ?>
                                                     </span>
-                                                    <img class="candidate-avatar" src="<?= h(!empty($candidate['photo']) ? $candidate['photo'] : 'assets/default-avatar.png') ?>" alt="">
+                                                    <img class="candidate-avatar" src="<?= h(!empty($candidate['photo']) ? $candidate['photo'] : 'assets/default-avatar.svg') ?>" alt="">
                                                 </label>
                                             <?php endforeach; ?>
                                         </fieldset>
@@ -702,7 +720,7 @@
                 }
                 const rows = checkedInputs.map(input => {
                     const name = input.dataset.candidateName || '';
-                    const photo = input.dataset.candidatePhoto || 'assets/default-avatar.png';
+                    const photo = input.dataset.candidatePhoto || 'assets/default-avatar.svg';
                     const partyEl = input.closest('.ballot-candidate').querySelector('.ballot-candidate-party');
                     const party = partyEl ? partyEl.textContent : '';
                     return `
@@ -878,8 +896,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>Dashboard | School Elections</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link rel="stylesheet" href="assets/dashboard-app.css">
+    <link rel="stylesheet" href="<?= assetV('assets/style.css') ?>">
+    <link rel="stylesheet" href="<?= assetV('assets/dashboard-app.css') ?>">
     <script>
     // Applied synchronously, before the body renders, so the page never
     // flashes light-then-dark on load. Default is light unless the
@@ -920,6 +938,9 @@
                     <div class="name"><?= h($user['name']) ?></div>
                     <div class="role"><?= h($user['department'] ?: 'Student') ?><?= $user['year_level'] ? ' · ' . h($user['year_level']) : '' ?></div>
                 </div>
+            </div>
+            <div class="update-year-link">
+                <a href="update-account.php"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span>Update Year Level</span></a>
             </div>
             <div class="logout-link">
                 <a href="logout.php"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span><span>Log Out</span></a>
@@ -1256,6 +1277,9 @@
         } else if (now < start) {
             metaHtml += `<span class="ec-meta-item">🚀 Starts ${start.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>`;
         }
+        if (config.target_school_year_label) {
+            metaHtml += `<span class="ec-meta-item">🎓 SY ${escHtml(config.target_school_year_label)}</span>`;
+        }
 
         let bodyHtml = '';
         if (election.totalPositions === 0) {
@@ -1427,7 +1451,7 @@
                         <div class="ec-icon">${election.config.icon}</div>
                         <div class="ec-heading">
                             <h2 class="vote-hero-title">${escHtml(election.config.name)}</h2>
-                            <p class="ec-subtitle">${escHtml(election.config.subtitle)}</p>
+                            <p class="ec-subtitle">${escHtml(election.config.subtitle)}${election.config.target_school_year_label ? ' · 🎓 SY ' + escHtml(election.config.target_school_year_label) : ''}</p>
                         </div>
                     </div>
                     <span class="status-large"><span class="status-dot"></span>Voting Open</span>
@@ -1629,7 +1653,7 @@
             <section class="cand-election-section" id="cand-sec-${sec.election.id}">
                 <div class="cand-election-head">
                     <span class="cand-election-icon">${sec.election.config.icon}</span>
-                    <div><h3>${escHtml(sec.election.config.name)}</h3><p>${escHtml(sec.election.config.subtitle)}</p></div>
+                    <div><h3>${escHtml(sec.election.config.name)}</h3><p>${escHtml(sec.election.config.subtitle)}${sec.election.config.target_school_year_label ? ' · 🎓 SY ' + escHtml(sec.election.config.target_school_year_label) : ''}</p></div>
                 </div>
                 ${sec.positions.map(posBlock => {
                     const position = posBlock.position;
@@ -1642,9 +1666,9 @@
                         <div class="cand-grid">
                             ${posBlock.candidates.map(c => {
                                 const party = (c.party && c.party !== 'No Party / Independent') ? c.party : '';
-                                const photo = c.photo || 'assets/default-avatar.png';
+                                const photo = c.photo || 'assets/default-avatar.svg';
                                 const platform = (c.platform || '').trim();
-                                const searchMeta = `${c.course || ''} ${c.year_level || ''} ${platform}`.toLowerCase().trim();
+                                const searchMeta = `${c.department || ''} ${c.course || ''} ${c.year_level || ''} ${platform}`.toLowerCase().trim();
                                 window.__candMap[c.id] = {
                                     ...c,
                                     party,
@@ -1664,6 +1688,7 @@
                                     </div>
                                     <div class="cand-card-body">
                                         <div class="cand-card-meta">
+                                            ${c.department ? `<span>${escHtml(c.department)}</span>` : ''}
                                             ${c.course ? `<span>${escHtml(c.course)}</span>` : ''}
                                             ${c.year_level ? `<span>${escHtml(c.year_level)}</span>` : ''}
                                         </div>
@@ -1739,6 +1764,7 @@
                         <div class="cand-modal-meta-list">
                             <div class="cand-modal-meta-row"><span class="cand-modal-meta-label">Running for</span><span>${escHtml(c.positionTitle)}</span></div>
                             <div class="cand-modal-meta-row"><span class="cand-modal-meta-label">Election</span><span>${escHtml(c.electionName)}</span></div>
+                            ${c.department ? `<div class="cand-modal-meta-row"><span class="cand-modal-meta-label">Department</span><span>${escHtml(c.department)}</span></div>` : ''}
                             ${c.course ? `<div class="cand-modal-meta-row"><span class="cand-modal-meta-label">Course</span><span>${escHtml(c.course)}</span></div>` : ''}
                             ${c.year_level ? `<div class="cand-modal-meta-row"><span class="cand-modal-meta-label">Year Level</span><span>${escHtml(c.year_level)}</span></div>` : ''}
                         </div>
@@ -1883,7 +1909,7 @@
                     <p class="muted">Total votes: ${totalVotes}</p>
                 </div>`;
             }).join('');
-            return `<h2>${escHtml(election.config.name)}</h2>${positionsHtml}<hr>`;
+            return `<h2>${escHtml(election.config.name)}${election.config.target_school_year_label ? ` <span style="font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:.2rem .6rem;border-radius:999px;vertical-align:middle;">🎓 SY ${escHtml(election.config.target_school_year_label)}</span>` : ''}</h2>${positionsHtml}<hr>`;
         }).join('');
 
         el.innerHTML = `<h2>Live Results</h2><p class="muted">Results update automatically every 15 seconds.</p>${backLink}${html}`;
@@ -1911,7 +1937,7 @@
 
         track.innerHTML = renderList.map(item => {
             const c = item.candidate;
-            const photo = c.photo || 'assets/default-avatar.png';
+            const photo = c.photo || 'assets/default-avatar.svg';
             return `
             <div class="fc-card">
                 <img src="${escHtml(photo)}" alt="${escHtml(c.name)}">

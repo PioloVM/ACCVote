@@ -61,6 +61,57 @@ $r = Invoke-Get "$base/icon.php?e=999999"
 Assert-True "icon.php unknown election returns 404" ($r.Code -eq "404") "got $($r.Code)"
 Assert-True "icon.php 404 body leaks nothing" ($r.Text -notmatch "SQLSTATE|PDO|neon|password") $r.Text.Substring(0, [Math]::Min(120, $r.Text.Length))
 
+# ----------------------------------------------------------------
+# Section: skippable ballot + abstention lock (Task 4)
+# ----------------------------------------------------------------
+$jar = [System.IO.Path]::GetTempFileName()
+
+# Fixtures: both eligible elections (SSG #1, own-dept DSG #2) open with a
+# fresh window; clear this student's previous ballot/votes so the section
+# is re-runnable; clear login_attempts (the shared rate-limit bucket for
+# login + vote keys) so rapid test reruns never mask a real failure.
+$uidSql = "(SELECT id FROM users WHERE student_id='987654321')"
+& $mysql -u root voting_app -e @"
+UPDATE elections SET status='ongoing', start_date=DATE_SUB(NOW(), INTERVAL 1 DAY), end_date=DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE id IN (1,2);
+DELETE FROM ballot_submissions WHERE user_id=$uidSql;
+DELETE FROM votes WHERE user_id=$uidSql;
+UPDATE users SET has_voted=0 WHERE id=$uidSql;
+DELETE FROM login_attempts;
+"@ 2>&1 | Out-Null
+
+$loginHtml = ((curl.exe -s -c $jar "$base/login.php") -join "`n")
+$token = [regex]::Match($loginHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+Assert-True "login form yields csrf token" ($token -ne "") "not found in login page"
+$loginCode = curl.exe -s -b $jar -c $jar -o NUL -w "%{http_code}" -X POST "$base/login.php" -d "csrf_token=$token&student_id=987654321&password=password123"
+Assert-True "login succeeds (302)" ($loginCode -eq "302") "got $loginCode"
+
+$data = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$votable = @($data.elections | Where-Object { $_.config.status -eq 'ongoing' -and -not $_.hasVoted -and $_.totalPositions -gt 0 })
+Assert-True "fixture yields at least 2 votable elections" ($votable.Count -ge 2) "got $($votable.Count)"
+
+$first = $votable[0]
+
+# 1. Empty ballot (no position_* fields at all) must be accepted as an
+#    abstention and report the next election in the chain.
+$respText = ((curl.exe -s -b $jar -X POST "$base/vote.php" -d "csrf_token=$token&election_id=$($first.id)") -join "")
+$resp = $respText | ConvertFrom-Json
+Assert-True "empty ballot accepted" ($resp.success -eq $true) $respText
+Assert-True "response carries next_election key" (($resp.PSObject.Properties.Name -contains 'next_election')) $respText
+Assert-True "response carries remaining count" (($resp.PSObject.Properties.Name -contains 'remaining')) $respText
+if (($resp.PSObject.Properties.Name -contains 'next_election')) {
+    Assert-True "next_election is the next votable id in dashboard-data order" ($resp.next_election.id -eq $votable[1].id) "got $($resp.next_election.id), want $($votable[1].id)"
+    Assert-True "remaining equals votable minus submitted" ([int]$resp.remaining -eq ($votable.Count - 1)) "got $($resp.remaining), want $($votable.Count - 1)"
+}
+
+# 2. Re-submitting the same election must 409 (the lock).
+$code2 = curl.exe -s -b $jar -o NUL -w "%{http_code}" -X POST "$base/vote.php" -d "csrf_token=$token&election_id=$($first.id)"
+Assert-True "re-submit returns 409" ($code2 -eq "409") "got $code2"
+
+# 3. The dashboard must now report the election as voted.
+$data2 = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$eAfter = $data2.elections | Where-Object { $_.id -eq $first.id }
+Assert-True "hasVoted flips true after empty submit" ($eAfter.hasVoted -eq $true) "hasVoted=$($eAfter.hasVoted)"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
