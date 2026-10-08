@@ -112,6 +112,16 @@ $data2 = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFr
 $eAfter = $data2.elections | Where-Object { $_.id -eq $first.id }
 Assert-True "hasVoted flips true after empty submit" ($eAfter.hasVoted -eq $true) "hasVoted=$($eAfter.hasVoted)"
 
+# ----------------------------------------------------------------
+# Section: payload contract — URLs instead of base64 (Task 5)
+# ----------------------------------------------------------------
+$respRaw = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "")
+$respBytes = [System.Text.Encoding]::UTF8.GetByteCount($respRaw)
+Assert-True "payload has photo_url" ($respRaw -match '"photo_url"') ""
+Assert-True "payload has icon_url" ($respRaw -match '"icon_url"') ""
+Assert-True "payload contains no inline data:image" ($respRaw -notmatch 'data:image') ($respRaw.Substring([Math]::Max(0, $respRaw.IndexOf('data:image')), [Math]::Min(120, $respRaw.Length)))
+Assert-True "payload under 50KB" ($respBytes -lt 50000) "got $respBytes bytes"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

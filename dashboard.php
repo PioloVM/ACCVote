@@ -969,6 +969,19 @@
     const STUDENT_NAME = <?= json_encode($user['name']) ?>;
     const DASHBOARD_DATA_API = 'dashboard-data.php';
 
+    // Mirror of defaultElectionLogoSvg() in includes/functions.php — the
+    // generic institution glyph shown when an election has no uploaded
+    // logo (or its icon_url 404s).
+    const ELECTION_LOGO_FALLBACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="elogo-placeholder"><path d="M3 21h18"/><path d="M5 21V9.5L12 4l7 5.5V21"/><path d="M9 21v-6h6v6"/></svg>';
+
+    // config.icon_url (URL or null) -> ready-to-insert header markup.
+    // The URL form keeps base64 logos out of the dashboard-data payload;
+    // if the endpoint 404s at runtime the onerror swaps in the glyph.
+    function electionIconHtml(config) {
+        if (!config.icon_url) return ELECTION_LOGO_FALLBACK;
+        return '<img src="' + escHtml(config.icon_url) + '" alt="" class="elogo-img" onerror="this.outerHTML=ELECTION_LOGO_FALLBACK">';
+    }
+
     const hamburger = document.getElementById('hamburgerBtn');
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
@@ -1306,7 +1319,7 @@
         return `
         <div class="election-card status-${electionStatusKey(isOpen, statusClass)}" style="--ec-accent: ${config.accent};">
             <div class="ec-header">
-                <div class="ec-icon">${config.icon}</div>
+                <div class="ec-icon">${electionIconHtml(config)}</div>
                 <div class="ec-heading">
                     <h2 class="election-title">${escHtml(config.name)}</h2>
                     <p class="ec-subtitle">${escHtml(config.subtitle)}</p>
@@ -1448,7 +1461,7 @@
             <div class="vote-hero">
                 <div class="vote-hero-eyebrow">
                     <div class="ec-header" style="margin-bottom: 0;">
-                        <div class="ec-icon">${election.config.icon}</div>
+                        <div class="ec-icon">${electionIconHtml(election.config)}</div>
                         <div class="ec-heading">
                             <h2 class="vote-hero-title">${escHtml(election.config.name)}</h2>
                             <p class="ec-subtitle">${escHtml(election.config.subtitle)}${election.config.target_school_year_label ? ' · 🎓 SY ' + escHtml(election.config.target_school_year_label) : ''}</p>
@@ -1652,7 +1665,7 @@
         const sectionsHtml = sections.map(sec => `
             <section class="cand-election-section" id="cand-sec-${sec.election.id}">
                 <div class="cand-election-head">
-                    <span class="cand-election-icon">${sec.election.config.icon}</span>
+                    <span class="cand-election-icon">${electionIconHtml(sec.election.config)}</span>
                     <div><h3>${escHtml(sec.election.config.name)}</h3><p>${escHtml(sec.election.config.subtitle)}${sec.election.config.target_school_year_label ? ' · 🎓 SY ' + escHtml(sec.election.config.target_school_year_label) : ''}</p></div>
                 </div>
                 ${sec.positions.map(posBlock => {
@@ -1666,7 +1679,7 @@
                         <div class="cand-grid">
                             ${posBlock.candidates.map(c => {
                                 const party = (c.party && c.party !== 'No Party / Independent') ? c.party : '';
-                                const photo = c.photo || 'assets/default-avatar.svg';
+                                const photo = c.photo_url || 'assets/default-avatar.svg';
                                 const platform = (c.platform || '').trim();
                                 const searchMeta = `${c.department || ''} ${c.course || ''} ${c.year_level || ''} ${platform}`.toLowerCase().trim();
                                 window.__candMap[c.id] = {
@@ -1757,7 +1770,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
                 <div class="cand-modal-left">
-                    <div class="cand-modal-photo"><img src="${escHtml(c.photo)}" alt="${escHtml(c.name)}"></div>
+                    <div class="cand-modal-photo"><img src="${escHtml(c.photo_url || 'assets/default-avatar.svg')}" alt="${escHtml(c.name)}"></div>
                     <div class="cand-modal-info">
                         <h2 class="cand-modal-name">${escHtml(c.name)}</h2>
                         ${c.party ? `<span class="cand-modal-party">${escHtml(c.party)}</span>` : ''}
@@ -1937,7 +1950,7 @@
 
         track.innerHTML = renderList.map(item => {
             const c = item.candidate;
-            const photo = c.photo || 'assets/default-avatar.svg';
+            const photo = c.photo_url || 'assets/default-avatar.svg';
             return `
             <div class="fc-card">
                 <img src="${escHtml(photo)}" alt="${escHtml(c.name)}">

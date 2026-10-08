@@ -12,6 +12,13 @@
  * "Branch A", ?page=vote&election_id=X) — that stays a full server-rendered
  * page and posts straight to vote.php/draft.php as it always has.
  *
+ * Query shape: a fixed batch set (user, submissions, settings, departments,
+ * elections, positions-IN, candidates-IN, voted-positions, drafts) — never
+ * one query per election or per position. Images travel as URLs
+ * (`photo_url` / `icon_url`, served cacheably by photo.php / icon.php),
+ * never as base64, so the payload stays a few KB regardless of how many
+ * candidates have photos.
+ *
  * "answeredPositionIds" per election is the one piece of derived data this
  * endpoint pre-merges server-side (real votes + saved drafts) rather than
  * shipping both separately and merging in JS — keeps the client simpler
@@ -57,17 +64,13 @@ foreach ($draftStmt->fetchAll() as $draftRow) {
     $draftsByElection[(int) $draftRow['election_id']] = is_array($decoded) ? $decoded : [];
 }
 
-function userHasVotedInElection(PDO $pdo, int $userId, int $electionId): bool
-{
-    // ballot_submissions, not votes: a submitted ballot may be empty
-    // (abstention), so "voted" must mean "a submission exists", which is
-    // exactly the lock vote.php enforces.
-    $stmt = $pdo->prepare(
-        'SELECT 1 FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
-    );
-    $stmt->execute(['uid' => $userId, 'eid' => $electionId]);
-    return (bool) $stmt->fetch();
-}
+// Submission locks — ONE query answers hasVoted for every election below.
+// ballot_submissions, not votes: a submitted ballot may be empty
+// (abstention), so "voted" must mean "a submission exists", which is
+// exactly the lock vote.php enforces.
+$subStmt = $pdo->prepare('SELECT election_id FROM ballot_submissions WHERE user_id = :uid');
+$subStmt->execute(['uid' => $user['id']]);
+$votedElectionIds = array_map('intval', $subStmt->fetchAll(PDO::FETCH_COLUMN));
 
 // 'draft' elections aren't visible to students yet; 'archived' elections
 // are past cycles the admin has explicitly tucked away (same as they
@@ -80,61 +83,122 @@ $rawElections = $pdo->query("
     WHERE e.status NOT IN ('draft', 'archived')
     ORDER BY e.start_date ASC
 ")->fetchAll();
-$elections = [];
-$ssgLogo = getSiteSetting($pdo, 'ssg_logo');
-$departmentLogos = getDepartmentLogos($pdo);
 
+// Department filter first, then batch every per-election query across the
+// whole eligible set.
+$eligible = [];
 foreach ($rawElections as $e) {
     if ($e['type'] === 'DSG' && $e['department'] !== $user['department']) {
         continue; // not this student's department
     }
+    $eligible[] = $e;
+}
 
+// Logo EXISTENCE only — the bytes are served by icon.php, so the base64
+// never travels through this payload (nor is it loaded from the DB just to
+// be thrown away).
+$ssgLogoExists = (bool) (int) $pdo->query("
+    SELECT COUNT(*) FROM site_settings
+    WHERE setting_key = 'ssg_logo' AND setting_value IS NOT NULL AND setting_value <> ''
+")->fetchColumn();
+$deptsWithLogo = $pdo->query("
+    SELECT code FROM departments WHERE logo IS NOT NULL AND logo <> ''
+")->fetchAll(PDO::FETCH_COLUMN);
+$deptsWithLogo = array_flip($deptsWithLogo);
+
+// ONE positions query for every eligible election (was: one per election).
+$positionsByElection = [];
+if ($eligible) {
+    $ePlaceholders = [];
+    $eParams = [];
+    foreach ($eligible as $i => $e) {
+        $ePlaceholders[] = ':eid' . $i;
+        $eParams[':eid' . $i] = (int) $e['id'];
+    }
     $posStmt = $pdo->prepare('
-        SELECT ep.position_id, p.title, ep.winner_count, ep.candidate_limit, ep.year_restriction
+        SELECT ep.election_id, ep.position_id, p.title, ep.winner_count,
+               ep.candidate_limit, ep.year_restriction
         FROM election_positions ep
         JOIN positions p ON p.id = ep.position_id
-        WHERE ep.election_id = :eid
-        ORDER BY ep.id ASC
+        WHERE ep.election_id IN (' . implode(',', $ePlaceholders) . ')
+        ORDER BY ep.election_id ASC, ep.id ASC
     ');
-    $posStmt->execute(['eid' => $e['id']]);
-    $allPositions = $posStmt->fetchAll();
+    $posStmt->execute($eParams);
+    foreach ($posStmt->fetchAll() as $row) {
+        $positionsByElection[(int) $row['election_id']][] = $row;
+    }
+}
 
-    // "Limit to see" — hide positions restricted to a year level this
-    // student isn't in.
-    $positions = array_values(array_filter($allPositions, function ($p) use ($user) {
+// "Limit to see" — hide positions restricted to a year level this student
+// isn't in, and remember which position ids survive for the candidates
+// batch below.
+$allowedPositionsByElection = [];
+$allowedPositionIds = [];
+foreach ($positionsByElection as $eid => $rows) {
+    $kept = array_values(array_filter($rows, function ($p) use ($user) {
         return empty($p['year_restriction']) || $p['year_restriction'] === $user['year_level'];
     }));
+    $allowedPositionsByElection[$eid] = $kept;
+    foreach ($kept as $p) {
+        $allowedPositionIds[] = (int) $p['position_id'];
+    }
+}
 
-    $currentDraft = $draftsByElection[(int) $e['id']] ?? [];
+// ONE candidates query for all allowed positions (was: one per position).
+// has_photo replaces the base64 photo column itself: only whether a photo
+// EXISTS is needed to build photo.php?c=<id>.
+$candidatesByPosition = [];
+if ($allowedPositionIds) {
+    $pPlaceholders = [];
+    $pParams = [];
+    foreach ($allowedPositionIds as $i => $pid) {
+        $pPlaceholders[] = ':pid' . $i;
+        $pParams[':pid' . $i] = $pid;
+    }
+    $candStmt = $pdo->prepare('
+        SELECT c.position_id, c.id, c.name, c.party, c.department,
+               c.candidate_year AS year_level, c.platform,
+               MAX(c.photo IS NOT NULL) AS has_photo,
+               COUNT(v.id) AS vote_count
+        FROM candidates c
+        LEFT JOIN votes v ON v.candidate_id = c.id
+        WHERE c.position_id IN (' . implode(',', $pPlaceholders) . ')
+        GROUP BY c.id, c.position_id, c.name, c.party, c.department, c.candidate_year, c.platform
+        ORDER BY c.name ASC
+    ');
+    $candStmt->execute($pParams);
+    foreach ($candStmt->fetchAll() as $row) {
+        $pid = (int) $row['position_id'];
+        $candidatesByPosition[$pid][] = [
+            'id' => (int) $row['id'],
+            'name' => $row['name'],
+            'photo_url' => (bool) $row['has_photo'] ? 'photo.php?c=' . (int) $row['id'] : null,
+            'party' => $row['party'],
+            'department' => $row['department'],
+            'year_level' => $row['year_level'],
+            'platform' => $row['platform'],
+            'vote_count' => (int) $row['vote_count'],
+        ];
+    }
+}
+
+$elections = [];
+foreach ($eligible as $e) {
+    $electionId = (int) $e['id'];
+    $positions = $allowedPositionsByElection[$electionId] ?? [];
+    $currentDraft = $draftsByElection[$electionId] ?? [];
 
     $positionsOut = [];
     $answeredPositionIds = [];
     foreach ($positions as $p) {
         $pid = (int) $p['position_id'];
 
-        $candStmt = $pdo->prepare('
-            SELECT c.id, c.name, c.photo, c.party, c.department,
-                   c.candidate_year AS year_level, c.platform,
-                   COUNT(v.id) AS vote_count
-            FROM candidates c
-            LEFT JOIN votes v ON v.candidate_id = c.id
-            WHERE c.position_id = :pid
-            GROUP BY c.id, c.name, c.photo, c.party, c.department, c.candidate_year, c.platform
-            ORDER BY c.name ASC
-        ');
-        $candStmt->execute(['pid' => $pid]);
-        $candidates = array_map(function ($c) {
-            $c['id'] = (int) $c['id'];
-            $c['vote_count'] = (int) $c['vote_count'];
-            return $c;
-        }, $candStmt->fetchAll());
-
         $positionsOut[] = [
             'position_id' => $pid,
             'title' => $p['title'],
             'winner_count' => (int) ($p['winner_count'] ?? 1),
             'year_restriction' => $p['year_restriction'] ?: null,
-            'candidates' => $candidates,
+            'candidates' => $candidatesByPosition[$pid] ?? [],
         ];
 
         // A position counts as "answered" for the progress stepper if the
@@ -147,10 +211,14 @@ foreach ($rawElections as $e) {
         }
     }
 
+    $hasLogo = $e['type'] === 'SSG'
+        ? $ssgLogoExists
+        : isset($deptsWithLogo[(string) $e['department']]);
+
     $elections[] = [
-        'id' => (int) $e['id'],
+        'id' => $electionId,
         'config' => [
-            'id' => (int) $e['id'],
+            'id' => $electionId,
             'name' => $e['name'],
             'type' => $e['type'],
             'department' => $e['department'],
@@ -160,12 +228,12 @@ foreach ($rawElections as $e) {
             'results_visibility' => $e['results_visibility'],
             'target_school_year_label' => $e['target_school_year_label'],
             'accent' => $e['type'] === 'SSG' ? '#3b82f6' : '#f97316',
-            'icon' => electionLogoHtml($e['type'], $e['department'], $ssgLogo, $departmentLogos),
+            'icon_url' => $hasLogo ? 'icon.php?e=' . $electionId : null,
             'subtitle' => $e['type'] === 'SSG' ? 'Supreme Student Government' : 'Department Student Government' . ($e['department'] ? ' — ' . $e['department'] : ''),
         ],
         'positions' => $positionsOut,
         'totalPositions' => count($positionsOut),
-        'hasVoted' => userHasVotedInElection($pdo, (int) $user['id'], (int) $e['id']),
+        'hasVoted' => in_array($electionId, $votedElectionIds, true),
         'answeredPositionIds' => $answeredPositionIds,
     ];
 }
