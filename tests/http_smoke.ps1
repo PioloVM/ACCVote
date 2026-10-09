@@ -345,6 +345,7 @@ Assert-True "ballot page header tagged for mobile opt-out" ($ballotSrc -match 'b
 Assert-True "mobile ballot overrides come after the base rule" ($ballotCss.IndexOf('margin-left: -2rem') -lt $ballotCss.IndexOf('.ballot-header { top: 0')) "mobile rule loses the cascade"
 Assert-True "mobile page header spans full width" ($ballotCss -match 'margin-left: -1rem; margin-right: -1rem; border-radius: 0') "page header still inset"
 Assert-True "dead pre-base mobile bleed rule removed" ($ballotCss -notmatch '\.ballot-header \{ margin-left: -1rem') "old rule still present"
+Assert-True "no gap above the mobile page header" ($ballotCss -match '\.main-content \{ padding-top: 0; \}') "container top padding still shows above the header"
 
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"

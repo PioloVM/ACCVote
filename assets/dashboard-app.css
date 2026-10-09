@@ -782,6 +782,9 @@
         .page-header { margin-left: -1rem; margin-right: -1rem; border-radius: 0; }
         .ballot-page-header { position: static; margin-bottom: 1.25rem; }
         .ballot-header { top: 0; margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; }
+        /* Pull the page header flush with the top — the container's own
+           top padding otherwise reads as a gap above the burger menu. */
+        .main-content { padding-top: 0; }
     }
 
     /* One continuous scroll: every position section is always visible. */
