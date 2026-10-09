@@ -175,8 +175,15 @@ $csrfToken = csrfToken();
 .report-section-row input[type="checkbox"]{width:16px;height:16px;flex:0 0 auto;}
 .drag-handle{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--muted);padding:0 .35rem;font-size:1rem;flex:0 0 auto;}
 .drag-handle:active{cursor:grabbing;}
-.row-dragging{opacity:.55;box-shadow:0 4px 14px rgba(0,0,0,.18);}
-#positionsTable tr.row-dragging td{background:rgba(132,204,22,.08);}
+/* Grabbed row: lifted over its siblings while it follows the pointer
+   (the transform comes from JS so the row stays glued to the cursor). */
+.row-dragging{ position: relative; z-index: 60; box-shadow: 0 16px 30px -10px rgba(15,23,42,.4); will-change: transform; }
+.report-section-row.row-dragging{ background: var(--card); border-color: var(--accent); }
+#positionsTable tr.row-dragging td{ background: var(--input-bg); box-shadow: 0 16px 30px -10px rgba(15,23,42,.35); }
+/* Landing flash after the drop (settle), on div rows and table rows. */
+@keyframes rowSettle{ from{ background-color: rgba(132,204,22,.18); } to{ background-color: transparent; } }
+.row-settle{ animation: rowSettle .5s ease; }
+#positionsTable tr.row-settle td{ animation: rowSettle .5s ease; }
 
 *{box-sizing:border-box;}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
@@ -3674,44 +3681,79 @@ function bindReportSectionDrag(){
 }
 
 // Press-hold-drag vertical row reordering. Pointer events (not HTML5 DnD)
-// so it works identically for mouse and touch. While the pointer is held
-// on the handle, the dragged row is live-moved past neighbors as it crosses
-// their midpoint; on release the caller commits the resulting DOM order.
+// so it works identically for mouse and touch. The grabbed row "lifts"
+// (scale + shadow) and follows the pointer via transform while the other
+// rows make room with a FLIP animation. Placement is DIRECT: the target
+// slot is computed from how many rows sit above the pointer, so one
+// decisive drag takes a row all the way to the top or bottom — no
+// one-row-per-event lag. On release the row settles into its slot with a
+// small landing bounce before the commit re-render.
 // `listEl` must be a container whose children ARE the rows (div list or
 // tbody); rows carry data-idx for the commit callback.
 function attachRowDrag(handle, row, listEl, onCommit){
     handle.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         handle.setPointerCapture(e.pointerId);
-        row.classList.add('row-dragging');
         const startY = e.clientY;
+        const grabOffsetY = e.clientY - row.getBoundingClientRect().top;
+        row.classList.add('row-dragging');
+        let currentDy = 0;
         let moved = false;
+        // The row's layout top changes every time it is re-slotted; the
+        // transform compensates so the row stays glued to the pointer.
+        const followPointer = (ev) => {
+            const layoutTop = row.getBoundingClientRect().top - currentDy;
+            currentDy = (ev.clientY - grabOffsetY) - layoutTop;
+            row.style.transform = `translateY(${currentDy}px) scale(1.02)`;
+        };
         const onMove = (ev) => {
             if (Math.abs(ev.clientY - startY) > 2) moved = true;
-            const rows = Array.from(listEl.children).filter(r => r !== row);
-            const rowBox = row.getBoundingClientRect();
-            const rowMid = rowBox.top + rowBox.height / 2;
-            for (const other of rows) {
+            const allRows = Array.from(listEl.children);
+            const others = allRows.filter(r => r !== row);
+            // Direct placement: target index = how many other rows sit
+            // ABOVE the pointer. One event reaches the list's ends.
+            let target = 0;
+            for (const other of others) {
                 const box = other.getBoundingClientRect();
-                const mid = box.top + box.height / 2;
-                if (rowMid < mid && ev.clientY > mid) {
-                    listEl.insertBefore(row, other.nextElementSibling);
-                    moved = true;
-                    break;
-                }
-                if (rowMid > mid && ev.clientY < mid) {
-                    listEl.insertBefore(row, other);
-                    moved = true;
-                    break;
-                }
+                if (ev.clientY > box.top + box.height / 2) target++;
+                else break;
             }
+            const currentIdx = allRows.indexOf(row);
+            if (currentIdx !== target) {
+                const beforeTops = new Map(allRows.map(r => [r, r.getBoundingClientRect().top]));
+                if (target >= others.length) listEl.appendChild(row);
+                else listEl.insertBefore(row, others[target]);
+                // FLIP: displaced rows glide to their new spots instead of
+                // snapping into place.
+                allRows.forEach(r => {
+                    if (r === row) return;
+                    const delta = beforeTops.get(r) - r.getBoundingClientRect().top;
+                    if (!delta) return;
+                    r.style.transition = 'none';
+                    r.style.transform = `translateY(${delta}px)`;
+                    requestAnimationFrame(() => {
+                        r.style.transition = 'transform 0.18s ease';
+                        r.style.transform = '';
+                    });
+                });
+            }
+            followPointer(ev);
         };
         const onUp = () => {
             handle.removeEventListener('pointermove', onMove);
             handle.removeEventListener('pointerup', onUp);
             handle.removeEventListener('pointercancel', onUp);
             row.classList.remove('row-dragging');
-            if (moved) onCommit();
+            // Put-down: glide into the slot with a soft landing bounce, THEN
+            // commit — the re-render must not cut the settle animation off.
+            row.style.transition = 'transform 0.2s cubic-bezier(.3,1.6,.5,1)';
+            row.style.transform = '';
+            row.classList.add('row-settle');
+            setTimeout(() => {
+                row.style.transition = '';
+                row.classList.remove('row-settle');
+                if (moved) onCommit();
+            }, 220);
         };
         handle.addEventListener('pointermove', onMove);
         handle.addEventListener('pointerup', onUp);

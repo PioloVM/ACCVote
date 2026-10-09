@@ -291,6 +291,17 @@ Assert-True "drag helper is pointer-based for touch support" ($adminSrc -match '
 Assert-True "report section rows carry drag handles" ($adminSrc -match 'report-section-row[\s\S]{0,300}drag-handle') "no handle on report rows"
 Assert-True "wizard position rows carry drag handles" ($adminSrc -match '(?s)wizardDraft\.positions\.map\(\(p,i\) =>[\s\S]{0,900}drag-handle') "no handle on wizard rows"
 Assert-True "drag handle blocks page scroll while dragging" ($adminSrc -match 'touch-action:\s*none') "touch-action missing"
+# Drag placement must be DIRECT: a row dragged from the bottom lands at the
+# top in the same gesture, instead of lagging one row behind the pointer.
+Assert-True "drag computes the target slot from the pointer position" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?listEl\.insertBefore\(row, others\[target\]\)') "placement still one-row-per-event"
+Assert-True "drag can drop a row at the very bottom" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?listEl\.appendChild\(row\)') "no bottom-edge drop"
+# The whole row should read as grabbed: it lifts and follows the pointer.
+Assert-True "dragged row follows the pointer" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?followPointer') "row does not follow pointer"
+Assert-True "dragged row lifts while grabbed" ($adminSrc -match '(?s)\.row-dragging\{[\s\S]{0,300}box-shadow') "no lifted styling"
+Assert-True "displaced rows glide via FLIP instead of snapping" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?beforeTops') "no FLIP animation"
+# And it should land with a visible put-down before the re-render commits.
+Assert-True "row lands with a settle animation" ($adminSrc -match 'rowSettle') "no settle animation"
+Assert-True "commit waits for the settle animation" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?setTimeout[\s\S]{0,200}onCommit\(\)') "commit still immediate"
 
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
