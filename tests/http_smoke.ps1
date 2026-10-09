@@ -315,6 +315,17 @@ Assert-True "results page loads 200" ($r.Code -eq '200') "got $($r.Code)"
 Assert-True "results renders closed election card" ($r.Text -match 'CASED Student Council Election 2026') "CASED card missing"
 Assert-True "results renders turnout line" ($r.Text -match 'ballots cast') "turnout line missing"
 
+# ----------------------------------------------------------------
+# Section: ballot exit confirm + re-click unvote (partner follow-ups)
+# ----------------------------------------------------------------
+# Exit confirm: leaving the ballot with unsubmitted selections must ask
+# first. Re-click unvote: clicking an already-selected radio clears it
+# (the no-vote option for single-choice positions).
+$ballotSrc = Get-Content .\dashboard.php -Raw
+Assert-True "ballot exit links intercepted with confirm dialog" ($ballotSrc -match 'ballotExitLinks') "no exit interception found"
+Assert-True "exit dialog warns unsubmitted selections are lost" ($ballotSrc -match 'will not be saved') "warning text missing"
+Assert-True "selected radio can be unvoted by re-clicking it" ($ballotSrc -match 'prevCheckedByGroup') "no re-click unvote logic found"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

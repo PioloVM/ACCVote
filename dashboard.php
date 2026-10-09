@@ -629,6 +629,29 @@
             updateDimming(fieldset, step);
         });
 
+        // Re-click to unvote: radios can't be unchecked natively, so on a
+        // single-choice position, clicking the already-selected candidate
+        // clears the selection (abstain) instead of doing nothing.
+        // Multi-select positions use checkboxes, which uncheck natively.
+        // The last-checked radio per group is remembered from the change
+        // event; a click on that same radio unchecks it (with a synthetic
+        // change event so dimming + progress stay in sync).
+        const prevCheckedByGroup = {};
+        voteForm.addEventListener('change', e => {
+            if (e.target.type === 'radio') {
+                prevCheckedByGroup[e.target.name] = e.target.checked ? e.target : null;
+            }
+        });
+        voteForm.addEventListener('click', e => {
+            const input = e.target.closest('.ballot-radio-input');
+            if (!input || input.type !== 'radio') return;
+            if (prevCheckedByGroup[input.name] === input && input.checked) {
+                input.checked = false;
+                prevCheckedByGroup[input.name] = null;
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+
         // Progress = answered positions / total. A position counts as
         // answered once any candidate inside it is picked; an empty
         // position is a legitimate skip, never a blocker.
@@ -648,6 +671,29 @@
         const confirmModal = document.getElementById('ballotConfirmModal');
         window.openBallotConfirm = function () { if (confirmModal) confirmModal.classList.add('active'); };
         window.closeBallotConfirm = function () { if (confirmModal) confirmModal.classList.remove('active'); };
+
+        // Exit guard for in-page controls (the Exit link + sidebar links):
+        // leaving the ballot with unsubmitted selections asks first, since
+        // unsubmitted selections are simply lost on navigation. The browser
+        // back button / refresh can't be covered without the native
+        // beforeunload dialog, which is deliberately not used here.
+        const ballotExitLinks = document.querySelectorAll('a[href^="dashboard.php?page="]');
+        ballotExitLinks.forEach(link => {
+            link.addEventListener('click', e => {
+                const successOpen = document.getElementById('ballotSuccessModal')
+                    && document.getElementById('ballotSuccessModal').classList.contains('active');
+                const anySelected = voteForm.querySelectorAll('.ballot-radio-input:checked').length > 0;
+                if (!anySelected || successOpen) return; // nothing unsaved — navigate normally
+                e.preventDefault();
+                showConfirmModal({
+                    title: 'Exit this ballot?',
+                    message: 'Any selections you have not submitted will not be saved.',
+                    confirmLabel: 'Exit',
+                    cancelLabel: 'Keep Voting',
+                    danger: true,
+                }).then(ok => { if (ok) window.location.href = link.href; });
+            });
+        });
 
         // ---- Vote All chain helpers (continuous mode only) -------------
         function showChainModal(nextElection) {
