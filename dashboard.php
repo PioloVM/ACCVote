@@ -296,7 +296,7 @@
         <div class="page-header ballot-page-header">
             <div style="display: flex; align-items: center; gap: 0.75rem;">
                 <button class="hamburger" id="hamburgerBtn" aria-label="Toggle sidebar">☰</button>
-                <h1>Welcome, <?= h($user['name']) ?></h1>
+                <h1>Cast Your Vote</h1>
             </div>
             <span class="date"><?= date('l, F j, Y') ?></span>
         </div>

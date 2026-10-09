@@ -342,6 +342,11 @@ Assert-True "submit vote button centers on all screen sizes" ($ballotCss -match 
 # come after the base .ballot-header rule or the -2rem desktop bleed wins
 # the cascade and overflows the phone screen (that bug shipped in d191f65).
 Assert-True "ballot page header tagged for mobile opt-out" ($ballotSrc -match 'ballot-page-header') "class missing"
+
+# The ballot screen's top header must speak the ballot's language, not the
+# generic dashboard greeting.
+Assert-True "ballot page header uses a ballot-appropriate title" ($ballotSrc -match '(?s)page-header ballot-page-header.{0,300}<h1>Cast Your Vote</h1>') "header title not updated"
+Assert-True "ballot page header drops the dashboard greeting" ($ballotSrc -notmatch '(?s)page-header ballot-page-header.{0,300}Welcome') "header still greets the user"
 Assert-True "mobile ballot overrides come after the base rule" ($ballotCss.IndexOf('margin-left: -2rem') -lt $ballotCss.IndexOf('.ballot-header { top: 0')) "mobile rule loses the cascade"
 Assert-True "mobile page header spans full width" ($ballotCss -match 'margin-left: -1rem; margin-right: -1rem; border-radius: 0') "page header still inset"
 Assert-True "dead pre-base mobile bleed rule removed" ($ballotCss -notmatch '\.ballot-header \{ margin-left: -1rem') "old rule still present"
