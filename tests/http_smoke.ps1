@@ -289,6 +289,7 @@ Assert-True "empty selection blocks export" ($adminSrc -match 'Select at least o
 Assert-True "shared press-hold drag helper exists" ($adminSrc -match '(?s)function attachRowDrag') "no drag helper"
 Assert-True "drag helper is pointer-based for touch support" ($adminSrc -match '(?s)function attachRowDrag[\s\S]{0,900}pointerdown') "drag helper not pointer-based"
 Assert-True "report section rows carry drag handles" ($adminSrc -match 'report-section-row[\s\S]{0,300}drag-handle') "no handle on report rows"
+Assert-True "report arrows sit beside the drag handle like the wizard rows" ($adminSrc -match '(?s)class="report-section-row" data-idx="\$\{i\}">\s*<span class="drag-handle"[^>]*>⠿</span>\s*<button[^>]*title="Move up"') "arrows not beside the handle"
 Assert-True "wizard position rows carry drag handles" ($adminSrc -match '(?s)wizardDraft\.positions\.map\(\(p,i\) =>[\s\S]{0,900}drag-handle') "no handle on wizard rows"
 Assert-True "drag handle blocks page scroll while dragging" ($adminSrc -match 'touch-action:\s*none') "touch-action missing"
 # Drag placement must be DIRECT: a row dragged from the bottom lands at the
@@ -310,6 +311,10 @@ Assert-True "drag ends on a release anywhere (window fallback)" ($adminSrc -matc
 Assert-True "drag ends when pointer capture is lost" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?lostpointercapture') "no lostpointercapture handling"
 Assert-True "a drop is processed exactly once" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?let ended = false') "no once-guard"
 Assert-True "capture failure cannot break the drag" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?try \{[\s\S]*?setPointerCapture') "setPointerCapture unguarded"
+# Tracking must not depend on the handle receiving events: if pointer capture
+# dies mid-gesture the row stopped following, so a long drag only advanced
+# one slot per grab. Window-level move tracking survives any capture loss.
+Assert-True "drag tracks the pointer at window level" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?window\.addEventListener\(.pointermove., onMove') "tracking still handle-only"
 # Target-slot math must read LAYOUT positions (offsetTop), not animated
 # rects — mid-FLIP rect reads made the target index oscillate mid-gesture.
 Assert-True "drag target math ignores in-flight animations" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?offsetTop') "target math still uses animated rects"

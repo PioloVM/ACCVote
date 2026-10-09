@@ -3766,7 +3766,7 @@ function attachRowDrag(handle, row, listEl, onCommit){
         const onUp = () => {
             if (ended) return;
             ended = true;
-            handle.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointermove', onMove, true);
             handle.removeEventListener('pointerup', onUp);
             handle.removeEventListener('pointercancel', onUp);
             handle.removeEventListener('lostpointercapture', onUp);
@@ -3784,7 +3784,12 @@ function attachRowDrag(handle, row, listEl, onCommit){
                 if (moved) onCommit();
             }, 220);
         };
-        handle.addEventListener('pointermove', onMove);
+        // Move tracking lives at WINDOW level, not on the handle: pointer
+        // capture can die mid-gesture (e.g. when the row is re-slotted),
+        // and handle-bound tracking then stops — a long drag only advanced
+        // one slot per grab. Window-level capture-phase tracking follows
+        // the pointer no matter what happens to the handle or the DOM.
+        window.addEventListener('pointermove', onMove, true);
         handle.addEventListener('pointerup', onUp);
         handle.addEventListener('pointercancel', onUp);
         // A capture that dies mid-drag fires THIS on the handle — treat it
@@ -3858,10 +3863,10 @@ function renderReportPreview(){
             ${lastReportData.order.map(i => `
                 <div class="report-section-row" data-idx="${i}">
                     <span class="drag-handle" title="Hold and drag to reorder">⠿</span>
-                    <input type="checkbox" ${lastReportData.selected[i] ? 'checked' : ''} onchange="toggleReportSection(${i}, this.checked)">
-                    <span style="flex:1;min-width:0;">${escapeHtml(lastReportData.sections[i].heading)}</span>
                     <button type="button" class="btn btn-secondary btn-sm" title="Move up" ${lastReportData.order.indexOf(i) === 0 ? 'disabled' : ''} onclick="moveReportSection(${i}, -1)" style="padding:0 .5rem;">↑</button>
                     <button type="button" class="btn btn-secondary btn-sm" title="Move down" ${lastReportData.order.indexOf(i) === lastReportData.order.length - 1 ? 'disabled' : ''} onclick="moveReportSection(${i}, 1)" style="padding:0 .5rem;">↓</button>
+                    <input type="checkbox" ${lastReportData.selected[i] ? 'checked' : ''} onchange="toggleReportSection(${i}, this.checked)">
+                    <span style="flex:1;min-width:0;">${escapeHtml(lastReportData.sections[i].heading)}</span>
                 </div>`).join('')}
             </div>
             <p class="muted" style="font-size:.76rem;margin:.5rem 0 0;">Exports include only the checked sections, in the order shown. Hold a row's ⠿ handle and drag, or use the arrows.</p>
