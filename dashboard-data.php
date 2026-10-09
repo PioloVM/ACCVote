@@ -13,16 +13,11 @@
  * page and posts straight to vote.php/draft.php as it always has.
  *
  * Query shape: a fixed batch set (user, submissions, settings, departments,
- * elections, positions-IN, candidates-IN, voted-positions, drafts) — never
+ * elections, positions-IN, candidates-IN) — never
  * one query per election or per position. Images travel as URLs
  * (`photo_url` / `icon_url`, served cacheably by photo.php / icon.php),
  * never as base64, so the payload stays a few KB regardless of how many
  * candidates have photos.
- *
- * "answeredPositionIds" per election is the one piece of derived data this
- * endpoint pre-merges server-side (real votes + saved drafts) rather than
- * shipping both separately and merging in JS — keeps the client simpler
- * and matches exactly what the old PHP page did per election card.
  */
 
 require_once __DIR__ . '/includes/functions.php';
@@ -44,24 +39,6 @@ if (!$user) {
     http_response_code(401);
     echo json_encode(['error' => 'Not logged in.']);
     exit;
-}
-
-// Real cast votes, per position — matches userHasVotedInElection()'s
-// underlying data source in dashboard.php.
-$votedPositionIds = [];
-$vpStmt = $pdo->prepare('SELECT position_id FROM votes WHERE user_id = :uid');
-$vpStmt->execute(['uid' => $user['id']]);
-$votedPositionIds = array_map('intval', $vpStmt->fetchAll(PDO::FETCH_COLUMN));
-
-// Saved-for-later ballot drafts, keyed by election_id — never counted as
-// actual votes, only used to show "X of Y positions" progress before
-// submission (same as dashboard.php's Branch A / Branch B always did).
-$draftsByElection = [];
-$draftStmt = $pdo->prepare('SELECT election_id, selections FROM vote_drafts WHERE user_id = :uid');
-$draftStmt->execute(['uid' => $user['id']]);
-foreach ($draftStmt->fetchAll() as $draftRow) {
-    $decoded = json_decode($draftRow['selections'], true);
-    $draftsByElection[(int) $draftRow['election_id']] = is_array($decoded) ? $decoded : [];
 }
 
 // Submission locks — ONE query answers hasVoted for every election below.
@@ -186,10 +163,8 @@ $elections = [];
 foreach ($eligible as $e) {
     $electionId = (int) $e['id'];
     $positions = $allowedPositionsByElection[$electionId] ?? [];
-    $currentDraft = $draftsByElection[$electionId] ?? [];
 
     $positionsOut = [];
-    $answeredPositionIds = [];
     foreach ($positions as $p) {
         $pid = (int) $p['position_id'];
 
@@ -200,15 +175,6 @@ foreach ($eligible as $e) {
             'year_restriction' => $p['year_restriction'] ?: null,
             'candidates' => $candidatesByPosition[$pid] ?? [],
         ];
-
-        // A position counts as "answered" for the progress stepper if the
-        // student has a real recorded vote OR a saved draft pick for it —
-        // matches exactly what dashboard.php's per-card logic used to do.
-        $hasRealVote = in_array($pid, $votedPositionIds, true);
-        $hasDraftPick = !empty($currentDraft[(string) $pid]);
-        if ($hasRealVote || $hasDraftPick) {
-            $answeredPositionIds[] = $pid;
-        }
     }
 
     $hasLogo = $e['type'] === 'SSG'
@@ -234,7 +200,6 @@ foreach ($eligible as $e) {
         'positions' => $positionsOut,
         'totalPositions' => count($positionsOut),
         'hasVoted' => in_array($electionId, $votedElectionIds, true),
-        'answeredPositionIds' => $answeredPositionIds,
     ];
 }
 

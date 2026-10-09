@@ -899,22 +899,6 @@
     .vote-hero-empty-title { font-size: 1.15rem; font-weight: 700; color: var(--text); margin: 0 0 0.3rem; }
     .vote-hero-empty-text { color: var(--text-secondary); font-size: 0.9rem; margin: 0; }
 
-    .quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
-    .quick-action-tile {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 1.25rem 1rem;
-        text-align: center;
-        text-decoration: none;
-        color: var(--text);
-        transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
-        display: block;
-    }
-    .quick-action-tile:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15,23,42,0.07); }
-    .quick-action-tile .qa-icon { font-size: 1.7rem; margin-bottom: 0.4rem; }
-    .quick-action-tile .qa-label { font-weight: 700; font-size: 0.92rem; }
-    .quick-action-tile .qa-desc { font-size: 0.76rem; color: var(--text-secondary); margin-top: 0.15rem; }
     /* One continuous progress line with a checkpoint for every position in
        THIS election (Start -> Position 1 -> Position 2 -> ... -> Ballot
        Complete -> Submit), built dynamically per election. A segment only
@@ -954,11 +938,6 @@
         .vote-hero-title { font-size: 1.3rem; }
         .vote-hero-cta { flex-direction: column; align-items: stretch; }
         .vote-hero-cta .btn { width: 100%; }
-        .quick-actions { gap: 0.6rem; }
-        .quick-action-tile { padding: 0.9rem 0.5rem; }
-        .quick-action-tile .qa-icon { font-size: 1.4rem; }
-        .quick-action-tile .qa-label { font-size: 0.8rem; }
-        .quick-action-tile .qa-desc { display: none; }
     }
 
     /* ================= TOASTS ================= */

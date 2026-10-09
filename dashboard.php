@@ -23,21 +23,6 @@
     // any election? (votes has UNIQUE(user_id, position_id), so one row per
     // position is all there ever is.) Used by the dashboard home to show a
     // real per-position checklist instead of just one all-or-nothing badge.
-    $votedPositionIds = [];
-    $vpStmt = $pdo->prepare('SELECT position_id FROM votes WHERE user_id = :uid');
-    $vpStmt->execute(['uid' => $user['id']]);
-    $votedPositionIds = array_map('intval', $vpStmt->fetchAll(PDO::FETCH_COLUMN));
-
-    // Saved-for-later ballot drafts, keyed by election_id. Never counted as
-    // actual votes — used only to pre-fill an in-progress ballot and to show
-    // "Position X of Y voted" progress on the dashboard before submission.
-    $draftsByElection = [];
-    $draftStmt = $pdo->prepare('SELECT election_id, selections FROM vote_drafts WHERE user_id = :uid');
-    $draftStmt->execute(['uid' => $user['id']]);
-    foreach ($draftStmt->fetchAll() as $draftRow) {
-        $decoded = json_decode($draftRow['selections'], true);
-        $draftsByElection[(int) $draftRow['election_id']] = is_array($decoded) ? $decoded : [];
-    }
 
     /**
      * Whether this student has already cast a ballot in a SPECIFIC election.
@@ -112,63 +97,6 @@
             return "{$hours}h {$minutes}m left";
         }
         return "{$minutes}m {$secs}s left";
-    }
-
-    /**
-     * One continuous progress line with a checkpoint for EVERY position in
-     * this specific election, not just a fixed 3-point summary:
-     *   Start -- Position 1 -- Position 2 -- ... -- Ballot Complete -- Submit
-     * Built dynamically from $positions, so an election with 2 positions
-     * and one with 10 get correspondingly different stepper lengths.
-     *
-     * A segment fills only once the node to its LEFT is filled, so the
-     * green fill reads as contiguous progress from the start rather than
-     * jumping around if positions were answered out of order. The final
-     * segment (Ballot Complete -> Submit) is strictly 0% or 100% — it only
-     * fills once the ballot is ACTUALLY submitted, so a fully-answered-
-     * but-unsubmitted draft still visibly stops short of the end.
-     *
-     * $positions: this election's position rows (each needs 'position_id' and 'title')
-     * $answeredPositionIds: position IDs that already have an answer (draft or real vote)
-     * $submitted: whether the ballot has actually been cast
-     */
-    function renderBallotProgressStepper(array $positions, array $answeredPositionIds, bool $submitted): string
-    {
-        $total = count($positions);
-        $answeredCount = 0;
-        foreach ($positions as $pos) {
-            if (in_array((int) $pos['position_id'], $answeredPositionIds, true)) {
-                $answeredCount++;
-            }
-        }
-        $allAnswered = $total > 0 && $answeredCount === $total;
-
-        $nodes = '<div class="bps-dot filled" title="Started"></div>';
-        $prevFilled = true; // "Start" is always considered reached
-
-        foreach ($positions as $i => $pos) {
-            $isAnswered = in_array((int) $pos['position_id'], $answeredPositionIds, true);
-            $segPct = $prevFilled ? 100 : 0;
-            $nodes .= '<div class="bps-line"><div class="bps-line-fill" style="width: ' . $segPct . '%;"></div></div>';
-            $nodes .= '<div class="bps-dot' . ($isAnswered ? ' filled' : '') . '" title="' . h($pos['title']) . '"><span class="bps-dot-num">' . ($i + 1) . '</span></div>';
-            $prevFilled = $isAnswered;
-        }
-
-        $segPct = $prevFilled ? 100 : 0;
-        $nodes .= '<div class="bps-line"><div class="bps-line-fill" style="width: ' . $segPct . '%;"></div></div>';
-        $nodes .= '<div class="bps-dot' . ($allAnswered ? ' filled' : '') . '" title="Ballot Complete"></div>';
-
-        $segPct = $submitted ? 100 : 0;
-        $nodes .= '<div class="bps-line"><div class="bps-line-fill" style="width: ' . $segPct . '%;"></div></div>';
-        $nodes .= '<div class="bps-dot' . ($submitted ? ' filled' : '') . '" title="Submitted"></div>';
-
-        return '
-        <div class="ballot-progress-stepper">' . $nodes . '</div>
-        <div class="bps-labels">
-            <span>Start</span>
-            <span>' . $answeredCount . ' of ' . $total . ' positions</span>
-            <span>Submit</span>
-        </div>';
     }
 
     /**
@@ -335,7 +263,7 @@
         </div>
         <nav>
             <a href="dashboard.php?page=home"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5Z"/></svg></span><span>Dashboard</span></a>
-            <a href="dashboard.php?page=vote" class="active"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7.5 12l3 3 6-6.5"/></svg></span><span>Vote</span></a>
+            <a href="dashboard.php?page=vote" class="active"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7.5 12l3 3 6-6.5"/></svg></span><span>Vote Now</span></a>
             <a href="dashboard.php?page=candidates"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span>Candidates</span></a>
             <a href="dashboard.php?page=results"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span>Results</span></a>
         </nav>
@@ -863,7 +791,7 @@
         </div>
         <nav>
             <a data-panel="home" class="nav-link active" onclick="showPanel('home')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5Z"/></svg></span><span>Dashboard</span></a>
-            <a data-panel="vote" class="nav-link" onclick="showPanel('vote')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7.5 12l3 3 6-6.5"/></svg></span><span>Vote</span></a>
+            <a data-panel="vote" class="nav-link" onclick="showPanel('vote')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7.5 12l3 3 6-6.5"/></svg></span><span>Vote Now</span></a>
             <a data-panel="candidates" class="nav-link" onclick="showPanel('candidates')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span>Candidates</span></a>
             <a data-panel="results" class="nav-link" onclick="showPanel('results')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span><span>Results</span></a>
         </nav>
@@ -1107,45 +1035,6 @@
     const GROUP_LABELS = { ongoing: 'Ongoing', paused: 'Paused', scheduled: 'Upcoming', closed: 'Ended' };
     const GROUP_DOT_COLOR = { ongoing: '#22c55e', paused: '#f59e0b', scheduled: '#6366f1', closed: '#ef4444' };
 
-    // Mirrors renderBallotProgressStepper() in PHP.
-    function renderBallotProgressStepper(positions, answeredPositionIds, submitted) {
-        const total = positions.length;
-        let answeredCount = 0;
-        positions.forEach(p => { if (answeredPositionIds.includes(p.position_id)) answeredCount++; });
-        const allAnswered = total > 0 && answeredCount === total;
-
-        let nodes = '<div class="bps-dot filled" title="Started"></div>';
-        let prevFilled = true;
-        positions.forEach((pos, i) => {
-            const isAnswered = answeredPositionIds.includes(pos.position_id);
-            const segPct = prevFilled ? 100 : 0;
-            nodes += `<div class="bps-line"><div class="bps-line-fill" style="width: ${segPct}%;"></div></div>`;
-            nodes += `<div class="bps-dot${isAnswered ? ' filled' : ''}" title="${escHtml(pos.title)}"><span class="bps-dot-num">${i + 1}</span></div>`;
-            prevFilled = isAnswered;
-        });
-        let segPct = prevFilled ? 100 : 0;
-        nodes += `<div class="bps-line"><div class="bps-line-fill" style="width: ${segPct}%;"></div></div>`;
-        nodes += `<div class="bps-dot${allAnswered ? ' filled' : ''}" title="Ballot Complete"></div>`;
-        segPct = submitted ? 100 : 0;
-        nodes += `<div class="bps-line"><div class="bps-line-fill" style="width: ${segPct}%;"></div></div>`;
-        nodes += `<div class="bps-dot${submitted ? ' filled' : ''}" title="Submitted"></div>`;
-
-        return `
-        <div class="ballot-progress-stepper">${nodes}</div>
-        <div class="bps-labels">
-            <span>Start</span>
-            <span>${answeredCount} of ${total} positions</span>
-            <span>Submit</span>
-        </div>`;
-    }
-
-    function answeredPositionIdsFor(election) {
-        // Server already merges real votes + saved drafts into this list
-        // per election (see dashboard-data.php) — no need to redo that
-        // merge here.
-        return election.answeredPositionIds || [];
-    }
-
     // ------------------------------------------------------------------
     // SKELETON LOADERS — shown immediately on panel switch, before the
     // (usually near-instant, since it's one cached fetch) data is ready.
@@ -1153,7 +1042,6 @@
     function skeletonHome() {
         return `
             <div class="skeleton skel-card" style="height:220px;margin-bottom:1.75rem;"></div>
-            <div class="quick-actions">${'<div class="skeleton skel-card" style="height:96px;"></div>'.repeat(3)}</div>
             <div class="skeleton skel-line w40" style="height:22px;margin:1.5rem 0 1rem;"></div>
             <div class="skeleton skel-card" style="height:200px;margin-bottom:1.5rem;"></div>
             <div class="skeleton skel-card" style="height:200px;"></div>
@@ -1221,8 +1109,6 @@
         const diff = isOpen ? (end - now) / 1000 : 0;
         const canVote = isOpen && !election.hasVoted && election.totalPositions > 0;
         const hasOpened = now >= start;
-        const answeredIds = answeredPositionIdsFor(election);
-        const answeredCount = election.positions.filter(p => answeredIds.includes(p.position_id)).length;
 
         let metaHtml = `<span class="ec-meta-item">📅 ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} &ndash; ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>`;
         if (isOpen) {
@@ -1238,9 +1124,8 @@
         if (election.totalPositions === 0) {
             bodyHtml = `<div class="ec-status-neutral">No positions have been added to this election yet.</div>`;
         } else if (hasOpened) {
-            bodyHtml = renderBallotProgressStepper(election.positions, answeredIds, election.hasVoted);
             if (election.hasVoted) {
-                bodyHtml += `<div class="ec-voted-banner">✅ <span>Thank you &mdash; your vote has been recorded.</span></div>`;
+                bodyHtml = `<div class="ec-voted-banner">✅ <span>Thank you &mdash; your vote has been recorded.</span></div>`;
             } else if (config.status === 'paused') {
                 bodyHtml += `<div class="ec-status-neutral">Voting is temporarily paused. Check back soon.</div>`;
             } else if (!isOpen && now >= end) {
@@ -1250,7 +1135,7 @@
 
         let primaryLabel = null, primaryHref = null;
         if (canVote) {
-            primaryLabel = answeredCount > 0 ? '🗳 Continue Voting' : '🗳 Vote Now';
+            primaryLabel = '🗳 Vote Now';
             primaryHref = `dashboard.php?page=vote&election_id=${election.id}`;
         } else if (election.totalPositions > 0 && hasOpened) {
             primaryLabel = '📊 View Results';
@@ -1410,13 +1295,6 @@
             </div>`;
         }
 
-        const quickActionsHtml = `
-        <div class="quick-actions">
-            <button type="button" class="quick-action-tile" onclick="showPanel('vote')"><div class="qa-icon">🗳</div><div class="qa-label">Vote</div><div class="qa-desc">Cast your ballot</div></button>
-            <button type="button" class="quick-action-tile" onclick="showPanel('candidates')"><div class="qa-icon">👥</div><div class="qa-label">Candidates</div><div class="qa-desc">View all candidates</div></button>
-            <button type="button" class="quick-action-tile" onclick="showPanel('results')"><div class="qa-icon">📊</div><div class="qa-label">Results</div><div class="qa-desc">Live vote counts</div></button>
-        </div>`;
-
         let electionsSectionHtml = '<div class="alert alert-info">No elections have been set up for you yet. Check back soon.</div>';
         if (elections.length > 0) {
             const { filterBar, groupsHtml } = renderElectionFilterBarAndGroups(elections, now, 'home', 'countdown');
@@ -1449,7 +1327,6 @@
         el.innerHTML = `
             <div class="home-greeting"><p>Here's your election dashboard.</p></div>
             ${voteAllHtml}
-            ${quickActionsHtml}
             <h2 class="section-title">Your Elections</h2>
             ${electionsSectionHtml}
             ${featuredHtml}

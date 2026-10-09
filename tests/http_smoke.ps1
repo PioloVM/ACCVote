@@ -219,6 +219,20 @@ DELETE FROM votes WHERE user_id=$uidSql3;
 UPDATE users SET has_voted=0 WHERE id=$uidSql3;
 "@ 2>&1 | Out-Null
 
+# ----------------------------------------------------------------
+# Section: nav cleanup + draft remnants (Task 8)
+# ----------------------------------------------------------------
+$payloadRaw = (curl.exe -s -b $jar "$base/dashboard-data.php") -join ""
+Assert-True "payload has no answeredPositionIds" ($payloadRaw -notmatch 'answeredPositionIds') ""
+
+$shellHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=home") -join "")
+Assert-True "shell has no quick-action markup" ($shellHtml -notmatch 'quick-action') ""
+Assert-True "shell has no ballot progress stepper" ($shellHtml -notmatch 'renderBallotProgressStepper') ""
+Assert-True "shell has no answeredPositionIds use" ($shellHtml -notmatch 'answeredPositionIds') ""
+Assert-True "shell has no draftsByElection" ($shellHtml -notmatch 'draftsByElection') ""
+Assert-True "sidebar label is Vote Now" ($shellHtml -match 'Vote Now') ""
+Assert-True "sidebar has no bare Vote label" ($shellHtml -notmatch '>Vote<') ""
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
