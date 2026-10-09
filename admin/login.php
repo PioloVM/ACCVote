@@ -34,6 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($admin && password_verify($password, $admin['password_hash'])) {
                 session_regenerate_id(true);
+                // A pre-auth CSRF token must not survive into the
+                // privileged session, and one browser must not carry
+                // a student AND an admin identity at once.
+                unset($_SESSION['csrf_token']);
+                unset($_SESSION['user_id'], $_SESSION['name']);
                 $_SESSION['admin_id'] = $admin['id'];
                 $_SESSION['admin_username'] = $admin['username'];
                 $_SESSION['is_admin'] = true;
@@ -41,6 +46,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // nothing in the codebase checks it, and a stored-but-unused
                 // privilege field invites someone to "gate" on it later
                 // without wiring up real enforcement (audit finding #6).
+
+                // Migrate the hash if PHP's default algorithm/cost
+                // has moved on since it was created.
+                if (password_needs_rehash($admin['password_hash'], PASSWORD_DEFAULT)) {
+                    $rehash = $pdo->prepare('UPDATE admins SET password_hash = :hash WHERE id = :id');
+                    $rehash->execute(['hash' => password_hash($password, PASSWORD_DEFAULT), 'id' => $admin['id']]);
+                }
 
                 // Update last_login
                 $update = $pdo->prepare('UPDATE admins SET last_login = NOW() WHERE id = :id');
@@ -62,7 +74,9 @@ $csrfToken = csrfToken();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Aklan Catholic College student council election administration.">
+    <link rel="icon" href="../assets/favicon.png" type="image/png">
     <title>Admin Login | School Elections</title>
     <link rel="stylesheet" href="../assets/style.css">
     <style>
@@ -312,7 +326,7 @@ $csrfToken = csrfToken();
 <body>
 <div class="page-center">
     <div class="card" id="loginCard">
-        <div class="admin-badge">FICT</div>
+        <div class="admin-badge">ACC</div>
         <h2 class="card-title">Election Admin</h2>
         <p class="card-subtitle">Sign in to manage elections, students, and results.</p>
 

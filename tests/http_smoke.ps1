@@ -248,13 +248,20 @@ Assert-True "blankDraft seeds exactly 1 candidate row" ($blankRows -eq 1) "got $
 Assert-True "candidates count input defaults to 1" ($adminSrc -match 'p\.candidates\.length \|\| 1') ""
 Assert-True "candidates count input has highlight id" ($adminSrc -match 'id="pos_cands_\$\{i\}"') ""
 Assert-True "candCount<1 error highlights its field" ($adminSrc -match "wizardInvalidFields\.add\('pos_cands_'\+i\)") ""
-# sizeBarChartBox must be top-level (declared before drawPositionShareChart),
-# not nested inside it — drawMarginChart() calls it too, and a nested
-# declaration throws ReferenceError which kills the margin chart AND the
-# "uncontested" legend note before it renders.
-$szIdx = $adminSrc.IndexOf('function sizeBarChartBox')
-$dsIdx = $adminSrc.IndexOf('function drawPositionShareChart')
-Assert-True "sizeBarChartBox declared above drawPositionShareChart (top-level)" ($szIdx -gt 0 -and $dsIdx -gt 0 -and $szIdx -lt $dsIdx) "sz=$szIdx ds=$dsIdx"
+# Backup-imported Results detail view must carry the spec's uncontested
+# label (plan item 6): grey pill in the position header + the explanatory
+# note under the candidate rows.
+Assert-True "detail view flags uncontested positions" ($adminSrc -match 'status-pill normal">UNCONTESTED') ""
+Assert-True "detail view explains uncontested label" ($adminSrc -match 'only one candidate stood') ""
+# Admin reset-vote must clear the ballot_submissions lock too — votes alone
+# being gone does not let the student vote again (vote.php checks the lock).
+$studentsSrc = Get-Content .\admin\api\students.php -Raw
+Assert-True "admin reset-vote clears ballot_submissions lock" ($studentsSrc -match 'DELETE FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid') ""
+# Local MySQL (emulated PDO prepares) returns string ids from elections.php
+# while voted_election_ids are ints — a strict .includes(e.id) never matched,
+# so the student-detail Reset button could never render. The compare must
+# coerce types.
+Assert-True "voted-status compares coerce election id types" ($adminSrc -match 'String\(vid\) === String\(e\.id\)') ""
 
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"

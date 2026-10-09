@@ -11,5 +11,5 @@ require_once __DIR__ . '/../includes/functions.php';
 
 startSecureSession();
 
-header('Location: ' . (!empty($_SESSION['is_admin']) ? 'dashboard.php' : 'login.php'));
+header('Location: ' . (!empty($_SESSION['admin_id']) ? 'dashboard.php' : 'login.php'));
 exit;

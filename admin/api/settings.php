@@ -452,15 +452,33 @@ if ($method === 'DELETE') {
         $stmt2->execute(['code' => $code]);
         $eCount = (int) $stmt2->fetchColumn();
 
-        if ($uCount > 0 || $eCount > 0) {
+        // candidates.department references departments(code) with
+        // ON DELETE RESTRICT — a faculty used only by candidates
+        // (e.g. SSG candidates, where elections.department is NULL)
+        // passes the users/elections counts above and then blows up
+        // as a raw FK violation. Check it too.
+        $candStmt = $pdo->prepare('SELECT COUNT(*) FROM candidates WHERE department = :code');
+        $candStmt->execute(['code' => $code]);
+        $cCount = (int) $candStmt->fetchColumn();
+
+        if ($uCount > 0 || $eCount > 0 || $cCount > 0) {
             $parts = [];
             if ($uCount > 0) $parts[] = "$uCount student" . ($uCount === 1 ? '' : 's');
             if ($eCount > 0) $parts[] = "$eCount election" . ($eCount === 1 ? '' : 's');
+            if ($cCount > 0) $parts[] = "$cCount candidate" . ($cCount === 1 ? '' : 's');
             respond(['error' => 'Cannot delete — ' . implode(' and ', $parts) . ' still use this faculty. Reassign them first.'], 409);
         }
 
         // Its logo (if any) goes with the row — nothing else references it.
-        $pdo->prepare('DELETE FROM departments WHERE code = :code')->execute(['code' => $code]);
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare('DELETE FROM departments WHERE code = :code')->execute(['code' => $code]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Delete department failed: ' . $e->getMessage());
+            respond(['error' => 'Could not delete the faculty. Please try again.'], 500);
+        }
         respond(['success' => true]);
     }
 
@@ -480,11 +498,28 @@ if ($method === 'DELETE') {
         $countStmt = $pdo->prepare('SELECT COUNT(*) FROM users WHERE school_year_id = :id');
         $countStmt->execute(['id' => $id]);
         $count = (int) $countStmt->fetchColumn();
-        if ($count > 0) {
-            respond(['error' => "Cannot delete — $count student" . ($count === 1 ? '' : 's') . ' started in this school year. Reassign them first.'], 409);
+        // elections.target_school_year_id has no ON DELETE action —
+        // deleting a targeted school year throws an FK violation
+        // instead of the intended 409. Check it too.
+        $eStmt = $pdo->prepare('SELECT COUNT(*) FROM elections WHERE target_school_year_id = :id');
+        $eStmt->execute(['id' => $id]);
+        $eCount = (int) $eStmt->fetchColumn();
+        if ($count > 0 || $eCount > 0) {
+            $parts = [];
+            if ($count > 0) $parts[] = "$count student" . ($count === 1 ? '' : 's') . ' started in this school year';
+            if ($eCount > 0) $parts[] = "$eCount election" . ($eCount === 1 ? '' : 's') . ' targeted at it';
+            respond(['error' => 'Cannot delete — ' . implode(' and ', $parts) . '. Reassign them first.'], 409);
         }
 
-        $pdo->prepare('DELETE FROM school_years WHERE id = :id')->execute(['id' => $id]);
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare('DELETE FROM school_years WHERE id = :id')->execute(['id' => $id]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Delete school year failed: ' . $e->getMessage());
+            respond(['error' => 'Could not delete the school year. Please try again.'], 500);
+        }
         respond(['success' => true]);
     }
 
@@ -512,7 +547,15 @@ if ($method === 'DELETE') {
             respond(['error' => 'Cannot delete — ' . implode(' and ', $parts) . ' still use this year level.'], 409);
         }
 
-        $pdo->prepare('DELETE FROM year_levels WHERE id = :id')->execute(['id' => $id]);
+        try {
+            $pdo->beginTransaction();
+            $pdo->prepare('DELETE FROM year_levels WHERE id = :id')->execute(['id' => $id]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Delete year level failed: ' . $e->getMessage());
+            respond(['error' => 'Could not delete the year level. Please try again.'], 500);
+        }
         respond(['success' => true]);
     }
 

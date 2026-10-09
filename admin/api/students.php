@@ -59,6 +59,7 @@ function checkFieldLengths(array $fields): ?string
         'Faculty' => [$fields['department'] ?? null, 150],
         'Year level' => [$fields['yearLevel'] ?? null, 20],
         'Email' => [$fields['email'] ?? null, 100],
+        'Registration status' => [$fields['status'] ?? null, 20],
     ];
     foreach ($limits as $label => [$value, $max]) {
         if ($value !== null && mb_strlen((string) $value) > $max) {
@@ -232,17 +233,29 @@ if ($method === 'POST') {
         INSERT INTO users (student_id, name, department, school_year_id, year_level, email, password, registration_status, account_status, has_voted)
         VALUES (:student_id, :name, :department, :school_year_id, :year_level, :email, :password, :status, :account_status, 0)
     ');
-    $stmt->execute([
-        'student_id' => $studentId,
-        'name' => $name,
-        'department' => $department,
-        'school_year_id' => $schoolYearId,
-        'year_level' => $yearLevel,
-        'email' => $email !== '' ? $email : null,
-        'password' => $hash,
-        'status' => $status,
-        'account_status' => $accountStatus,
-    ]);
+    try {
+        $stmt->execute([
+            'student_id' => $studentId,
+            'name' => $name,
+            'department' => $department,
+            'school_year_id' => $schoolYearId,
+            'year_level' => $yearLevel,
+            'email' => $email !== '' ? $email : null,
+            'password' => $hash,
+            'status' => $status,
+            'account_status' => $accountStatus,
+        ]);
+    } catch (Throwable $e) {
+        error_log('Student create failed: ' . $e->getMessage());
+        // A duplicate student_id (unique-constraint race) is the one
+        // error worth naming; everything else is a server fault and
+        // must not leak a stack trace (display_errors is on locally).
+        $isDuplicate = $e->getCode() === '23505' || $e->getCode() === '23000'
+            || stripos((string) $e->getMessage(), 'student_id') !== false;
+        respond($isDuplicate
+            ? ['error' => 'That Student ID is already registered.']
+            : ['error' => 'Could not save changes. Please try again.'], $isDuplicate ? 409 : 500);
+    }
 
     respond(['success' => true, 'id' => (int) $pdo->lastInsertId()]);
 }
@@ -271,27 +284,37 @@ if ($method === 'PUT') {
     // election or what vote.php checks, so the button did nothing real.
     if (!empty($body['resetVotesForElection'])) {
         $eid = (int) $body['resetVotesForElection'];
-        $pdo->prepare('
-            DELETE FROM votes
-            WHERE user_id = :uid
-              AND position_id IN (SELECT position_id FROM election_positions WHERE election_id = :eid)
-        ')->execute(['uid' => $id, 'eid' => $eid]);
+        // One transaction: an interrupted reset must not leave the
+        // legacy has_voted flag disagreeing with the votes table.
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('
+                DELETE FROM votes
+                WHERE user_id = :uid
+                  AND position_id IN (SELECT position_id FROM election_positions WHERE election_id = :eid)
+            ')->execute(['uid' => $id, 'eid' => $eid]);
 
-        // Drop the submission lock too — without this the student would
-        // stay locked out of the election even though their votes are gone
-        // (the lock, not the votes, is what vote.php checks).
-        $pdo->prepare(
-            'DELETE FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
-        )->execute(['uid' => $id, 'eid' => $eid]);
+            // Drop the submission lock too — without this the student would
+            // stay locked out of the election even though their votes are gone
+            // (the lock, not the votes, is what vote.php checks).
+            $pdo->prepare(
+                'DELETE FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
+            )->execute(['uid' => $id, 'eid' => $eid]);
 
-        // Keep the legacy "voted somewhere, ever" flag consistent: only
-        // true if the student still has at least one vote left in any
-        // election after this reset.
-        $remainStmt = $pdo->prepare('SELECT COUNT(*) FROM votes WHERE user_id = :uid');
-        $remainStmt->execute(['uid' => $id]);
-        $remaining = (int) $remainStmt->fetchColumn();
-        $pdo->prepare('UPDATE users SET has_voted = :hv WHERE id = :id')
-            ->execute(['hv' => $remaining > 0 ? 1 : 0, 'id' => $id]);
+            // Keep the legacy "voted somewhere, ever" flag consistent: only
+            // true if the student still has at least one vote left in any
+            // election after this reset.
+            $remainStmt = $pdo->prepare('SELECT COUNT(*) FROM votes WHERE user_id = :uid');
+            $remainStmt->execute(['uid' => $id]);
+            $remaining = (int) $remainStmt->fetchColumn();
+            $pdo->prepare('UPDATE users SET has_voted = :hv WHERE id = :id')
+                ->execute(['hv' => $remaining > 0 ? 1 : 0, 'id' => $id]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            error_log('Vote reset failed: ' . $e->getMessage());
+            respond(['error' => 'Could not reset votes. Please try again.'], 500);
+        }
 
         respond(['success' => true]);
     }
@@ -318,6 +341,17 @@ if ($method === 'PUT') {
         }
         $fields[] = 'account_status = :account_status';
         $values['account_status'] = $body['accountStatus'];
+    }
+
+    // registration_status is a fixed enum — never accept arbitrary
+    // strings from the request. An unvalidated value here lands in
+    // the Students table unescaped (stored XSS in the admin panel)
+    // and corrupts the login gate's === 'suspended' /
+    // === 'unregistered' checks.
+    if (array_key_exists('status', $body)) {
+        if (!in_array($body['status'], ['active', 'unregistered', 'suspended'], true)) {
+            respond(['error' => 'Invalid registration status.'], 400);
+        }
     }
 
     $newSchoolYearId = $current['school_year_id'] !== null ? (int) $current['school_year_id'] : null;
@@ -404,7 +438,13 @@ if ($method === 'PUT') {
     }
 
     $sql = 'UPDATE users SET ' . implode(', ', $fields) . ' WHERE id = :id';
-    $pdo->prepare($sql)->execute($values);
+    try {
+        $pdo->prepare($sql)->execute($values);
+    } catch (Throwable $e) {
+        error_log('Student update failed: ' . $e->getMessage());
+        // No stack trace to the client (display_errors is on locally).
+        respond(['error' => 'Could not save changes. Please try again.'], 500);
+    }
 
     respond(['success' => true]);
 }

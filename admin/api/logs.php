@@ -68,10 +68,15 @@ if ($method === 'POST') {
     if (mb_strlen($action) > 500) $action = mb_substr($action, 0, 500);
 
     $stmt = $pdo->prepare('INSERT INTO activity_logs (admin_username, action) VALUES (:username, :action)');
-    $stmt->execute([
-        'username' => $_SESSION['admin_username'] ?? 'admin',
-        'action' => $action,
-    ]);
+    try {
+        $stmt->execute([
+            'username' => $_SESSION['admin_username'] ?? 'admin',
+            'action' => $action,
+        ]);
+    } catch (Throwable $e) {
+        error_log('Activity log write failed: ' . $e->getMessage());
+        respond(['error' => 'Could not record the log entry.'], 500);
+    }
 
     respond(['success' => true]);
 }

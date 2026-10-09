@@ -572,11 +572,24 @@ if ($method === 'PUT') {
         if ($current['status'] === 'ongoing') {
             respond(['error' => 'This election is ongoing. Pause it before editing positions or candidates.'], 409);
         }
-        if (electionVoteCount($pdo, $id) > 0) {
-            respond(['error' => 'This election already has votes recorded, so its positions and candidates can\'t be edited anymore. You can still change its schedule, status, or results visibility.'], 409);
+
+        // "Save as Draft" must keep the election a draft — the client
+        // sends is_draft_save and the server previously ignored it,
+        // so saving an unfinished election silently scheduled it (and
+        // the wizard's default start of "now" meant the next status
+        // sync would open it for voting).
+        $isDraftSave = !empty($input['is_draft_save']);
+
+        // A draft save may legitimately be unfinished: drop blank
+        // position rows instead of rejecting them (the client has
+        // always documented this behaviour; the server never did it).
+        if ($isDraftSave) {
+            $input['positions'] = array_values(array_filter($input['positions'] ?? [], function ($p) {
+                return trim($p['title'] ?? '') !== '';
+            }));
         }
 
-        $errors = validatePayload($input, true, validDepartmentCodes($pdo));
+        $errors = validatePayload($input, !$isDraftSave, validDepartmentCodes($pdo));
         if ($errors) respond(['error' => implode(' ', $errors)], 400);
 
         [$type, $department] = splitElectionType($input);
@@ -589,7 +602,19 @@ if ($method === 'PUT') {
 
         $pdo->beginTransaction();
 
-        $statusClause = $current['status'] === 'draft' ? ", status = 'scheduled'" : '';
+        // Lock the election row and re-check the vote count INSIDE the
+        // transaction: a ballot cast between an unlocked check and the
+        // position delete below would be cascade-deleted, and the
+        // concurrent voter's INSERT would then fail on the FK — a lost
+        // vote with no admin-visible trace.
+        $lockStmt = $pdo->prepare('SELECT id FROM elections WHERE id = :id FOR UPDATE');
+        $lockStmt->execute(['id' => $id]);
+        if (electionVoteCount($pdo, $id) > 0) {
+            $pdo->rollBack();
+            respond(['error' => 'This election already has votes recorded, so its positions and candidates can\'t be edited anymore. You can still change its schedule, status, or results visibility.'], 409);
+        }
+
+        $statusClause = ($current['status'] === 'draft' && !$isDraftSave) ? ", status = 'scheduled'" : '';
         $partiesSql = isMysql() ? 'parties = :parties' : 'parties = :parties::jsonb';
         $pdo->prepare('
             UPDATE elections SET
@@ -640,8 +665,32 @@ if ($method === 'DELETE') {
     $id = (int) ($input['id'] ?? 0);
     if ($id <= 0) respond(['error' => 'Invalid election ID.'], 400);
 
+    // Deleting an election cascade-deletes every vote ever cast in
+    // it. The browser confirm is not a guard — require an explicit
+    // server-side acknowledgement, and record what is being
+    // destroyed in the audit log inside the same transaction.
+    if (empty($input['confirm_delete'])) {
+        respond(['error' => 'Refusing to delete: missing explicit confirmation. This election and all its votes will be permanently removed.'], 409);
+    }
+
     try {
         $pdo->beginTransaction();
+
+        $lockStmt = $pdo->prepare('SELECT id FROM elections WHERE id = :id FOR UPDATE');
+        $lockStmt->execute(['id' => $id]);
+        if (!$lockStmt->fetch()) {
+            $pdo->rollBack();
+            respond(['error' => 'Election not found.'], 404);
+        }
+
+        $voteCount = electionVoteCount($pdo, $id);
+        if ($voteCount > 0) {
+            $pdo->prepare('INSERT INTO activity_logs (admin_username, action) VALUES (:u, :a)')
+                ->execute([
+                    'u' => 'admin:' . ($_SESSION['admin_username'] ?? 'unknown'),
+                    'a' => sprintf('Deleted election #%d with %d recorded vote(s) — votes destroyed with the election', $id, $voteCount),
+                ]);
+        }
 
         $posStmt = $pdo->prepare('SELECT position_id FROM election_positions WHERE election_id = :id');
         $posStmt->execute(['id' => $id]);
