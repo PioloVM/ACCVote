@@ -3,10 +3,10 @@
  * admin/api/settings.php
  *
  * CRUD for the reference lists that power dropdowns elsewhere in the admin
- * panel: Departments, Majors (scoped to a department), and Year Levels.
+ * panel: Departments (Faculties), School Years, and Year Levels.
  * These used to be hardcoded JS arrays inside admin/dashboard.php — this
  * makes them admin-editable instead. See migration_settings.sql for the
- * schema and why users.department/users.major/users.year_level/
+ * schema and why users.department/users.year_level/users.school_year_id/
  * elections.department deliberately stay plain text with no foreign key.
  *
  * Also serves election LOGOS:
@@ -18,10 +18,18 @@
  * Both are stored the same way candidate photos already are — as the
  * browser's own base64 data: URL, directly in Postgres, capped at 2MB.
  *
- * A single "type" field ('department' | 'major' | 'year_level' |
+ * A single "type" field ('department' | 'school_year' | 'year_level' |
  * 'department_logo' | 'site_setting') routes POST/PUT/DELETE to the right
  * sub-resource, since these are all small and closely related — keeps
  * this to one file instead of several near-identical ones.
+ *
+ * "Majors" have been retired (see migration_schoolyear.sql) — the
+ * `majors` table still exists but nothing here manages it anymore.
+ *
+ * "school_year" rows are label/start_year/sort_order editable, but
+ * is_active is fully calendar-derived (see getActiveSchoolYear() in
+ * includes/functions.php) — there's no manual "set active" control.
+ * GET auto-ensures the current AND next school year both exist.
  */
 
 require_once __DIR__ . '/../../includes/functions.php';
@@ -61,8 +69,11 @@ function base64ApproxBytes(string $base64): int
     return (int) (strlen($encoded) * 3 / 4);
 }
 
-// Validates an uploaded logo image: must be a real data:image/ URL, capped
-// at 2MB (matches the candidate-photo cap in admin/api/elections.php).
+// Validates an uploaded logo image: must be a real data:image/ URL whose
+// DECODED BYTES actually parse as a raster image (PNG/JPEG/GIF/WebP — see
+// isValidImageDataUrl() in functions.php; SVG and anything else is
+// rejected), capped at 2MB (matches the candidate-photo cap in
+// admin/api/elections.php).
 // Returns an error string, or null if the image is fine (or empty/absent,
 // which is valid — it means "clear the logo").
 function validateLogoUpload(?string $value): ?string
@@ -76,6 +87,9 @@ function validateLogoUpload(?string $value): ?string
     if (base64ApproxBytes($value) > 2 * 1024 * 1024) {
         return 'Logo is too large (max 2MB) — please use a smaller image.';
     }
+    if (!isValidImageDataUrl($value)) {
+        return 'That file is not a valid image (use PNG, JPEG, GIF, or WebP).';
+    }
     return null;
 }
 
@@ -84,14 +98,26 @@ function validateLogoUpload(?string $value): ?string
 // ------------------------------------------------------------------
 if ($method === 'GET') {
     $departments = $pdo->query('SELECT code, name, sort_order, logo FROM departments ORDER BY sort_order, code')->fetchAll();
-    $majors = $pdo->query('SELECT id, department_code, name, sort_order FROM majors ORDER BY department_code, sort_order, name')->fetchAll();
     $yearLevels = $pdo->query('SELECT id, name, sort_order FROM year_levels ORDER BY sort_order, name')->fetchAll();
+
+    // Auto-derived from today's date (see includes/functions.php) — this
+    // guarantees the current AND next school year (elections are run FOR
+    // the next one — see migration_election_target_schoolyear.sql) always
+    // exist and appear in the list, without an admin ever needing to add
+    // them manually first.
+    getActiveSchoolYear($pdo);
+    getOrCreateSchoolYear($pdo, nextSchoolYearStartYear());
+
+    $schoolYears = $pdo->query('SELECT id, label, start_year, is_active, sort_order FROM school_years ORDER BY sort_order, start_year')->fetchAll();
     $ssgLogo = getSiteSetting($pdo, 'ssg_logo');
 
     respond([
         'departments' => $departments,
-        'majors' => $majors,
         'year_levels' => $yearLevels,
+        'school_years' => array_map(function ($sy) {
+            $sy['is_active'] = (bool) $sy['is_active'];
+            return $sy;
+        }, $schoolYears),
         'site_settings' => ['ssg_logo' => $ssgLogo],
     ]);
 }
@@ -105,8 +131,15 @@ if (!verifyCsrfToken($body['csrf_token'] ?? null)) {
     respond(['error' => 'Your session expired. Please refresh and try again.'], 403);
 }
 
+// Per-admin rate limit on every write (same policy as the other admin APIs).
+$adminWriteKey = 'admin_write:admin:' . (int) ($_SESSION['admin_id'] ?? 0);
+if (isRateLimitedKey($pdo, $adminWriteKey, 120, 60)) {
+    respond(['error' => 'Too many requests. Please slow down.'], 429);
+}
+recordAttemptKey($pdo, $adminWriteKey);
+
 $type = $body['type'] ?? '';
-if (!in_array($type, ['department', 'major', 'year_level', 'department_logo', 'site_setting'], true)) {
+if (!in_array($type, ['department', 'school_year', 'year_level', 'department_logo', 'site_setting'], true)) {
     respond(['error' => 'Invalid type.'], 400);
 }
 
@@ -115,39 +148,47 @@ if (!in_array($type, ['department', 'major', 'year_level', 'department_logo', 's
 // ------------------------------------------------------------------
 if ($method === 'POST') {
     if ($type === 'department') {
-        $code = trim($body['code'] ?? '');
-        $name = trim($body['name'] ?? '') ?: $code;
-        if ($code === '') respond(['error' => 'Department code is required.'], 400);
-        if (mb_strlen($code) > 20) respond(['error' => 'Department code is too long (max 20 characters).'], 400);
-        if (mb_strlen($name) > 100) respond(['error' => 'Department name is too long (max 100 characters).'], 400);
+        // The admin only enters a Faculty NAME now — "Code" was removed
+        // from the UI as redundant (adviser wants everything labeled with
+        // the complete faculty name). Internally, code and name are kept
+        // IDENTICAL — code remains the actual value stored on
+        // users.department / elections.department / candidates.department,
+        // so nothing else in the app needs to change; it just always
+        // holds the full name now instead of a short abbreviation. See
+        // migration_faculty_full_name.sql for the column-width changes
+        // that make this safe.
+        $name = trim($body['name'] ?? '');
+        if ($name === '') respond(['error' => 'Faculty name is required.'], 400);
+        if (mb_strlen($name) > 150) respond(['error' => 'Faculty name is too long (max 150 characters).'], 400);
 
         $check = $pdo->prepare('SELECT id FROM departments WHERE code = :code');
-        $check->execute(['code' => $code]);
-        if ($check->fetch()) respond(['error' => 'A department with that code already exists.'], 409);
+        $check->execute(['code' => $name]);
+        if ($check->fetch()) respond(['error' => 'A faculty with that name already exists.'], 409);
 
         $sort = nextSortOrder($pdo, 'departments');
         $pdo->prepare('INSERT INTO departments (code, name, sort_order) VALUES (:code, :name, :sort)')
-            ->execute(['code' => $code, 'name' => $name, 'sort' => $sort]);
+            ->execute(['code' => $name, 'name' => $name, 'sort' => $sort]);
         respond(['success' => true]);
     }
 
-    if ($type === 'major') {
-        $departmentCode = trim($body['department_code'] ?? '');
-        $name = trim($body['name'] ?? '');
-        if ($departmentCode === '' || $name === '') respond(['error' => 'Department and major name are required.'], 400);
-        if (mb_strlen($name) > 100) respond(['error' => 'Major name is too long (max 100 characters).'], 400);
+    if ($type === 'school_year') {
+        $label = trim($body['label'] ?? '');
+        $startYear = (int) ($body['start_year'] ?? 0);
+        if ($label === '' || $startYear <= 0) respond(['error' => 'A label and a valid start year are required.'], 400);
+        if (mb_strlen($label) > 20) respond(['error' => 'School year label is too long (max 20 characters).'], 400);
+        if ($startYear < 2000 || $startYear > 2100) respond(['error' => 'Start year looks invalid.'], 400);
 
-        $deptCheck = $pdo->prepare('SELECT code FROM departments WHERE code = :code');
-        $deptCheck->execute(['code' => $departmentCode]);
-        if (!$deptCheck->fetch()) respond(['error' => 'That department does not exist.'], 404);
+        $dupLabel = $pdo->prepare('SELECT id FROM school_years WHERE label = :label');
+        $dupLabel->execute(['label' => $label]);
+        if ($dupLabel->fetch()) respond(['error' => 'That school year label already exists.'], 409);
 
-        $dupCheck = $pdo->prepare('SELECT id FROM majors WHERE department_code = :dc AND name = :name');
-        $dupCheck->execute(['dc' => $departmentCode, 'name' => $name]);
-        if ($dupCheck->fetch()) respond(['error' => 'That major already exists for this department.'], 409);
+        $dupYear = $pdo->prepare('SELECT id FROM school_years WHERE start_year = :sy');
+        $dupYear->execute(['sy' => $startYear]);
+        if ($dupYear->fetch()) respond(['error' => 'A school year with that start year already exists.'], 409);
 
-        $sort = nextSortOrder($pdo, 'majors', ['clause' => 'department_code = :dc', 'params' => ['dc' => $departmentCode]]);
-        $pdo->prepare('INSERT INTO majors (department_code, name, sort_order) VALUES (:dc, :name, :sort)')
-            ->execute(['dc' => $departmentCode, 'name' => $name, 'sort' => $sort]);
+        $sort = nextSortOrder($pdo, 'school_years');
+        $pdo->prepare('INSERT INTO school_years (label, start_year, sort_order) VALUES (:label, :sy, :sort)')
+            ->execute(['label' => $label, 'sy' => $startYear, 'sort' => $sort]);
         respond(['success' => true]);
     }
 
@@ -181,31 +222,35 @@ if ($method === 'POST') {
 // ------------------------------------------------------------------
 if ($method === 'PUT') {
     if ($type === 'department') {
+        // Single-field rename now — the admin only edits a Faculty NAME,
+        // and code is kept identical to it internally (see the POST
+        // handler above and migration_faculty_full_name.sql). old_code
+        // is how the existing row is found; the new name becomes both
+        // the new code and the new name.
         $oldCode = trim($body['old_code'] ?? '');
-        $newCode = trim($body['code'] ?? $oldCode);
-        $name = trim($body['name'] ?? '') ?: $newCode;
+        $newName = trim($body['name'] ?? '');
         $sortOrder = array_key_exists('sort_order', $body) ? (int) $body['sort_order'] : null;
 
-        if ($oldCode === '') respond(['error' => 'Missing department code.'], 400);
+        if ($oldCode === '') respond(['error' => 'Missing faculty identifier.'], 400);
         $existing = $pdo->prepare('SELECT code FROM departments WHERE code = :code');
         $existing->execute(['code' => $oldCode]);
-        if (!$existing->fetch()) respond(['error' => 'Department not found.'], 404);
+        if (!$existing->fetch()) respond(['error' => 'Faculty not found.'], 404);
 
-        if ($newCode === '') respond(['error' => 'Department code cannot be empty.'], 400);
-        if (mb_strlen($newCode) > 20) respond(['error' => 'Department code is too long (max 20 characters).'], 400);
-        if (mb_strlen($name) > 100) respond(['error' => 'Department name is too long (max 100 characters).'], 400);
+        if ($newName === '') respond(['error' => 'Faculty name cannot be empty.'], 400);
+        if (mb_strlen($newName) > 150) respond(['error' => 'Faculty name is too long (max 150 characters).'], 400);
 
+        $newCode = $newName; // code always mirrors name
         if ($newCode !== $oldCode) {
             $dupCheck = $pdo->prepare('SELECT id FROM departments WHERE code = :code AND code != :old');
             $dupCheck->execute(['code' => $newCode, 'old' => $oldCode]);
-            if ($dupCheck->fetch()) respond(['error' => 'A department with that code already exists.'], 409);
+            if ($dupCheck->fetch()) respond(['error' => 'A faculty with that name already exists.'], 409);
         }
 
         try {
             $pdo->beginTransaction();
 
             $fields = ['name = :name'];
-            $values = ['old' => $oldCode, 'name' => $name];
+            $values = ['old' => $oldCode, 'name' => $newName];
             if ($newCode !== $oldCode) {
                 $fields[] = 'code = :new_code';
                 $values['new_code'] = $newCode;
@@ -218,12 +263,12 @@ if ($method === 'PUT') {
 
             $affected = ['users' => 0, 'elections' => 0];
             if ($newCode !== $oldCode) {
-                // majors.department_code follows automatically via
-                // ON UPDATE CASCADE (see migration_settings.sql) — but
                 // users.department / elections.department are plain text
                 // with no FK, so those need an explicit bulk-update here,
                 // in the same transaction, so nothing is left pointing at
-                // a department code that no longer exists.
+                // a faculty name that no longer exists. candidates.department
+                // DOES have a real FK (ON UPDATE CASCADE), so it follows
+                // automatically.
                 $u = $pdo->prepare('UPDATE users SET department = :new WHERE department = :old');
                 $u->execute(['new' => $newCode, 'old' => $oldCode]);
                 $affected['users'] = $u->rowCount();
@@ -278,56 +323,62 @@ if ($method === 'PUT') {
         }
         $value = $valueInput ?: null;
 
-        $pdo->prepare('
-            INSERT INTO site_settings (setting_key, setting_value, updated_at)
-            VALUES (:k, :v, NOW())
-            ON CONFLICT (setting_key) DO UPDATE SET setting_value = :v2, updated_at = NOW()
-        ')->execute(['k' => $key, 'v' => $value, 'v2' => $value]);
+        if (isMysql()) {
+            $pdo->prepare('
+                INSERT INTO site_settings (setting_key, setting_value, updated_at)
+                VALUES (:k, :v, NOW())
+                ON DUPLICATE KEY UPDATE setting_value = :v2, updated_at = NOW()
+            ')->execute(['k' => $key, 'v' => $value, 'v2' => $value]);
+        } else {
+            $pdo->prepare('
+                INSERT INTO site_settings (setting_key, setting_value, updated_at)
+                VALUES (:k, :v, NOW())
+                ON CONFLICT (setting_key) DO UPDATE SET setting_value = :v2, updated_at = NOW()
+            ')->execute(['k' => $key, 'v' => $value, 'v2' => $value]);
+        }
         respond(['success' => true]);
     }
 
-    if ($type === 'major') {
+    if ($type === 'school_year') {
         $id = (int) ($body['id'] ?? 0);
-        if ($id <= 0) respond(['error' => 'Invalid major.'], 400);
+        if ($id <= 0) respond(['error' => 'Invalid school year.'], 400);
 
-        $existing = $pdo->prepare('SELECT id, department_code, name FROM majors WHERE id = :id');
+        $existing = $pdo->prepare('SELECT id, label, start_year, is_active FROM school_years WHERE id = :id');
         $existing->execute(['id' => $id]);
         $current = $existing->fetch();
-        if (!$current) respond(['error' => 'Major not found.'], 404);
+        if (!$current) respond(['error' => 'School year not found.'], 404);
 
-        $newName = trim($body['name'] ?? $current['name']);
+        // is_active is fully calendar-derived now (see getActiveSchoolYear()
+        // in includes/functions.php) — there's no manual "set active"
+        // control anymore. Only the label/start_year/sort_order are
+        // editable here (e.g. to fix a typo in a label).
+
+        $label = trim($body['label'] ?? $current['label']);
+        $startYear = array_key_exists('start_year', $body) ? (int) $body['start_year'] : (int) $current['start_year'];
         $sortOrder = array_key_exists('sort_order', $body) ? (int) $body['sort_order'] : null;
-        if ($newName === '') respond(['error' => 'Major name cannot be empty.'], 400);
-        if (mb_strlen($newName) > 100) respond(['error' => 'Major name is too long (max 100 characters).'], 400);
+        if ($label === '') respond(['error' => 'School year label cannot be empty.'], 400);
+        if (mb_strlen($label) > 20) respond(['error' => 'School year label is too long (max 20 characters).'], 400);
+        if ($startYear < 2000 || $startYear > 2100) respond(['error' => 'Start year looks invalid.'], 400);
 
-        try {
-            $pdo->beginTransaction();
-
-            $fields = ['name = :name'];
-            $values = ['id' => $id, 'name' => $newName];
-            if ($sortOrder !== null) {
-                $fields[] = 'sort_order = :sort';
-                $values['sort'] = $sortOrder;
-            }
-            $pdo->prepare('UPDATE majors SET ' . implode(', ', $fields) . ' WHERE id = :id')->execute($values);
-
-            $updatedStudents = 0;
-            if ($newName !== $current['name']) {
-                // users.major is plain text with no FK — bulk-update any
-                // student currently recorded under the old major name so
-                // nothing is left pointing at a major that no longer exists.
-                $u = $pdo->prepare('UPDATE users SET major = :new WHERE major = :old AND department = :dc');
-                $u->execute(['new' => $newName, 'old' => $current['name'], 'dc' => $current['department_code']]);
-                $updatedStudents = $u->rowCount();
-            }
-
-            $pdo->commit();
-            respond(['success' => true, 'updated_students' => $updatedStudents]);
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) $pdo->rollBack();
-            error_log('Update major failed: ' . $e->getMessage());
-            respond(['error' => 'Could not save changes.'], 500);
+        if ($label !== $current['label']) {
+            $dupCheck = $pdo->prepare('SELECT id FROM school_years WHERE label = :label AND id != :id');
+            $dupCheck->execute(['label' => $label, 'id' => $id]);
+            if ($dupCheck->fetch()) respond(['error' => 'That school year label already exists.'], 409);
         }
+        if ($startYear !== (int) $current['start_year']) {
+            $dupYear = $pdo->prepare('SELECT id FROM school_years WHERE start_year = :sy AND id != :id');
+            $dupYear->execute(['sy' => $startYear, 'id' => $id]);
+            if ($dupYear->fetch()) respond(['error' => 'A school year with that start year already exists.'], 409);
+        }
+
+        $fields = ['label = :label', 'start_year = :sy'];
+        $values = ['id' => $id, 'label' => $label, 'sy' => $startYear];
+        if ($sortOrder !== null) {
+            $fields[] = 'sort_order = :sort';
+            $values['sort'] = $sortOrder;
+        }
+        $pdo->prepare('UPDATE school_years SET ' . implode(', ', $fields) . ' WHERE id = :id')->execute($values);
+        respond(['success' => true]);
     }
 
     if ($type === 'year_level') {
@@ -391,7 +442,7 @@ if ($method === 'PUT') {
 if ($method === 'DELETE') {
     if ($type === 'department') {
         $code = trim($body['code'] ?? '');
-        if ($code === '') respond(['error' => 'Missing department code.'], 400);
+        if ($code === '') respond(['error' => 'Missing faculty identifier.'], 400);
 
         $stmt = $pdo->prepare('SELECT COUNT(*) FROM users WHERE department = :code');
         $stmt->execute(['code' => $code]);
@@ -405,33 +456,35 @@ if ($method === 'DELETE') {
             $parts = [];
             if ($uCount > 0) $parts[] = "$uCount student" . ($uCount === 1 ? '' : 's');
             if ($eCount > 0) $parts[] = "$eCount election" . ($eCount === 1 ? '' : 's');
-            respond(['error' => 'Cannot delete — ' . implode(' and ', $parts) . ' still use this department. Reassign them first.'], 409);
+            respond(['error' => 'Cannot delete — ' . implode(' and ', $parts) . ' still use this faculty. Reassign them first.'], 409);
         }
 
-        // Majors under this department cascade-delete automatically
-        // (see migration_settings.sql). Its logo (if any) goes with the
-        // row — nothing else references it.
+        // Its logo (if any) goes with the row — nothing else references it.
         $pdo->prepare('DELETE FROM departments WHERE code = :code')->execute(['code' => $code]);
         respond(['success' => true]);
     }
 
-    if ($type === 'major') {
+    if ($type === 'school_year') {
         $id = (int) ($body['id'] ?? 0);
-        if ($id <= 0) respond(['error' => 'Invalid major.'], 400);
+        if ($id <= 0) respond(['error' => 'Invalid school year.'], 400);
 
-        $stmt = $pdo->prepare('SELECT department_code, name FROM majors WHERE id = :id');
+        $stmt = $pdo->prepare('SELECT id, is_active FROM school_years WHERE id = :id');
         $stmt->execute(['id' => $id]);
-        $major = $stmt->fetch();
-        if (!$major) respond(['error' => 'Major not found.'], 404);
+        $sy = $stmt->fetch();
+        if (!$sy) respond(['error' => 'School year not found.'], 404);
 
-        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM users WHERE department = :dc AND major = :name');
-        $countStmt->execute(['dc' => $major['department_code'], 'name' => $major['name']]);
-        $count = (int) $countStmt->fetchColumn();
-        if ($count > 0) {
-            respond(['error' => "Cannot delete — $count student" . ($count === 1 ? '' : 's') . ' still have this major. Reassign them first.'], 409);
+        if ($sy['is_active']) {
+            respond(['error' => 'Cannot delete the active school year. Set another one active first.'], 409);
         }
 
-        $pdo->prepare('DELETE FROM majors WHERE id = :id')->execute(['id' => $id]);
+        $countStmt = $pdo->prepare('SELECT COUNT(*) FROM users WHERE school_year_id = :id');
+        $countStmt->execute(['id' => $id]);
+        $count = (int) $countStmt->fetchColumn();
+        if ($count > 0) {
+            respond(['error' => "Cannot delete — $count student" . ($count === 1 ? '' : 's') . ' started in this school year. Reassign them first.'], 409);
+        }
+
+        $pdo->prepare('DELETE FROM school_years WHERE id = :id')->execute(['id' => $id]);
         respond(['success' => true]);
     }
 

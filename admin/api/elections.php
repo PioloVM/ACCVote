@@ -60,7 +60,14 @@ function respond(array $payload, int $status = 200): void
 function saveCandidatePhoto(?string $base64): ?string
 {
     if (!$base64) return null;
-    if (strpos($base64, 'data:image/') === 0) return $base64;
+    if (strpos($base64, 'data:image/') === 0) {
+        // Byte-level validation: the decoded payload must actually parse as
+        // a raster image (see isValidImageDataUrl() in functions.php), not
+        // merely carry the right string prefix. Invalid data is dropped
+        // here as a final guard; validatePayload() already rejects it with
+        // a proper error message before this is ever reached.
+        return isValidImageDataUrl($base64) ? $base64 : null;
+    }
     if (strpos($base64, 'assets/') === 0) return $base64; // legacy pre-migration path
     return null;
 }
@@ -81,12 +88,41 @@ function splitElectionType(array $input): array
     return [$type, $department];
 }
 
-function validatePayload(array $input, bool $requirePositions): array
+function validDepartmentCodes(PDO $pdo): array
+{
+    return $pdo->query('SELECT code FROM departments')->fetchAll(PDO::FETCH_COLUMN);
+}
+
+// Elections are run FOR the upcoming school year (see
+// nextSchoolYearStartYear() in includes/functions.php). Defaults to that
+// automatically; the admin can override to any existing school year by
+// sending target_school_year_id explicitly (e.g. a rare mid-cycle
+// special election actually meant for the CURRENT year).
+function resolveTargetSchoolYearId(PDO $pdo, array $input, ?int $existingId = null): int
+{
+    if (!empty($input['target_school_year_id'])) {
+        $id = (int) $input['target_school_year_id'];
+        $check = $pdo->prepare('SELECT id, start_year FROM school_years WHERE id = :id');
+        $check->execute(['id' => $id]);
+        $row = $check->fetch();
+        if ($row) {
+            // An existing election may keep its current (past) year on edit;
+            // anything else must be the current school year or later.
+            if ((int) $row['start_year'] < currentSchoolYearStartYear() && $id !== $existingId) {
+                respond(['error' => 'The target school year can\'t be earlier than the current school year.'], 400);
+            }
+            return $id;
+        }
+    }
+    return (int) getOrCreateSchoolYear($pdo, nextSchoolYearStartYear())['id'];
+}
+
+function validatePayload(array $input, bool $requirePositions, array $validDepartmentCodes = []): array
 {
     $errors = [];
     $type = $input['type'] ?? '';
     if (!in_array($type, ['SSG', 'DSG'], true)) $errors[] = 'Choose a valid election type.';
-    if ($type === 'DSG' && empty(trim($input['department'] ?? ''))) $errors[] = 'Select a department.';
+    if ($type === 'DSG' && empty(trim($input['department'] ?? ''))) $errors[] = 'Select a faculty.';
     if (empty(trim($input['name'] ?? ''))) {
         $errors[] = 'Enter an election name.';
     } elseif (mb_strlen(trim($input['name'])) > 100) {
@@ -133,15 +169,24 @@ function validatePayload(array $input, bool $requirePositions): array
                     // instead of a clear validation message here.
                     $errors[] = 'Name for candidate ' . ($j + 1) . ' in position "' . $label . '" is too long (max 100 characters).';
                 }
-                if (!empty($c['course']) && mb_strlen($c['course']) > 100) {
-                    $errors[] = 'Course/major for candidate ' . ($j + 1) . ' in position "' . $label . '" is too long (max 100 characters).';
+                $candDept = trim((string) ($c['department'] ?? ''));
+                if ($candDept === '') {
+                    $errors[] = 'Candidate ' . ($j + 1) . ' in position "' . $label . '" needs a faculty.';
+                } elseif (mb_strlen($candDept) > 150) {
+                    $errors[] = 'Faculty for candidate ' . ($j + 1) . ' in position "' . $label . '" is too long (max 150 characters).';
+                } elseif (!in_array($candDept, $validDepartmentCodes, true)) {
+                    $errors[] = 'Faculty for candidate ' . ($j + 1) . ' in position "' . $label . '" is not a recognized faculty.';
                 }
                 if (!empty($c['party']) && mb_strlen($c['party']) > 100) {
                     $errors[] = 'Party for candidate ' . ($j + 1) . ' in position "' . $label . '" is too long (max 100 characters).';
                 }
                 $photo = $c['photo'] ?? '';
-                if ($photo && strpos($photo, 'data:image/') === 0 && base64ApproxBytes($photo) > 2 * 1024 * 1024) {
-                    $errors[] = 'Photo for candidate ' . ($j + 1) . ' in position "' . $label . '" is too large (max 2MB) — please use a smaller image.';
+                if ($photo && strpos($photo, 'data:image/') === 0) {
+                    if (base64ApproxBytes($photo) > 2 * 1024 * 1024) {
+                        $errors[] = 'Photo for candidate ' . ($j + 1) . ' in position "' . $label . '" is too large (max 2MB) — please use a smaller image.';
+                    } elseif (!isValidImageDataUrl($photo)) {
+                        $errors[] = 'Photo for candidate ' . ($j + 1) . ' in position "' . $label . '" is not a valid image file (use PNG, JPEG, GIF, or WebP).';
+                    }
                 }
             }
         }
@@ -174,22 +219,82 @@ function electionVoteCount(PDO $pdo, int $electionId): int
     return (int) $stmt->fetchColumn();
 }
 
+/**
+ * Distinct voters who have cast at least one ballot in this election, and
+ * the number of students actually eligible to do so.
+ *
+ * "Ballots cast" counts DISTINCT voters, not vote rows: one voter fills a
+ * whole ballot, so a multi-position election records several rows per
+ * person. Counting rows would report turnout far above 100%.
+ *
+ * "Eligible" is the set who could genuinely vote right now:
+ *   - registration_status = 'active'  (an 'unregistered' row has no
+ *     password yet, so it can never reach a ballot)
+ *   - account_status NOT IN ('dropped','graduated')  (login.php refuses
+ *     these outright)
+ * Scoped to the election's own faculty for a DSG, since a DSG ballot is
+ * only open to that faculty. SSG is open to every active student.
+ */
+function electionTurnout(PDO $pdo, int $electionId, string $type, ?string $department): array
+{
+    $ballotsStmt = $pdo->prepare('
+        SELECT COUNT(DISTINCT v.user_id) FROM votes v
+        JOIN election_positions ep ON ep.position_id = v.position_id
+        WHERE ep.election_id = :eid
+    ');
+    $ballotsStmt->execute(['eid' => $electionId]);
+    $ballotsCast = (int) $ballotsStmt->fetchColumn();
+
+    if ($type === 'DSG' && $department !== null && $department !== '') {
+        $eligStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM users
+            WHERE registration_status = 'active'
+              AND account_status NOT IN ('dropped','graduated')
+              AND department = :dept
+        ");
+        $eligStmt->execute(['dept' => $department]);
+    } else {
+        $eligStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM users
+            WHERE registration_status = 'active'
+              AND account_status NOT IN ('dropped','graduated')
+        ");
+        $eligStmt->execute();
+    }
+    $eligible = (int) $eligStmt->fetchColumn();
+
+    return [
+        'ballots_cast'   => $ballotsCast,
+        'eligible_voters' => $eligible,
+        'turnout_pct'    => $eligible > 0 ? round($ballotsCast / $eligible * 100, 1) : 0.0,
+    ];
+}
+
 function insertPositionsAndCandidates(PDO $pdo, int $electionId, array $positions, bool $partiesEnabled): void
 {
-    $posInsert = $pdo->prepare('INSERT INTO positions (title) VALUES (:title) RETURNING id');
+    // Postgres returns the new id via RETURNING; MySQL/MariaDB exposes it
+    // through lastInsertId(). Both are safe inside this loop because each
+    // insert is its own statement on the same connection.
+    if (isMysql()) {
+        $posInsert = $pdo->prepare('INSERT INTO positions (title) VALUES (:title)');
+    } else {
+        $posInsert = $pdo->prepare('INSERT INTO positions (title) VALUES (:title) RETURNING id');
+    }
     $epInsert = $pdo->prepare('
         INSERT INTO election_positions (election_id, position_id, winner_count, candidate_limit, year_restriction)
         VALUES (:eid, :pid, :winners, :limit_c, :year)
     ');
     $candInsert = $pdo->prepare('
-        INSERT INTO candidates (position_id, name, photo, course, candidate_year, platform, party)
-        VALUES (:pid, :name, :photo, :course, :year, :platform, :party)
+        INSERT INTO candidates (position_id, name, photo, candidate_year, department, platform, party)
+        VALUES (:pid, :name, :photo, :year, :department, :platform, :party)
     ');
 
     foreach ($positions as $posData) {
         $title = trim($posData['title']);
         $posInsert->execute(['title' => $title]);
-        $posId = (int) $posInsert->fetchColumn();
+        $posId = isMysql()
+            ? (int) $pdo->lastInsertId()
+            : (int) $posInsert->fetchColumn();
 
         $candidates = $posData['candidates'] ?? [];
         $yearRestriction = trim($posData['year_restriction'] ?? '');
@@ -208,8 +313,8 @@ function insertPositionsAndCandidates(PDO $pdo, int $electionId, array $position
                 'pid' => $posId,
                 'name' => trim($cand['name']),
                 'photo' => $photoPath,
-                'course' => $cand['course'] ?? '',
                 'year' => $cand['candidate_year'] ?? '',
+                'department' => trim($cand['department'] ?? ''),
                 'platform' => $cand['platform'] ?? '',
                 'party' => $partiesEnabled ? ($cand['party'] ?: 'No Party / Independent') : 'No Party / Independent',
             ]);
@@ -224,7 +329,12 @@ if ($method === 'GET') {
     $id = $_GET['id'] ?? null;
 
     if ($id) {
-        $stmt = $pdo->prepare('SELECT * FROM elections WHERE id = :id');
+        $stmt = $pdo->prepare('
+            SELECT e.*, sy.label AS target_school_year_label, sy.start_year AS target_school_year_start
+            FROM elections e
+            LEFT JOIN school_years sy ON sy.id = e.target_school_year_id
+            WHERE e.id = :id
+        ');
         $stmt->execute(['id' => (int) $id]);
         $election = $stmt->fetch();
 
@@ -243,12 +353,12 @@ if ($method === 'GET') {
         $positions = $posStmt->fetchAll();
 
         $candStmt = $pdo->prepare('
-            SELECT c.id, c.name, c.photo, c.course, c.candidate_year, c.platform, c.party,
+            SELECT c.id, c.name, c.photo, c.candidate_year, c.department, c.platform, c.party,
                    COUNT(v.id) AS vote_count
             FROM candidates c
             LEFT JOIN votes v ON v.candidate_id = c.id
             WHERE c.position_id = :pid
-            GROUP BY c.id
+            GROUP BY c.id, c.name, c.photo, c.candidate_year, c.department, c.platform, c.party
             ORDER BY c.name ASC
         ');
         foreach ($positions as &$pos) {
@@ -267,14 +377,27 @@ if ($method === 'GET') {
         $election['parties_enabled'] = (bool) $election['parties_enabled'];
         $election['vote_count'] = electionVoteCount($pdo, (int) $election['id']);
 
+        // Turnout figures for the admin charts. Deliberately NOT exposed on
+        // the public results page's own numbers without saying so: this
+        // "eligible" definition is stricter than results.php's, which counts
+        // every non-'unregistered' row including dropped/graduated students
+        // who can no longer log in. The two are both defensible; mixing them
+        // in one report is not.
+        $election = array_merge(
+            $election,
+            electionTurnout($pdo, (int) $election['id'], (string) $election['type'], $election['department'])
+        );
+
         respond($election);
     }
 
     $stmt = $pdo->query('
-        SELECT id, name, type, department, status, start_date, end_date,
-               results_visibility, parties_enabled, parties
-        FROM elections
-        ORDER BY start_date DESC
+        SELECT e.id, e.name, e.type, e.department, e.status, e.start_date, e.end_date,
+               e.results_visibility, e.parties_enabled, e.parties,
+               e.target_school_year_id, sy.label AS target_school_year_label
+        FROM elections e
+        LEFT JOIN school_years sy ON sy.id = e.target_school_year_id
+        ORDER BY e.start_date DESC
     ');
     $list = $stmt->fetchAll();
     foreach ($list as &$e) {
@@ -294,24 +417,45 @@ if (!verifyCsrfToken($input['csrf_token'] ?? null)) {
     respond(['error' => 'Your session expired. Please refresh and try again.'], 403);
 }
 
+// Per-admin rate limit on every write. The cap is deliberately generous —
+// a busy admin wizard fires several requests in quick succession — but it
+// stops a runaway client or compromised session from hammering the
+// database with unbounded writes.
+$adminWriteKey = 'admin_write:admin:' . (int) ($_SESSION['admin_id'] ?? 0);
+if (isRateLimitedKey($pdo, $adminWriteKey, 120, 60)) {
+    respond(['error' => 'Too many requests. Please slow down.'], 429);
+}
+recordAttemptKey($pdo, $adminWriteKey);
+
 // ------------------------------------------------------------------
 // POST: create a brand-new election (always a "full" payload)
 // ------------------------------------------------------------------
 if ($method === 'POST') {
-    $errors = validatePayload($input, true);
+    $errors = validatePayload($input, true, validDepartmentCodes($pdo));
     if ($errors) respond(['error' => implode(' ', $errors)], 400);
 
     [$type, $department] = splitElectionType($input);
 
     try {
+        $targetSchoolYearId = resolveTargetSchoolYearId($pdo, $input);
+
         $pdo->beginTransaction();
 
-        $stmt = $pdo->prepare('
-            INSERT INTO elections (name, type, department, status, start_date, end_date,
-                                    results_visibility, parties_enabled, parties)
-            VALUES (:name, :type, :department, :status, :start, :end, :visibility, :parties_enabled, :parties::jsonb)
-            RETURNING id
-        ');
+        $partiesJson = json_encode($input['parties'] ?? []);
+        if (isMysql()) {
+            $stmt = $pdo->prepare('
+                INSERT INTO elections (name, type, department, status, start_date, end_date,
+                                        results_visibility, parties_enabled, parties, target_school_year_id)
+                VALUES (:name, :type, :department, :status, :start, :end, :visibility, :parties_enabled, :parties, :target_sy)
+            ');
+        } else {
+            $stmt = $pdo->prepare('
+                INSERT INTO elections (name, type, department, status, start_date, end_date,
+                                        results_visibility, parties_enabled, parties, target_school_year_id)
+                VALUES (:name, :type, :department, :status, :start, :end, :visibility, :parties_enabled, :parties::jsonb, :target_sy)
+                RETURNING id
+            ');
+        }
         $stmt->execute([
             'name' => trim($input['name']),
             'type' => $type,
@@ -329,9 +473,10 @@ if ($method === 'POST') {
             // and Postgres rejects '' as invalid boolean input — 1/0 (which
             // PHP stringifies to '1'/'0') are valid boolean literals instead.
             'parties_enabled' => !empty($input['parties_enabled']) ? 1 : 0,
-            'parties' => json_encode($input['parties'] ?? []),
+            'parties' => $partiesJson,
+            'target_sy' => $targetSchoolYearId,
         ]);
-        $electionId = (int) $stmt->fetchColumn();
+        $electionId = isMysql() ? (int) $pdo->lastInsertId() : (int) $stmt->fetchColumn();
 
         insertPositionsAndCandidates($pdo, $electionId, $input['positions'], !empty($input['parties_enabled']));
 
@@ -411,6 +556,11 @@ if ($method === 'PUT') {
                 $fields[] = 'results_visibility = :vis';
                 $values['vis'] = $input['results_visibility'];
             }
+            if (array_key_exists('target_school_year_id', $input)) {
+                $targetSchoolYearId = resolveTargetSchoolYearId($pdo, $input, (int) $current['target_school_year_id']);
+                $fields[] = 'target_school_year_id = :target_sy';
+                $values['target_sy'] = $targetSchoolYearId;
+            }
 
             if (!$fields) respond(['error' => 'Nothing to update.'], 400);
 
@@ -426,19 +576,27 @@ if ($method === 'PUT') {
             respond(['error' => 'This election already has votes recorded, so its positions and candidates can\'t be edited anymore. You can still change its schedule, status, or results visibility.'], 409);
         }
 
-        $errors = validatePayload($input, true);
+        $errors = validatePayload($input, true, validDepartmentCodes($pdo));
         if ($errors) respond(['error' => implode(' ', $errors)], 400);
 
         [$type, $department] = splitElectionType($input);
+        // On a full edit, only change the target school year if the admin
+        // actually sent one — otherwise keep whatever was already set
+        // rather than silently resetting it back to "next year" on every save.
+        $targetSchoolYearId = array_key_exists('target_school_year_id', $input)
+            ? resolveTargetSchoolYearId($pdo, $input, (int) $current['target_school_year_id'])
+            : (int) $current['target_school_year_id'];
 
         $pdo->beginTransaction();
 
         $statusClause = $current['status'] === 'draft' ? ", status = 'scheduled'" : '';
+        $partiesSql = isMysql() ? 'parties = :parties' : 'parties = :parties::jsonb';
         $pdo->prepare('
             UPDATE elections SET
                 name = :name, type = :type, department = :department,
                 start_date = :start, end_date = :end,
-                results_visibility = :visibility, parties_enabled = :parties_enabled, parties = :parties::jsonb
+                results_visibility = :visibility, parties_enabled = :parties_enabled, ' . $partiesSql . ',
+                target_school_year_id = :target_sy
                 ' . $statusClause . '
             WHERE id = :id
         ')->execute([
@@ -453,6 +611,7 @@ if ($method === 'PUT') {
             // binding a raw PHP bool breaks for `false`.
             'parties_enabled' => !empty($input['parties_enabled']) ? 1 : 0,
             'parties' => json_encode($input['parties'] ?? []),
+            'target_sy' => $targetSchoolYearId ?: null,
         ]);
 
         // Wipe the old positions (cascades election_positions + candidates + votes
