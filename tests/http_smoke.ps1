@@ -334,8 +334,17 @@ Assert-True "selected radio can be unvoted by re-clicking it" ($ballotSrc -match
 $ballotCss = Get-Content .\assets\dashboard-app.css -Raw
 Assert-True "ballot sticky bar offsets below the page header dynamically" ($ballotSrc -match 'syncBallotStickyTop') "no sticky-top sync JS found"
 Assert-True "ballot sticky bar spans the full content width" ($ballotCss -match '(?s)\.ballot-header \{[^}]*margin-left: -2rem') "no full-bleed margins on .ballot-header"
-Assert-True "mobile keeps the ballot bar full-bleed" ($ballotCss -match '\.ballot-header \{ margin-left: -1rem') "no mobile full-bleed rule"
+Assert-True "mobile keeps the ballot bar full-bleed" ($ballotCss -match '\.ballot-header \{ top: 0; margin-left: -1rem') "no mobile full-bleed rule"
 Assert-True "submit vote button centers on all screen sizes" ($ballotCss -match '(?s)\.ballot-submit-block \.btn \{[^}]*inline-flex') "button is still block-level flex"
+
+# Mobile ballot follow-up: page header full-bleed + scrolls away on the
+# voting page; ballot bar pins at the very top. The mobile overrides MUST
+# come after the base .ballot-header rule or the -2rem desktop bleed wins
+# the cascade and overflows the phone screen (that bug shipped in d191f65).
+Assert-True "ballot page header tagged for mobile opt-out" ($ballotSrc -match 'ballot-page-header') "class missing"
+Assert-True "mobile ballot overrides come after the base rule" ($ballotCss.IndexOf('margin-left: -2rem') -lt $ballotCss.IndexOf('.ballot-header { top: 0')) "mobile rule loses the cascade"
+Assert-True "mobile page header spans full width" ($ballotCss -match 'margin-left: -1rem; margin-right: -1rem; border-radius: 0') "page header still inset"
+Assert-True "dead pre-base mobile bleed rule removed" ($ballotCss -notmatch '\.ballot-header \{ margin-left: -1rem') "old rule still present"
 
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"

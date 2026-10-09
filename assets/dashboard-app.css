@@ -709,7 +709,6 @@
         .sidebar { transform: translateX(-100%); width: 280px; padding-top: 0; }
         .sidebar.open { transform: translateX(0); }
         .main-content { margin-left: 0; padding: 1rem; }
-        .ballot-header { margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; }
         .page-header { flex-direction: row; align-items: center; background: var(--card); box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 0.5rem 1rem; margin-bottom: 1.5rem; border-bottom: none; border-radius: 0 0 8px 8px; }
         .page-header h1 { font-size: 1.2rem; }
         .page-header .date { font-size: 0.8rem; }
@@ -773,6 +772,17 @@
     .ballot-progress-track { height: 10px; background: var(--border); border-radius: 999px; overflow: hidden; }
     .ballot-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #84cc16, #65a30d); border-radius: 999px; transition: width 0.35s ease; }
     .ballot-progress-label { margin-top: 0.5rem; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
+
+    /* Mobile ballot: the page header scrolls away naturally (no half-stuck
+       sticky header) and spans full width; the ballot bar alone pins at the
+       very top, so no gap can appear. This block MUST stay after the base
+       .ballot-header rule above — same specificity, later wins; before it,
+       the desktop -2rem bleed won the cascade and overflowed phone screens. */
+    @media (max-width: 768px) {
+        .page-header { margin-left: -1rem; margin-right: -1rem; border-radius: 0; }
+        .ballot-page-header { position: static; margin-bottom: 1.25rem; }
+        .ballot-header { top: 0; margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; }
+    }
 
     /* One continuous scroll: every position section is always visible. */
     .ballot-step { display: block; }
