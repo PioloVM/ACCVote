@@ -498,6 +498,34 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Continuous mode only: names the next election (or a
+                         chain error) between ballots of the Vote All chain -->
+                    <div class="ballot-modal-overlay" id="ballotChainModal">
+                        <div class="ballot-modal-card">
+                            <div class="ballot-modal-check" id="chainModalCheck">✔</div>
+                            <h2 id="chainModalTitle">Vote Submitted!</h2>
+                            <p id="chainModalMessage"></p>
+                            <div class="modal-actions">
+                                <button type="button" class="btn btn-secondary" id="chainSecondaryBtn">Exit</button>
+                                <button type="button" class="btn btn-primary" id="chainPrimaryBtn">Continue Voting</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Continuous mode only: shown after the LAST election
+                         in the chain is submitted -->
+                    <div class="ballot-modal-overlay" id="ballotFinalModal">
+                        <div class="ballot-modal-card">
+                            <div class="ballot-modal-check">✔</div>
+                            <h2>You've completed all your elections!</h2>
+                            <p id="ballotFinalMessage">Thank you for participating in every election. Your voice has been counted.</p>
+                            <div class="modal-actions">
+                                <button type="button" class="btn btn-secondary" onclick="window.location.href='dashboard.php?page=home';">Dashboard</button>
+                                <button type="button" class="btn btn-primary" onclick="window.location.href='dashboard.php?page=results';">View Results</button>
+                            </div>
+                        </div>
+                    </div>
         <?php
                 }
             }
@@ -689,6 +717,51 @@
         window.openBallotConfirm = function () { if (confirmModal) confirmModal.classList.add('active'); };
         window.closeBallotConfirm = function () { if (confirmModal) confirmModal.classList.remove('active'); };
 
+        // ---- Vote All chain helpers (continuous mode only) -------------
+        function showChainModal(nextElection) {
+            const check = document.getElementById('chainModalCheck');
+            const title = document.getElementById('chainModalTitle');
+            const message = document.getElementById('chainModalMessage');
+            const primary = document.getElementById('chainPrimaryBtn');
+            const secondary = document.getElementById('chainSecondaryBtn');
+            const titleEl = document.querySelector('.ballot-title');
+            const currentName = titleEl ? titleEl.textContent.trim() : 'this election';
+            if (check) check.style.display = '';
+            if (title) title.textContent = 'Vote Submitted!';
+            if (message) message.textContent = "✅ You're done with the " + currentName + ". Next up: " + nextElection.name + ".";
+            if (secondary) {
+                secondary.style.display = '';
+                secondary.textContent = 'Exit';
+                secondary.onclick = function () { window.location.href = 'dashboard.php?page=home'; };
+            }
+            if (primary) {
+                primary.style.display = '';
+                primary.textContent = 'Continue Voting';
+                primary.onclick = function () { window.location.href = 'dashboard.php?page=vote&election_id=' + nextElection.id + '&continuous=1'; };
+            }
+            const chainModal = document.getElementById('ballotChainModal');
+            if (chainModal) chainModal.classList.add('active');
+        }
+
+        function showChainError(message) {
+            const check = document.getElementById('chainModalCheck');
+            const title = document.getElementById('chainModalTitle');
+            const messageEl = document.getElementById('chainModalMessage');
+            const primary = document.getElementById('chainPrimaryBtn');
+            const secondary = document.getElementById('chainSecondaryBtn');
+            if (check) check.style.display = 'none';
+            if (title) title.textContent = 'Vote not submitted';
+            if (messageEl) messageEl.textContent = message;
+            if (primary) { primary.style.display = 'none'; primary.onclick = null; }
+            if (secondary) {
+                secondary.style.display = '';
+                secondary.textContent = 'Return to Dashboard';
+                secondary.onclick = function () { window.location.href = 'dashboard.php?page=home'; };
+            }
+            const chainModal = document.getElementById('ballotChainModal');
+            if (chainModal) chainModal.classList.add('active');
+        }
+
         async function performBallotSubmit() {
             if (!submitBtn) return;
             submitBtn.disabled = true;
@@ -697,22 +770,38 @@
             if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.innerHTML = '<span class="btn-spinner"></span> Submitting...'; }
             if (statusMessage) statusMessage.style.display = 'none';
             const formData = new FormData(voteForm);
+            const isContinuous = voteForm.dataset.continuous === '1';
             try {
                 const response = await fetch('vote.php', { method: 'POST', body: formData });
                 const data = await response.json();
                 if (data.success) {
                     voteForm.querySelectorAll('input, button').forEach(el => el.disabled = true);
                     if (confirmModal) confirmModal.classList.remove('active');
-                    if (modal) {
+                    if (isContinuous) {
+                        if (data.next_election) {
+                            showChainModal(data.next_election);
+                        } else {
+                            const finalMsg = document.getElementById('ballotFinalMessage');
+                            if (finalMsg && data.message) finalMsg.textContent = data.message;
+                            const finalModal = document.getElementById('ballotFinalModal');
+                            if (finalModal) finalModal.classList.add('active');
+                        }
+                    } else if (modal) {
                         const msgEl = document.getElementById('ballotModalMessage');
                         if (msgEl && data.message) msgEl.textContent = data.message;
                         modal.classList.add('active');
                     }
                 } else {
                     if (confirmModal) confirmModal.classList.remove('active');
-                    showToast(data.message || 'Something went wrong. Please try again.', 'error');
-                    submitBtn.disabled = false; submitBtn.textContent = 'Submit My Vote';
-                    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Cast My Vote'; }
+                    if (isContinuous) {
+                        // Stale link / closed election mid-chain: give the
+                        // student a way out instead of a stranded ballot.
+                        showChainError(data.message || 'Something went wrong. Please try again.');
+                    } else {
+                        showToast(data.message || 'Something went wrong. Please try again.', 'error');
+                        submitBtn.disabled = false; submitBtn.textContent = 'Submit My Vote';
+                        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Cast My Vote'; }
+                    }
                 }
             } catch (err) {
                 if (confirmModal) confirmModal.classList.remove('active');
@@ -1285,83 +1374,35 @@
         const now = new Date();
         const elections = data.elections;
 
-        // Pick ONE election to feature in the hero card, same priority
-        // order as the old PHP version:
-        //   1) open + not yet voted (soonest deadline first)
-        //   2) open + already voted
-        //   3) soonest upcoming
-        let heroActionable = null, heroVoted = null, heroUpcoming = null;
-        elections.forEach(election => {
-            const { isOpen, start, end } = electionUiStatus(election.config, now);
-            if (isOpen && !election.hasVoted && election.totalPositions > 0) {
-                if (!heroActionable || end < heroActionable.end) heroActionable = { election, start, end };
-            } else if (isOpen) {
-                if (!heroVoted || end < heroVoted.end) heroVoted = { election, end };
-            } else if (now < start && election.config.status === 'scheduled') {
-                if (!heroUpcoming || start < heroUpcoming.start) heroUpcoming = { election, start };
-            }
+        // Vote All Elections card — counts every election this student can
+        // still vote in (same predicate as renderElectionCard's canVote) and
+        // chains them via ?continuous=1 through vote.php's next_election.
+        const remaining = elections.filter(election => {
+            const { isOpen } = electionUiStatus(election.config, now);
+            return isOpen && !election.hasVoted && election.totalPositions > 0;
         });
-
-        let heroHtml = '';
-        if (heroActionable) {
-            const { election, start, end } = heroActionable;
-            const answeredIds = answeredPositionIdsFor(election);
-            const answeredCount = election.positions.filter(p => answeredIds.includes(p.position_id)).length;
-            const diff = (end - now) / 1000;
-            heroHtml = `
+        let voteAllHtml;
+        if (remaining.length > 0) {
+            const first = remaining[0];
+            voteAllHtml = `
             <div class="vote-hero">
-                <div class="vote-hero-eyebrow">
-                    <div class="ec-header" style="margin-bottom: 0;">
-                        <div class="ec-icon">${electionIconHtml(election.config)}</div>
-                        <div class="ec-heading">
-                            <h2 class="vote-hero-title">${escHtml(election.config.name)}</h2>
-                            <p class="ec-subtitle">${escHtml(election.config.subtitle)}${election.config.target_school_year_label ? ' · 🎓 SY ' + escHtml(election.config.target_school_year_label) : ''}</p>
-                        </div>
-                    </div>
-                    <span class="status-large"><span class="status-dot"></span>Voting Open</span>
-                </div>
-                <div class="ec-meta" style="margin: 0 0 1.25rem;">
-                    <span class="ec-meta-item">📅 ${start.toLocaleDateString('en-US',{month:'short',day:'numeric'})} &ndash; ${end.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
-                    <span class="ec-meta-item ec-meta-countdown">⏱ <span id="heroCountdown">${formatCountdown(diff)}</span></span>
-                </div>
-                ${answeredCount > 0 ? `<div style="margin-bottom: 1.25rem;">${renderBallotProgressStepper(election.positions, answeredIds, false)}</div>` : ''}
+                <div class="vote-hero-eyebrow"><span class="status-large"><span class="status-dot"></span>Voting Open</span></div>
+                <h2 class="vote-hero-title">Vote All Elections</h2>
+                <p class="vote-hero-dates">${remaining.length} election${remaining.length === 1 ? '' : 's'} left to vote in — we'll take you through them one after another.</p>
                 <div class="vote-hero-cta">
-                    <a href="dashboard.php?page=vote&election_id=${election.id}" class="btn btn-primary">${answeredCount > 0 ? '🗳 Continue Voting' : '🗳 Cast Your Vote'}</a>
-                    <button type="button" class="btn btn-secondary" onclick="showCandidatesFor(${election.id})">View Candidates</button>
-                </div>
-            </div>`;
-        } else if (heroVoted) {
-            const { election } = heroVoted;
-            heroHtml = `
-            <div class="vote-hero is-voted">
-                <div class="vote-hero-eyebrow"><span class="status-large"><span class="status-dot"></span>Vote Submitted</span></div>
-                <h2 class="vote-hero-title">${escHtml(election.config.name)}</h2>
-                <p class="vote-hero-dates">Thanks for participating — your ballot has been recorded. Results will be available once they're released.</p>
-                <div class="vote-hero-cta">
-                    <button type="button" class="btn btn-primary" onclick="showPanel('results')">📊 View Results</button>
-                    <button type="button" class="btn btn-secondary" onclick="showCandidatesFor(${election.id})">View Candidates</button>
-                </div>
-            </div>`;
-        } else if (heroUpcoming) {
-            const { election, start } = heroUpcoming;
-            heroHtml = `
-            <div class="vote-hero">
-                <div class="vote-hero-eyebrow"><span class="status-large scheduled"><span class="status-dot"></span>Upcoming</span></div>
-                <h2 class="vote-hero-title">${escHtml(election.config.name)}</h2>
-                <p class="vote-hero-dates">Voting begins ${start.toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</p>
-                <div class="vote-hero-cta">
-                    <button type="button" class="btn btn-primary" onclick="showCandidatesFor(${election.id})">View Candidates</button>
+                    <a href="dashboard.php?page=vote&election_id=${first.id}&continuous=1" id="startVoteAllBtn" class="btn btn-primary">🗳 Start Voting</a>
+                    <button type="button" class="btn btn-secondary" onclick="showCandidatesFor(${first.id})">View Candidates</button>
                 </div>
             </div>`;
         } else if (elections.length > 0) {
-            heroHtml = `
-            <div class="vote-hero is-empty">
-                <div class="vote-hero-empty-icon">📊</div>
-                <div class="vote-hero-empty-title">No voting open right now</div>
-                <p class="vote-hero-empty-text">Check the results of past elections below.</p>
+            voteAllHtml = `
+            <div class="vote-hero is-voted">
+                <div class="vote-hero-eyebrow"><span class="status-large"><span class="status-dot"></span>All Done</span></div>
+                <h2 class="vote-hero-title">You're all caught up ✓</h2>
+                <p class="vote-hero-dates">There's nothing left to vote in right now. Results appear here as soon as they're released.</p>
             </div>`;
         } else {
-            heroHtml = `
+            voteAllHtml = `
             <div class="vote-hero is-empty">
                 <div class="vote-hero-empty-icon">🗳️</div>
                 <div class="vote-hero-empty-title">No elections yet</div>
@@ -1407,18 +1448,12 @@
 
         el.innerHTML = `
             <div class="home-greeting"><p>Here's your election dashboard.</p></div>
-            ${heroHtml}
+            ${voteAllHtml}
             ${quickActionsHtml}
             <h2 class="section-title">Your Elections</h2>
             ${electionsSectionHtml}
             ${featuredHtml}
         `;
-
-        if (heroActionable) {
-            const endTime = heroActionable.end.getTime();
-            const countdownEl = document.getElementById('heroCountdown');
-            if (countdownEl) setInterval(() => { countdownEl.textContent = formatCountdown((endTime - Date.now()) / 1000); }, 1000);
-        }
         startCountdowns(elections, now, 'countdown');
         if (featured.length) startFeaturedCarousel(featured);
     }

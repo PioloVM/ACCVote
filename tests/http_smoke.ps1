@@ -162,6 +162,63 @@ $contHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$($
 Assert-True "continuous=1 sets data-continuous on form" ($contHtml -match 'data-continuous="1"') ""
 Assert-True "no continuous param -> no data-continuous" ($ballotHtml -notmatch 'data-continuous') ""
 
+# ----------------------------------------------------------------
+# Section: Vote All continuous election chain (Task 7)
+# ----------------------------------------------------------------
+# Self-contained fixture: both eligible elections open, student's ballot
+# state cleared, rate-limit bucket empty — the section is re-runnable.
+$uidSql3 = "(SELECT id FROM users WHERE student_id='987654321')"
+& $mysql -u root voting_app -e @"
+UPDATE elections SET status='ongoing', start_date=DATE_SUB(NOW(), INTERVAL 1 DAY), end_date=DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE id IN (1,2);
+DELETE FROM ballot_submissions WHERE user_id=$uidSql3;
+DELETE FROM votes WHERE user_id=$uidSql3;
+UPDATE users SET has_voted=0 WHERE id=$uidSql3;
+DELETE FROM login_attempts;
+"@ 2>&1 | Out-Null
+
+# (a) votable list — the client's canVote predicate, evaluated server-side
+$chainData = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$chainIds = @($chainData.elections | Where-Object { $_.config.status -eq 'ongoing' -and -not $_.hasVoted -and $_.totalPositions -gt 0 } | ForEach-Object { [int]$_.id })
+Assert-True "chain fixture: at least 2 votable elections" ($chainIds.Count -ge 2) "got $($chainIds.Count)"
+
+# Vote All UI sources (home card + chain modals) — fetched BEFORE the loop
+# while the elections are still unvoted.
+$homeHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=home") -join "")
+Assert-True "home source has Vote All button id" ($homeHtml -match 'startVoteAllBtn') ""
+Assert-True "home source has Start Voting label" ($homeHtml -match 'Start Voting') ""
+Assert-True "home card links continuous=1" ($homeHtml -match 'continuous=1') ""
+Assert-True "home source opens remaining branch" ($homeHtml -match 'if \(remaining\.length > 0\)') ""
+Assert-True "featured hero selection removed" ($homeHtml -notmatch 'heroActionable') ""
+
+$chainBallotHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$($chainIds[0])&continuous=1") -join "")
+Assert-True "continuous ballot sets data-continuous" ($chainBallotHtml -match 'data-continuous="1"') ""
+Assert-True "ballot has chain (done/error) modal" ($chainBallotHtml -match 'id="ballotChainModal"') ""
+Assert-True "ballot has final modal" ($chainBallotHtml -match 'id="ballotFinalModal"') ""
+Assert-True "final modal exact copy" ($chainBallotHtml -match "You&#039;ve completed all your elections!|You've completed all your elections!") ""
+
+# (b) walk the chain: each submit must report the next id in list order
+for ($i = 0; $i -lt $chainIds.Count; $i++) {
+    $linkResp = ((curl.exe -s -b $jar -X POST "$base/vote.php" -d "csrf_token=$token&election_id=$($chainIds[$i])") -join "") | ConvertFrom-Json
+    Assert-True "chain link $($i+1): submit succeeds" ($linkResp.success -eq $true) ($linkResp | ConvertTo-Json -Compress)
+    $wantNext = if ($i + 1 -lt $chainIds.Count) { $chainIds[$i + 1] } else { $null }
+    $gotNext = if ($null -ne $linkResp.next_election) { [int]$linkResp.next_election.id } else { $null }
+    Assert-True "chain link $($i+1): next_election equals next id in dashboard-data order" ($gotNext -eq $wantNext) "got $gotNext, want $wantNext"
+    $wantRemaining = $chainIds.Count - 1 - $i
+    Assert-True "chain link $($i+1): remaining equals votes left" ([int]$linkResp.remaining -eq $wantRemaining) "got $($linkResp.remaining), want $wantRemaining"
+}
+
+# After the last link: every chained election reports hasVoted, final remaining was 0
+$chainData2 = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$stillOpen = @($chainData2.elections | Where-Object { $_.id -in $chainIds -and -not $_.hasVoted })
+Assert-True "all chained elections report hasVoted" ($stillOpen.Count -eq 0) ("still unvoted: " + (($stillOpen | ForEach-Object { $_.id }) -join ','))
+
+# Reset so the suite stays re-runnable
+& $mysql -u root voting_app -e @"
+DELETE FROM ballot_submissions WHERE user_id=$uidSql3;
+DELETE FROM votes WHERE user_id=$uidSql3;
+UPDATE users SET has_voted=0 WHERE id=$uidSql3;
+"@ 2>&1 | Out-Null
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
