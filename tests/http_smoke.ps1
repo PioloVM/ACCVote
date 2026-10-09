@@ -302,6 +302,21 @@ Assert-True "displaced rows glide via FLIP instead of snapping" ($adminSrc -matc
 # And it should land with a visible put-down before the re-render commits.
 Assert-True "row lands with a settle animation" ($adminSrc -match 'rowSettle') "no settle animation"
 Assert-True "commit waits for the settle animation" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?setTimeout[\s\S]{0,200}onCommit\(\)') "commit still immediate"
+# Robustness: the drop signal must not depend on pointer capture reaching the
+# handle. A silently-lost capture left the row stuck in grab mode AND glued
+# to the mouse (the "flies up infinitely" report) — so releases must also be
+# caught at window level, and a lost capture itself must end the drag.
+Assert-True "drag ends on a release anywhere (window fallback)" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?window\.addEventListener\(.pointerup., onUp') "no window-level drop listener"
+Assert-True "drag ends when pointer capture is lost" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?lostpointercapture') "no lostpointercapture handling"
+Assert-True "a drop is processed exactly once" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?let ended = false') "no once-guard"
+Assert-True "capture failure cannot break the drag" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?try \{[\s\S]*?setPointerCapture') "setPointerCapture unguarded"
+# Target-slot math must read LAYOUT positions (offsetTop), not animated
+# rects — mid-FLIP rect reads made the target index oscillate mid-gesture.
+Assert-True "drag target math ignores in-flight animations" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?offsetTop') "target math still uses animated rects"
+# Reports school-year default: must coerce types AND default to the year the
+# elections serve (next school year), not 2023-2024 via the [0] fallback.
+Assert-True "report school year default coerces option types" ($adminSrc -match 'String\(sy\.start_year\) === String\(nextSchoolYearStartYearClient\(\)\)') "find() still type-mismatches"
+Assert-True "report school year defaults to the serving year" ($adminSrc -match 'reportTargetSchoolYearId = \(schoolYearOptions\.find\(sy => String\(sy\.start_year\) === String\(nextSchoolYearStartYearClient\(\)\)\)') "default not the serving year"
 
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex

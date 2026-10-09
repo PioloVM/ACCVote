@@ -3577,7 +3577,14 @@ async function renderReportsView(){
 
     await loadSettingsData();
     if (reportTargetSchoolYearId === null) {
-        reportTargetSchoolYearId = (schoolYearOptions.find(sy => sy.start_year === currentSchoolYearStartYearClient()) || schoolYearOptions[0] || {}).id || null;
+        // Default to the school year these elections SERVE (the next one) —
+        // "an election held during 2026-2027 is normally FOR 2027-2028".
+        // String() on both sides: the settings API returns start_year as a
+        // string and the client helper returns a number, so a bare ===
+        // never matched and the report silently defaulted to 2023-2024
+        // via the [0] fallback — showing "no elections" until the admin
+        // picked the right year by hand.
+        reportTargetSchoolYearId = (schoolYearOptions.find(sy => String(sy.start_year) === String(nextSchoolYearStartYearClient())) || schoolYearOptions[0] || {}).id || null;
     }
 
     let allElections = [];
@@ -3693,12 +3700,18 @@ function bindReportSectionDrag(){
 function attachRowDrag(handle, row, listEl, onCommit){
     handle.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        handle.setPointerCapture(e.pointerId);
+        // Pointer capture can fail outright, or be silently dropped
+        // mid-drag — and when it is, the release never reaches the
+        // handle's listeners: the row stays stuck in grab mode and keeps
+        // following the mouse ("flies up infinitely"). So the drop is
+        // caught at THREE levels and runs exactly once.
+        try { handle.setPointerCapture(e.pointerId); } catch (err) { /* window listeners below still catch the release */ }
         const startY = e.clientY;
         const grabOffsetY = e.clientY - row.getBoundingClientRect().top;
         row.classList.add('row-dragging');
         let currentDy = 0;
         let moved = false;
+        let ended = false;
         // The row's layout top changes every time it is re-slotted; the
         // transform compensates so the row stays glued to the pointer.
         const followPointer = (ev) => {
@@ -3707,15 +3720,26 @@ function attachRowDrag(handle, row, listEl, onCommit){
             row.style.transform = `translateY(${currentDy}px) scale(1.02)`;
         };
         const onMove = (ev) => {
+            if (ended) return;
             if (Math.abs(ev.clientY - startY) > 2) moved = true;
             const allRows = Array.from(listEl.children);
             const others = allRows.filter(r => r !== row);
-            // Direct placement: target index = how many other rows sit
-            // ABOVE the pointer. One event reaches the list's ends.
+            // Target slot = how many other rows sit ABOVE the pointer,
+            // measured in LAYOUT space (offsetTop), not getBoundingClientRect:
+            // rects are mid-FLIP-animation while displaced rows glide, and
+            // reading them made the target oscillate during the gesture.
+            // offsetTop is transform- and transition-independent. Rows and
+            // the list share an offsetParent (div child of a static div;
+            // tr and tbody both anchored to the table), so the difference
+            // is each row's position within the list.
+            const listTop = listEl.offsetTop;
+            // pointer position in list-layout space (the list itself is
+            // never transformed, so its rect anchors offset-space to the
+            // viewport).
+            const pointerInList = ev.clientY - listEl.getBoundingClientRect().top;
             let target = 0;
             for (const other of others) {
-                const box = other.getBoundingClientRect();
-                if (ev.clientY > box.top + box.height / 2) target++;
+                if (pointerInList > other.offsetTop - listTop + other.offsetHeight / 2) target++;
                 else break;
             }
             const currentIdx = allRows.indexOf(row);
@@ -3740,9 +3764,14 @@ function attachRowDrag(handle, row, listEl, onCommit){
             followPointer(ev);
         };
         const onUp = () => {
+            if (ended) return;
+            ended = true;
             handle.removeEventListener('pointermove', onMove);
             handle.removeEventListener('pointerup', onUp);
             handle.removeEventListener('pointercancel', onUp);
+            handle.removeEventListener('lostpointercapture', onUp);
+            window.removeEventListener('pointerup', onUp, true);
+            window.removeEventListener('pointercancel', onUp, true);
             row.classList.remove('row-dragging');
             // Put-down: glide into the slot with a soft landing bounce, THEN
             // commit — the re-render must not cut the settle animation off.
@@ -3758,6 +3787,14 @@ function attachRowDrag(handle, row, listEl, onCommit){
         handle.addEventListener('pointermove', onMove);
         handle.addEventListener('pointerup', onUp);
         handle.addEventListener('pointercancel', onUp);
+        // A capture that dies mid-drag fires THIS on the handle — treat it
+        // as a drop, not as a stuck grab.
+        handle.addEventListener('lostpointercapture', onUp);
+        // Fallbacks for a release the capture didn't route to the handle
+        // (released outside the viewport, capture dropped silently): any
+        // pointerup/pointercancel anywhere still ends the drag.
+        window.addEventListener('pointerup', onUp, true);
+        window.addEventListener('pointercancel', onUp, true);
     });
 }
 
