@@ -14,6 +14,9 @@ $csrfToken = csrfToken();
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Aklan Catholic College student council election administration panel.">
 <link rel="icon" href="../assets/favicon.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <title>Admin Dashboard | School Elections</title>
 <style>
 :root{
@@ -23,6 +26,9 @@ $csrfToken = csrfToken();
     --lime:#84cc16;
     --lime-dark:#65a30d;
     --lime-soft:#f0fdf4;
+    /* Landing-page brand fonts carried inward (9.5 batch) */
+    --font-display:'Sora',system-ui,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,monospace;
     --bg:#f5f7fb;
     --ink:#0f172a;
     --muted:#64748b;
@@ -104,8 +110,8 @@ $csrfToken = csrfToken();
 .stat-tile.tone-good{border-left-color:var(--lime-dark);}
 .stat-tile.tone-warn{border-left-color:var(--amber);}
 .stat-tile.tone-neutral{border-left-color:var(--line-strong);}
-.stat-tile .k{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
-.stat-tile .v{font-size:1.9rem;font-weight:800;color:var(--ink);line-height:1.1;letter-spacing:-.02em;margin:.15rem 0 .2rem;}
+.stat-tile .k{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:var(--font-mono);}
+.stat-tile .v{font-size:1.9rem;font-weight:800;color:var(--ink);line-height:1.1;letter-spacing:-.02em;margin:.15rem 0 .2rem;font-family:var(--font-display);}
 .stat-tile .s{font-size:.78rem;color:var(--muted);line-height:1.45;}
 .stat-tile .hint{font-size:.72rem;color:var(--muted);margin-top:.5rem;padding-top:.5rem;border-top:1px dashed var(--line);line-height:1.45;}
 
@@ -251,7 +257,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,
 .stat-box .stat-icon svg{width:18px;height:18px;}
 .stat-box .stat-number{font-size:1.85rem;font-weight:800;color:var(--ink);letter-spacing:-.02em;line-height:1;}
 .stat-box .stat-label{font-size:.8rem;color:var(--muted);font-weight:500;}
-.section-title{font-size:1.15rem;font-weight:700;color:var(--ink);margin:0 0 1rem;letter-spacing:-.01em;}
+.section-title{font-size:1.15rem;font-weight:700;color:var(--ink);margin:0 0 1rem;letter-spacing:-.01em;font-family:var(--font-display);}
 .card{background:var(--surface);border-radius:var(--radius-md);box-shadow:var(--card-shadow);border:1px solid var(--line);padding:1.5rem;}
 .grid-2{display:grid;grid-template-columns:1.3fr 1fr;gap:1.25rem;}
 @media (max-width:1000px){.grid-2{grid-template-columns:1fr;}}

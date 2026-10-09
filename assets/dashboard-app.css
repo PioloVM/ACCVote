@@ -22,6 +22,10 @@
         --chip-active-bg: #84cc16;
         --chip-active-fg: #052e16;
         --chip-active-badge: rgba(5,46,22,0.16);
+        /* Landing-page brand fonts carried inward (9.5 batch): Sora for
+           headings, IBM Plex Mono for micro-label eyebrows. */
+        --font-display: 'Sora', system-ui, sans-serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
     }
     /* Toggled via [data-theme="dark"] on <html> — see the theme switcher in
        the sidebar. The sidebar itself stays the same dark navy in both
@@ -72,7 +76,7 @@
     }
     .sidebar .logo-area img { max-width: 84px; height: auto; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3)); }
     .sidebar .logo-area h2 { color: #fff; margin: 0.75rem 0 0.15rem; font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; }
-    .sidebar .logo-area .logo-tagline { display: block; color: #64748b; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .sidebar .logo-area .logo-tagline { display: block; color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
 
     .sidebar nav {
         flex: 1;
@@ -149,7 +153,7 @@
     }
     .sidebar .profile-section .user-info { flex: 1; overflow: hidden; }
     .sidebar .profile-section .user-info .name { font-weight: 600; color: white; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sidebar .profile-section .user-info .role { font-size: 0.72rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar .profile-section .user-info .role { font-size: 0.78rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sidebar .logout-link a {
         display: flex;
         align-items: center;
@@ -204,7 +208,7 @@
         padding-top: 0.5rem;
         padding-bottom: 0.75rem;
     }
-    .page-header h1 { margin: 0; font-weight: 400; color: var(--text); font-size: 1.5rem; }
+    .page-header h1 { margin: 0; font-weight: 600; color: var(--text); font-size: 1.5rem; font-family: var(--font-display); }
     .page-header .date { font-size: 0.95rem; color: var(--text-secondary); }
     .hamburger { display: none; background: none; border: none; font-size: 1.8rem; color: var(--text); cursor: pointer; padding: 0.25rem 0.5rem; line-height: 1; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
     .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 999; opacity: 0; transition: opacity 0.3s; }
@@ -239,6 +243,7 @@
         font-weight: 600;
         color: var(--text);
         margin: 1.5rem 0 1rem;
+        font-family: var(--font-display);
     }
 
     /* ----- Election Cards ----- */
@@ -279,7 +284,7 @@
     .election-group-header .dot.scheduled { background: #6366f1; }
     .election-group-header .dot.closed { background: #ef4444; }
     .election-group-header .label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
-    .election-group-header .count { background: var(--card-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .election-group-header .count { background: var(--card-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
     .election-group-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
     /* Status filter pills — click "Ongoing" and see only ongoing
@@ -657,7 +662,7 @@
         font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
         color:var(--accent-dark);margin:0 0 1rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;
     }
-    .cand-position-note{font-size:.68rem;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text-secondary);background:var(--card-2);padding:.15rem .6rem;border-radius:999px;}
+    .cand-position-note{font-size:.75rem;font-weight:600;text-transform:none;letter-spacing:0;color:var(--text-secondary);background:var(--card-2);padding:.15rem .6rem;border-radius:999px;}
 
     .cand-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:1.5rem;}
 
@@ -675,7 +680,7 @@
         background:linear-gradient(to top, rgba(8,20,40,.92) 0%, rgba(8,20,40,.55) 55%, transparent 100%);
         display:flex;flex-direction:column;gap:.2rem;
     }
-    .cand-card-kicker{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--lime,#84cc16);}
+    .cand-card-kicker{font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--lime,#84cc16);}
     .cand-card-name{font-size:1.15rem;font-weight:800;color:#fff;line-height:1.2;letter-spacing:-.01em;}
 
     .cand-card-body{padding:1rem 1.1rem 1.2rem;flex:1;display:flex;flex-direction:column;}
@@ -733,7 +738,7 @@
         .stat-box .stat-number { font-size: 1.6rem; }
         .page-header h1 { font-size: 1.05rem; }
         .election-title { font-size: 1.2rem; }
-        .status-large { font-size: 0.72rem; padding: 0.35rem 0.7rem 0.35rem 0.6rem; }
+        .status-large { font-size: 0.78rem; padding: 0.35rem 0.7rem 0.35rem 0.6rem; }
         .remaining-time { font-size: 0.78rem; padding: 0.4rem 0.75rem; }
         .featured-carousel-viewport { height: 190px; }
         .fc-card img { width: 52px; height: 52px; }
@@ -764,7 +769,7 @@
         box-shadow: 0 6px 14px rgba(0,0,0,0.07);
     }
     .ballot-header-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-    .ballot-title { margin: 0; font-size: 1.3rem; color: var(--text); }
+    .ballot-title { margin: 0; font-size: 1.3rem; color: var(--text); font-family: var(--font-display); }
     .ballot-header-actions { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
     .ballot-exit { font-size: 0.85rem; font-weight: 600; color: #dc2626; text-decoration: none; padding: 0.4rem 0.8rem; border-radius: 8px; transition: background 0.2s; flex-shrink: 0; }
     .ballot-exit:hover { background: rgba(239,68,68,0.08); }
@@ -792,8 +797,8 @@
     .ballot-step + .ballot-step { margin-top: 2.25rem; padding-top: 2rem; border-top: 1px dashed var(--border); }
 
     .ballot-step-heading { margin-bottom: 1.25rem; }
-    .ballot-step-eyebrow { display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #65a30d; background: rgba(132,204,22,0.14); padding: 0.25rem 0.65rem; border-radius: 999px; margin-bottom: 0.6rem; }
-    .ballot-position-title { margin: 0 0 0.3rem; font-size: 1.5rem; color: var(--text); }
+    .ballot-step-eyebrow { display: inline-block; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #65a30d; background: rgba(132,204,22,0.14); padding: 0.25rem 0.65rem; border-radius: 999px; margin-bottom: 0.6rem; }
+    .ballot-position-title { margin: 0 0 0.3rem; font-size: 1.5rem; color: var(--text); font-family: var(--font-display); border-left: 3px solid var(--accent); padding-left: 0.6rem; }
     .ballot-instruction { margin: 0.35rem 0 0; color: var(--text-secondary); font-size: 0.9rem; }
 
     .ballot-candidates { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1rem; }
@@ -1032,7 +1037,7 @@
     .cand-modal-party { display: inline-block; font-size: 0.78rem; font-weight: 700; color: var(--accent-dark); background: rgba(132,204,22,0.14); padding: 0.25rem 0.7rem; border-radius: 999px; margin-bottom: 1rem; }
     .cand-modal-meta-list { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border); }
     .cand-modal-meta-row { display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.88rem; color: var(--text); }
-    .cand-modal-meta-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+    .cand-modal-meta-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 
     .cand-modal-right { flex: 1; padding: 2.25rem 2.25rem 2rem; overflow-y: auto; }
     .cand-modal-platform-label { margin: 0 0 1rem; font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-dark); }
@@ -1102,14 +1107,14 @@
     /* Lives OUTSIDE .chart-box on purpose. .chart-box has a fixed height so
        Chart.js can size the canvas, which means anything inserted after the
        canvas would overflow the card. */
-    .chart-legend-note { font-size: .72rem; color: var(--text-secondary); margin: .75rem 0 0; line-height: 1.5; }
+    .chart-legend-note { font-size: .78rem; color: var(--text-secondary); margin: .75rem 0 0; line-height: 1.5; }
 
     /* Legend chips for the party / margin breakdowns, which have no
        built-in axis labels worth reading. */
     .chip-legend { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .8rem; }
     .chip-legend .chip {
         display: inline-flex; align-items: center; gap: .35rem;
-        font-size: .74rem; color: var(--text-secondary);
+        font-size: .78rem; color: var(--text-secondary);
         background: var(--card-2); border: 1px solid var(--border);
         padding: .22rem .55rem; border-radius: 999px;
     }
@@ -1124,9 +1129,9 @@
         background: var(--card); border: 1px solid var(--border);
         border-radius: 12px; padding: .9rem 1rem; box-shadow: var(--card-shadow);
     }
-    .stat-tile .k { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); }
+    .stat-tile .k { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); }
     .stat-tile .v { font-size: 1.5rem; font-weight: 800; color: var(--text); line-height: 1.2; margin-top: .15rem; }
-    .stat-tile .s { font-size: .74rem; color: var(--text-secondary); }
+    .stat-tile .s { font-size: .78rem; color: var(--text-secondary); }
 
     /* Print: the Overview is a summary, not a document. When someone
        prints from the admin panel, collapse the charts to their headline
