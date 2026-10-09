@@ -3299,12 +3299,6 @@ async function renderOverviewView(){
         ${flagsHtml}
     </div>`;
 
-    // Only the party chart belongs here — it is a genuine cross-election
-    // comparison (one ring, shared scale). Per-candidate bars and the
-    // turnout donut were removed: they were the "inside" view, duplicated in
-    // Election Detail, and the donut forced unrelated faculties onto one
-    // shared scale.
-    drawPartyChart(details);
 }
 
 // Truncates a long election name for a tile, without cutting mid-word when
@@ -3315,55 +3309,6 @@ function shortName(name, max){
     const cut = s.slice(0, max);
     const sp = cut.lastIndexOf(' ');
     return (sp > max * 0.6 ? cut.slice(0, sp) : cut) + '…';
-}
-
-// Chart 4 — party breakdown, only when some election actually has parties.
-function drawPartyChart(details){
-    const card = document.getElementById('partyChartCard');
-    const canvas = document.getElementById('chartParty');
-    if (!card || !canvas) return;
-
-    const totals = {};
-    let any = false;
-    details.forEach(d => {
-        if (!d.parties_enabled) return;
-        (d.positions || []).forEach(p => {
-            (p.candidates || []).forEach(c => {
-                const party = (c.party || '').trim();
-                if (!party) return;
-                totals[party] = (totals[party] || 0) + (c.vote_count || 0);
-                any = true;
-            });
-        });
-    });
-
-    if (!any) return;   // stays hidden — an empty party chart is noise
-    card.style.display = '';
-
-    const names = Object.keys(totals).sort((a,b) => totals[b] - totals[a]);
-    resultsCharts.chartParty = new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-            labels: names,
-            datasets: [{
-                data: names.map(n => totals[n]),
-                backgroundColor: names.map((n,i) => CHART_COLORS[i % CHART_COLORS.length]),
-                borderWidth: 2,
-                borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#1e293b' : '#ffffff',
-            }],
-        },
-        options: chartBaseOptions({
-            cutout: '52%',
-            scales: {},
-        }),
-    });
-
-    const legend = document.getElementById('chartPartyLegend');
-    if (legend) {
-        legend.innerHTML = names.map((n,i) =>
-            `<span class="chip"><span class="swatch" style="background:${CHART_COLORS[i % CHART_COLORS.length]}"></span>${escapeHtml(n)} · ${totals[n]}</span>`
-        ).join('');
-    }
 }
 
 // ------------------------------------------------------------------

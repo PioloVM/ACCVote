@@ -358,6 +358,22 @@ Assert-True "dashboard-data no longer selects the legacy has_voted flag" ($ddSrc
 $studentsApiSrc = Get-Content .\admin\api\students.php -Raw
 Assert-True "admin student list derives voted from ballot_submissions" ($studentsApiSrc -match 'EXISTS\(SELECT 1 FROM ballot_submissions bs WHERE bs\.user_id = u\.id\) AS has_voted') "chip still reads the legacy column"
 
+# ----------------------------------------------------------------
+# Section: 9.5 batch — login throttling (characterized, pre-existing)
+# ----------------------------------------------------------------
+# Both login flows already throttle per-IP (8 attempts / 5 min) via
+# includes/functions.php. Pinned here so it cannot silently regress.
+$studentLoginSrc = Get-Content .\login.php -Raw
+Assert-True "student login throttles before verifying credentials" ($studentLoginSrc -match 'isRateLimited\(\$pdo, ''student_login''\)' -and $studentLoginSrc -match 'recordAttempt\(\$pdo, ''student_login''\)') "student login unthrottled"
+$adminLoginSrc = Get-Content .\admin\login.php -Raw
+Assert-True "admin login throttles before verifying credentials" ($adminLoginSrc -match 'isRateLimited\(\$pdo, ''admin_login''\)' -and $adminLoginSrc -match 'recordAttempt\(\$pdo, ''admin_login''\)') "admin login unthrottled"
+$functionsSrc = Get-Content .\includes\functions.php -Raw
+Assert-True "throttle implementation exists in functions.php" ($functionsSrc -match 'function isRateLimitedKey\(' -and $functionsSrc -match 'function recordAttemptKey\(') "throttle functions missing"
+# Dead code: the admin's drawPartyChart renders a chart into a card the
+# markup never emits — verify it is gone or, if it must stay, that its
+# container actually exists somewhere.
+Assert-True "dead party-chart code removed" ($adminSrc -notmatch 'function drawPartyChart') "drawPartyChart still present"
+
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
 # checks above cannot see that. Extract the admin page's main script and
