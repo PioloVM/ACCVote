@@ -801,13 +801,16 @@ body,.sidebar,.card,.stat-box,.election-card,.wizard-section,.students-table-wra
     document.documentElement.setAttribute('data-theme', theme);
 })();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<!-- Early preconnect so the deferred CDN fetches start their TLS handshake
+     while the page shell is still downloading. -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous" defer></script>
 <!-- Chart.js drives the Results > Overview charts. Loaded from CDN for the
      same reason SheetJS is: no build step in this project. Every chart is
      guarded by a `chartLibReady()` check, so if the CDN is unreachable the
      Overview falls back to a plain message and the rest of the panel (and
      the whole admin dashboard) keeps working. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous" defer></script>
 </head>
 <body>
 
