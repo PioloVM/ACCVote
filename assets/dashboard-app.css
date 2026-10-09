@@ -709,6 +709,7 @@
         .sidebar { transform: translateX(-100%); width: 280px; padding-top: 0; }
         .sidebar.open { transform: translateX(0); }
         .main-content { margin-left: 0; padding: 1rem; }
+        .ballot-header { margin-left: -1rem; margin-right: -1rem; padding-left: 1rem; padding-right: 1rem; }
         .page-header { flex-direction: row; align-items: center; background: var(--card); box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 0.5rem 1rem; margin-bottom: 1.5rem; border-bottom: none; border-radius: 0 0 8px 8px; }
         .page-header h1 { font-size: 1.2rem; }
         .page-header .date { font-size: 0.8rem; }
@@ -749,10 +750,19 @@
     /* Sticky progress header: stays pinned while the whole ballot
        scrolls beneath it, so the answered-count is always visible. */
     .ballot-header {
-        position: sticky; top: 0; z-index: 40;
+        position: sticky; top: var(--ballot-sticky-top, 0px); z-index: 40;
         margin-bottom: 1.5rem;
         background: var(--bg);
         padding: 0.75rem 0 0.85rem;
+        /* Full-bleed across the main content area (canceling its padding)
+           so scrolled ballot content can't peek through beside the bar;
+           the inner .ballot-shell keeps title/Exit/progress aligned with
+           the centered ballot column below. */
+        margin-left: -2rem;
+        margin-right: -2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.07);
     }
     .ballot-header-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
     .ballot-title { margin: 0; font-size: 1.3rem; color: var(--text); }
@@ -840,7 +850,7 @@
     /* End-of-ballot submit block (no review step — the confirm modal is
        the final gate) */
     .ballot-submit-block { margin-top: 2.5rem; padding-top: 1.75rem; border-top: 2px solid var(--border); text-align: center; }
-    .ballot-submit-block .btn { min-width: 220px; margin-top: 1rem; }
+    .ballot-submit-block .btn { min-width: 220px; margin-top: 1rem; display: inline-flex; }
 
     /* Success/confirm modal */
     .ballot-modal-overlay {

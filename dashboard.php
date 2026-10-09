@@ -321,8 +321,8 @@
                 } else {
         ?>
                     <?php $totalPositions = count($positions); ?>
-                    <div class="ballot-shell">
-                        <div class="ballot-header">
+                    <div class="ballot-header">
+                        <div class="ballot-shell">
                             <div class="ballot-header-top">
                                 <div>
                                     <h2 class="ballot-title"><?= h($config['name']) ?></h2>
@@ -339,7 +339,9 @@
                             </div>
                             <div class="ballot-progress-label" id="ballotProgressLabel">0 of <?= $totalPositions ?> positions answered</div>
                         </div>
+                        </div>
 
+                        <div class="ballot-shell">
                         <div id="statusMessage" class="alert" style="display:none;"></div>
 
                         <form id="voteForm" data-election="<?= $selectedElectionId ?>" data-total-positions="<?= $totalPositions ?>"<?= !empty($_GET['continuous']) ? ' data-continuous="1"' : '' ?>>
@@ -665,6 +667,19 @@
             if (progressLabel) progressLabel.textContent = answered + ' of ' + total + ' positions answered';
         }
         updateProgress();
+
+        // Pin the sticky ballot header just BELOW the page header (which
+        // also sticks at top:0) — measure rather than guess: the page
+        // header wraps on mobile and its height differs.
+        const pageHeaderEl = document.querySelector('.page-header');
+        const ballotHeaderEl = document.querySelector('.ballot-header');
+        function syncBallotStickyTop() {
+            if (!ballotHeaderEl) return;
+            const top = pageHeaderEl ? pageHeaderEl.offsetHeight : 0;
+            ballotHeaderEl.style.setProperty('--ballot-sticky-top', top + 'px');
+        }
+        syncBallotStickyTop();
+        window.addEventListener('resize', syncBallotStickyTop);
 
         window.closeBallotModal = function () { window.location.href = 'dashboard.php?page=home'; };
 

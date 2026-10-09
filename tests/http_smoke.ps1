@@ -326,6 +326,17 @@ Assert-True "ballot exit links intercepted with confirm dialog" ($ballotSrc -mat
 Assert-True "exit dialog warns unsubmitted selections are lost" ($ballotSrc -match 'will not be saved') "warning text missing"
 Assert-True "selected radio can be unvoted by re-clicking it" ($ballotSrc -match 'prevCheckedByGroup') "no re-click unvote logic found"
 
+# ----------------------------------------------------------------
+# Section: ballot sticky header layout + centered submit (follow-up 2)
+# ----------------------------------------------------------------
+# The sticky election/progress bar must sit below the (also sticky) page
+# header, span the full content width, and the submit button must center.
+$ballotCss = Get-Content .\assets\dashboard-app.css -Raw
+Assert-True "ballot sticky bar offsets below the page header dynamically" ($ballotSrc -match 'syncBallotStickyTop') "no sticky-top sync JS found"
+Assert-True "ballot sticky bar spans the full content width" ($ballotCss -match '(?s)\.ballot-header \{[^}]*margin-left: -2rem') "no full-bleed margins on .ballot-header"
+Assert-True "mobile keeps the ballot bar full-bleed" ($ballotCss -match '\.ballot-header \{ margin-left: -1rem') "no mobile full-bleed rule"
+Assert-True "submit vote button centers on all screen sizes" ($ballotCss -match '(?s)\.ballot-submit-block \.btn \{[^}]*inline-flex') "button is still block-level flex"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
