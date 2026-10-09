@@ -233,6 +233,29 @@ Assert-True "shell has no draftsByElection" ($shellHtml -notmatch 'draftsByElect
 Assert-True "sidebar label is Vote Now" ($shellHtml -match 'Vote Now') ""
 Assert-True "sidebar has no bare Vote label" ($shellHtml -notmatch '>Vote<') ""
 
+# ----------------------------------------------------------------
+# Section: admin single-candidate wizard (Task 9)
+# ----------------------------------------------------------------
+# Source-level checks on the wizard JS inside admin/dashboard.php —
+# no admin session needed, and they pin the exact three edits.
+$adminSrc = Get-Content .\admin\dashboard.php -Raw
+$seedBlock = [regex]::Match($adminSrc, 'function setPositionCount[\s\S]*?function updateCandidateCount').Value
+$seedRows = ([regex]::Matches($seedBlock, "\{name:'', photo:''")).Count
+Assert-True "wizard seeds exactly 1 candidate row" ($seedRows -eq 1) "got $seedRows seed rows"
+$blankBlock = [regex]::Match($adminSrc, 'function blankDraft[\s\S]*?function openCreateElection').Value
+$blankRows = ([regex]::Matches($blankBlock, "\{name:'', photo:''")).Count
+Assert-True "blankDraft seeds exactly 1 candidate row" ($blankRows -eq 1) "got $blankRows seed rows"
+Assert-True "candidates count input defaults to 1" ($adminSrc -match 'p\.candidates\.length \|\| 1') ""
+Assert-True "candidates count input has highlight id" ($adminSrc -match 'id="pos_cands_\$\{i\}"') ""
+Assert-True "candCount<1 error highlights its field" ($adminSrc -match "wizardInvalidFields\.add\('pos_cands_'\+i\)") ""
+# sizeBarChartBox must be top-level (declared before drawPositionShareChart),
+# not nested inside it — drawMarginChart() calls it too, and a nested
+# declaration throws ReferenceError which kills the margin chart AND the
+# "uncontested" legend note before it renders.
+$szIdx = $adminSrc.IndexOf('function sizeBarChartBox')
+$dsIdx = $adminSrc.IndexOf('function drawPositionShareChart')
+Assert-True "sizeBarChartBox declared above drawPositionShareChart (top-level)" ($szIdx -gt 0 -and $dsIdx -gt 0 -and $szIdx -lt $dsIdx) "sz=$szIdx ds=$dsIdx"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
