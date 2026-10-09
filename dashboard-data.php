@@ -31,7 +31,7 @@ header('Content-Type: application/json');
 $pdo = getDbConnection();
 syncElectionStatuses($pdo);
 
-$stmt = $pdo->prepare('SELECT id, name, has_voted, department, year_level FROM users WHERE id = :id');
+$stmt = $pdo->prepare('SELECT id, name, department, year_level FROM users WHERE id = :id');
 $stmt->execute(['id' => $_SESSION['user_id']]);
 $user = $stmt->fetch();
 

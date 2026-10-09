@@ -330,6 +330,34 @@ Assert-True "drag target math ignores in-flight animations" ($adminSrc -match '(
 Assert-True "report school year default coerces option types" ($adminSrc -match 'String\(sy\.start_year\) === String\(nextSchoolYearStartYearClient\(\)\)') "find() still type-mismatches"
 Assert-True "report school year defaults to the serving year" ($adminSrc -match 'reportTargetSchoolYearId = \(schoolYearOptions\.find\(sy => String\(sy\.start_year\) === String\(nextSchoolYearStartYearClient\(\)\)\)') "default not the serving year"
 
+# ----------------------------------------------------------------
+# Section: 9.5 batch — brand port (landing fonts carried inward)
+# ----------------------------------------------------------------
+$studentCss = Get-Content .\assets\dashboard-app.css -Raw
+$dashSrc = Get-Content .\dashboard.php -Raw
+Assert-True "student css defines the landing fonts as tokens" ($studentCss -match "--font-display: 'Sora'" -and $studentCss -match "--font-mono: 'IBM Plex Mono'") "font tokens missing"
+Assert-True "student page header uses the display font" ($studentCss -match '(?s)\.page-header h1 \{[^}]*font-family: var\(--font-display\)') "page-header h1 still system-ui"
+Assert-True "student section titles use the display font" ($studentCss -match '(?s)\.section-title \{[^}]*font-family: var\(--font-display\)') "section-title still system-ui"
+Assert-True "sticky ballot title uses the display font" ($studentCss -match '(?s)\.ballot-title \{[^}]*font-family: var\(--font-display\)') "ballot-title still system-ui"
+Assert-True "ballot position titles carry the lime accent" ($studentCss -match '(?s)\.ballot-position-title \{[^}]*border-left: 3px solid var\(--accent\)') "no lime accent on position titles"
+Assert-True "ballot branch head loads the brand fonts" (([regex]::Matches($dashSrc, 'family=Sora')).Count -ge 2) "font link missing from a dashboard head"
+Assert-True "admin head loads the brand fonts" ($adminSrc -match 'family=Sora') "no font link in admin head"
+Assert-True "admin section titles use the display font" ($adminSrc -match '(?s)\.section-title\{[^}]*font-family:var\(--font-display\)') "admin titles still system fonts"
+Assert-True "admin stat tile labels use the mono eyebrow" ($adminSrc -match '(?s)\.stat-tile \.k\{[^}]*font-family:var\(--font-mono\)') "stat labels not mono"
+Assert-True "no informational label below .75rem in student css" (-not ($studentCss -match 'font-size:\s*0?\.6[0-9]rem|font-size:\s*0?\.7[0-4]rem')) "tiny label sizes remain"
+
+# ----------------------------------------------------------------
+# Section: 9.5 batch — has_voted retirement (reads)
+# ----------------------------------------------------------------
+# decisions must read ballot_submissions, not the legacy flag; the flag's
+# WRITE stays only because the partner's uncommitted login.php redirects on
+# it — flagged in the ledger, not edited.
+Assert-True "student dashboard no longer selects the legacy has_voted flag" ($dashSrc -notmatch "SELECT id, name, has_voted, department, year_level FROM users") "flag still selected in dashboard.php"
+$ddSrc = Get-Content .\dashboard-data.php -Raw
+Assert-True "dashboard-data no longer selects the legacy has_voted flag" ($ddSrc -notmatch 'has_voted') "flag still selected in dashboard-data.php"
+$studentsApiSrc = Get-Content .\admin\api\students.php -Raw
+Assert-True "admin student list derives voted from ballot_submissions" ($studentsApiSrc -match 'EXISTS\(SELECT 1 FROM ballot_submissions bs WHERE bs\.user_id = u\.id\) AS has_voted') "chip still reads the legacy column"
+
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
 # checks above cannot see that. Extract the admin page's main script and

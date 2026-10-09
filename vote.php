@@ -178,9 +178,12 @@ try {
         ]);
     }
 
-    // Legacy "has voted somewhere at least once" convenience flag, kept for
-    // login.php's post-login redirect. Per-election status comes from
-    // ballot_submissions (userHasVotedInElection() reads that table).
+    // Legacy "has voted somewhere at least once" convenience flag — the ONLY
+    // remaining reason it is written. login.php (the partner's uncommitted
+    // file) redirects on it post-login. Every DECISION in the app reads the
+    // authoritative per-election lock in ballot_submissions instead
+    // (userHasVotedInElection()). Once login.php is finalized, remove this
+    // write, the column, and the redirect together.
     $updateStmt = $pdo->prepare('UPDATE users SET has_voted = 1 WHERE id = :id');
     $updateStmt->execute(['id' => $userId]);
 

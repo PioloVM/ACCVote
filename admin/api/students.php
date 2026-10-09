@@ -119,7 +119,9 @@ $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
     $stmt = $pdo->query('
         SELECT u.id, u.student_id, u.name, u.department, u.year_level,
-               u.email, u.has_voted, u.registration_status, u.account_status,
+               u.email,
+               EXISTS(SELECT 1 FROM ballot_submissions bs WHERE bs.user_id = u.id) AS has_voted,
+               u.registration_status, u.account_status,
                u.school_year_id, sy.label AS school_year_label
         FROM users u
         LEFT JOIN school_years sy ON sy.id = u.school_year_id
