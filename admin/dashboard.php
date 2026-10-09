@@ -3721,6 +3721,11 @@ function attachRowDrag(handle, row, listEl, onCommit){
         };
         const onMove = (ev) => {
             if (ended) return;
+            // Universal stale-drag guard: if any pointermove arrives with
+            // no button pressed, the release was missed somewhere (outside
+            // the viewport, capture already gone) — drop NOW. While the
+            // button IS held, this is false on every event.
+            if (ev.buttons === 0) { onUp(); return; }
             if (Math.abs(ev.clientY - startY) > 2) moved = true;
             const allRows = Array.from(listEl.children);
             const others = allRows.filter(r => r !== row);
@@ -3769,9 +3774,9 @@ function attachRowDrag(handle, row, listEl, onCommit){
             window.removeEventListener('pointermove', onMove, true);
             handle.removeEventListener('pointerup', onUp);
             handle.removeEventListener('pointercancel', onUp);
-            handle.removeEventListener('lostpointercapture', onUp);
             window.removeEventListener('pointerup', onUp, true);
             window.removeEventListener('pointercancel', onUp, true);
+            window.removeEventListener('blur', onUp);
             row.classList.remove('row-dragging');
             // Put-down: glide into the slot with a soft landing bounce, THEN
             // commit — the re-render must not cut the settle animation off.
@@ -3792,14 +3797,20 @@ function attachRowDrag(handle, row, listEl, onCommit){
         window.addEventListener('pointermove', onMove, true);
         handle.addEventListener('pointerup', onUp);
         handle.addEventListener('pointercancel', onUp);
-        // A capture that dies mid-drag fires THIS on the handle — treat it
-        // as a drop, not as a stuck grab.
-        handle.addEventListener('lostpointercapture', onUp);
+        // NOTE: lostpointercapture is deliberately NOT a drop signal. Chrome
+        // fires it the instant the captured row is re-slotted (insertBefore
+        // momentarily detaches it) while the button is still held — treating
+        // it as a drop ended every drag after the first reorder. A held
+        // drag must survive capture loss; genuinely stale drags are killed
+        // by the buttons-check in onMove instead.
         // Fallbacks for a release the capture didn't route to the handle
         // (released outside the viewport, capture dropped silently): any
         // pointerup/pointercancel anywhere still ends the drag.
         window.addEventListener('pointerup', onUp, true);
         window.addEventListener('pointercancel', onUp, true);
+        // Safety net: focus loss (alt-tab, notification steals the pointer)
+        // ends the drag — the pointer state can no longer be tracked.
+        window.addEventListener('blur', onUp);
     });
 }
 

@@ -308,7 +308,14 @@ Assert-True "commit waits for the settle animation" ($adminSrc -match '(?s)funct
 # to the mouse (the "flies up infinitely" report) — so releases must also be
 # caught at window level, and a lost capture itself must end the drag.
 Assert-True "drag ends on a release anywhere (window fallback)" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?window\.addEventListener\(.pointerup., onUp') "no window-level drop listener"
-Assert-True "drag ends when pointer capture is lost" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?lostpointercapture') "no lostpointercapture handling"
+# Chrome fires lostpointercapture the moment the captured row is re-slotted
+# (insertBefore momentarily detaches it) WHILE THE BUTTON IS STILL HELD —
+# treating that as a drop ended every drag after the first reorder. A held
+# drag must survive capture loss; a genuinely stale drag is ended instead
+# by any pointermove with no button pressed.
+Assert-True "capture loss does NOT end a held drag" ($adminSrc -notmatch "addEventListener\('lostpointercapture'") "lostpointercapture still treated as a drop"
+Assert-True "a stale drag ends when no button is held" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?ev\.buttons === 0') "no buttons-check drop guard"
+Assert-True "drag ends when the window loses focus" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?addEventListener\(.blur., onUp') "no blur safety net"
 Assert-True "a drop is processed exactly once" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?let ended = false') "no once-guard"
 Assert-True "capture failure cannot break the drag" ($adminSrc -match '(?s)function attachRowDrag[\s\S]*?try \{[\s\S]*?setPointerCapture') "setPointerCapture unguarded"
 # Tracking must not depend on the handle receiving events: if pointer capture
