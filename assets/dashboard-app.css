@@ -1040,10 +1040,16 @@
 
     @media (max-width: 768px) {
         .cand-modal-overlay { padding: 0; }
-        .cand-modal { flex-direction: column; max-width: none; max-height: 100dvh; height: 100dvh; border-radius: 0; }
-        .cand-modal-left { flex: 0 0 auto; max-width: none; border-right: none; border-bottom: 1px solid var(--border); }
+        /* One continuous scroll: the modal itself is the scroll container,
+           so the student can flick anywhere (photo, info, platform) and the
+           whole profile moves — instead of only the platform pane scrolling
+           inside a frozen screen. */
+        .cand-modal { flex-direction: column; max-width: none; max-height: 100dvh; height: 100dvh; border-radius: 0; overflow-y: auto; }
+        .cand-modal-left { flex: 0 0 auto; max-width: none; border-right: none; border-bottom: 1px solid var(--border); overflow: visible; }
         .cand-modal-photo { aspect-ratio: 16/10; }
-        .cand-modal-right { padding: 1.5rem; }
+        .cand-modal-right { padding: 1.5rem; overflow: visible; }
+        /* Keep the close button reachable while the profile is scrolled. */
+        .cand-modal-close { position: fixed; top: calc(1rem + env(safe-area-inset-top, 0px)); right: 1rem; z-index: 3; }
     }
 
     /* ================= RESULTS > OVERVIEW (charts) =================

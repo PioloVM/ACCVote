@@ -347,6 +347,12 @@ Assert-True "mobile page header spans full width" ($ballotCss -match 'margin-lef
 Assert-True "dead pre-base mobile bleed rule removed" ($ballotCss -notmatch '\.ballot-header \{ margin-left: -1rem') "old rule still present"
 Assert-True "no gap above the mobile page header" ($ballotCss -match '\.main-content \{ padding-top: 0; \}') "container top padding still shows above the header"
 
+# Candidate modal on mobile: the whole profile must scroll as one page
+# (photo + info + platform), not just the platform pane.
+Assert-True "candidate modal scrolls as one page on mobile" ($ballotCss -match '(?s)\.cand-modal \{ flex-direction: column;[^}]*overflow-y: auto') "modal still overflow:hidden on mobile"
+Assert-True "candidate modal panes don't scroll independently on mobile" ($ballotCss -match '(?s)\.cand-modal-left \{ flex: 0 0 auto;[^}]*overflow: visible') "left pane still self-scrolls"
+Assert-True "candidate modal close button stays reachable when scrolled" ($ballotCss -match '(?s)@media \(max-width: 768px\) \{[^@]*?\.cand-modal-close \{ position: fixed') "close button scrolls away"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
