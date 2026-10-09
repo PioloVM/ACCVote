@@ -263,6 +263,58 @@ Assert-True "admin reset-vote clears ballot_submissions lock" ($studentsSrc -mat
 # coerce types.
 Assert-True "voted-status compares coerce election id types" ($adminSrc -match 'String\(vid\) === String\(e\.id\)') ""
 
+# ----------------------------------------------------------------
+# Section: perf core — gated prelude + guarded status sync (Task 10)
+# ----------------------------------------------------------------
+# (a) Guarded sync end-to-end: a scheduled election whose start has
+#     already passed must flip to ongoing when a page running
+#     syncElectionStatuses() loads. Capture/restore election 1's row so
+#     the fixture is invisible to anything after this section.
+$e1row = & $mysql -u root voting_app -N -e "SELECT status, start_date, end_date FROM elections WHERE id=1"
+$e1 = @((($e1row -join "`n") -split "`t") | ForEach-Object { $_.Trim() })
+& $mysql -u root voting_app -e "UPDATE elections SET status='scheduled', start_date=DATE_SUB(NOW(), INTERVAL 1 DAY), end_date=DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE id=1" 2>&1 | Out-Null
+$syncLoad = Invoke-Get "$base/landingpage.php"
+$flipped = ((& $mysql -u root voting_app -N -e "SELECT status FROM elections WHERE id=1") -join '').Trim()
+& $mysql -u root voting_app -e "UPDATE elections SET status='$($e1[0])', start_date='$($e1[1])', end_date='$($e1[2])' WHERE id=1" 2>&1 | Out-Null
+Assert-True "landing load returns 200 during sync test" ($syncLoad.Code -eq '200') "got $($syncLoad.Code)"
+Assert-True "past-scheduled election flips to ongoing on page load" ($flipped -eq 'ongoing') "got '$flipped' after landing load (code $($syncLoad.Code))"
+
+# (b) Repeat load: no error, and the second load is not slower than the
+#     first — guards against per-load work creeping back into the prelude.
+$sw1 = [Diagnostics.Stopwatch]::StartNew(); $lb1 = Invoke-Get "$base/landingpage.php"; $sw1.Stop()
+$sw2 = [Diagnostics.Stopwatch]::StartNew(); $lb2 = Invoke-Get "$base/landingpage.php"; $sw2.Stop()
+Assert-True "repeat landing loads both 200" ($lb1.Code -eq '200' -and $lb2.Code -eq '200') "got $($lb1.Code)/$($lb2.Code)"
+Assert-True "second landing load not slower than the first" ($sw2.ElapsedMilliseconds -le ($sw1.ElapsedMilliseconds * 2 + 500)) "t1=$($sw1.ElapsedMilliseconds)ms t2=$($sw2.ElapsedMilliseconds)ms"
+
+# (c) SPA mode must serve the Branch B shell and never Branch A ballot
+#     markup (data-panel marker keeps this from passing vacuously on a
+#     redirect to the login page).
+$spaFile = [System.IO.Path]::GetTempFileName()
+$spaCode = (curl.exe -s -b $jar -o $spaFile -w "%{http_code}" "$base/dashboard.php") -join ''
+$spaText = [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($spaFile))
+Remove-Item $spaFile -Force
+Assert-True "student dashboard (no ?page) loads 200" ($spaCode -eq '200') "got $spaCode"
+Assert-True "dashboard no-?page renders the SPA shell" ($spaText -match 'data-panel="home"') "SPA marker missing"
+Assert-True "dashboard no ?page has no ballot-step markup" ($spaText -notmatch 'ballot-step') "ballot markup leaked into SPA shell"
+
+# (d) Source: the heavy per-election data block must run AFTER page
+#     detection and only inside the page=vote gate, so Branch B loads
+#     keep only session/user/light queries.
+$dashSrc = Get-Content .\dashboard.php -Raw
+$pageDetectIdx = $dashSrc.IndexOf('$page = $_GET[')
+$heavyGateIdx = $dashSrc.IndexOf("if (`$page === 'vote' && `$selectedElectionId) {")
+$heavyStartIdx = $dashSrc.IndexOf('$electionData = [];')
+Assert-True "page detection precedes the heavy data block" ($pageDetectIdx -ge 0 -and $heavyStartIdx -gt $pageDetectIdx) "pageIdx=$pageDetectIdx heavyIdx=$heavyStartIdx"
+Assert-True "heavy election-data block gated behind page=vote" ($heavyGateIdx -ge 0 -and $heavyGateIdx -lt $heavyStartIdx) "gateIdx=$heavyGateIdx heavyIdx=$heavyStartIdx"
+
+# Results behavior smoke — pins that batched queries still render the
+# closed CASED election's card (its tallies are fixture-stable: no test
+# casts votes there).
+$r = Invoke-Get "$base/results.php"
+Assert-True "results page loads 200" ($r.Code -eq '200') "got $($r.Code)"
+Assert-True "results renders closed election card" ($r.Text -match 'CASED Student Council Election 2026') "CASED card missing"
+Assert-True "results renders turnout line" ($r.Text -match 'ballots cast') "turnout line missing"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

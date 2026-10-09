@@ -137,6 +137,13 @@
     // "limit to see" (year_restriction): a position limited to a specific
     // year level is only shown to students in that year level.
     // --------------------------------
+    // Determine page first: the heavy per-election build below is only
+    // ever consumed by Branch A (the ballot), so Branch B's SPA shell
+    // must not pay for it on every load.
+    $page = $_GET['page'] ?? 'home';
+    $selectedElectionId = isset($_GET['election_id']) ? (int)$_GET['election_id'] : null;
+
+    if ($page === 'vote' && $selectedElectionId) {
     $electionData = [];
     $ssgLogo = getSiteSetting($pdo, 'ssg_logo');
     $departmentLogos = getDepartmentLogos($pdo);
@@ -217,10 +224,7 @@
             'hasVoted' => userHasVotedInElection($pdo, (int) $user['id'], (int) $e['id']),
         ];
     }
-
-    // Determine page
-    $page = $_GET['page'] ?? 'home';
-    $selectedElectionId = isset($_GET['election_id']) ? (int)$_GET['election_id'] : null;
+    } // end heavy-block gate (page=vote && election_id) — Branch B never runs it
 
     $csrfToken = csrfToken();
 
