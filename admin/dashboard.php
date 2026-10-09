@@ -164,6 +164,19 @@ $csrfToken = csrfToken();
 .report-row .pos{font-weight:600;color:var(--ink);}
 .report-row .who{text-align:right;color:var(--ink);}
 .report-row .who-none{color:var(--muted);font-style:italic;}
+/* "Reports & Export" lives outside the pill group, right-aligned; a darker
+   shade marks it active while its view is open. */
+.reports-btn-active{background:var(--accent-dark);border-color:var(--accent-dark);}
+/* Report section picker (select + reorder before export) and the shared
+   press-hold drag handle used by the picker rows AND the wizard position
+   table. touch-action:none is what lets a finger drag rows instead of
+   scrolling the page. */
+.report-section-row{display:flex;align-items:center;gap:.6rem;padding:.5rem .65rem;border:1px solid var(--line);border-radius:8px;margin-bottom:.45rem;background:var(--input-bg);font-size:.88rem;}
+.report-section-row input[type="checkbox"]{width:16px;height:16px;flex:0 0 auto;}
+.drag-handle{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--muted);padding:0 .35rem;font-size:1rem;flex:0 0 auto;}
+.drag-handle:active{cursor:grabbing;}
+.row-dragging{opacity:.55;box-shadow:0 4px 14px rgba(0,0,0,.18);}
+#positionsTable tr.row-dragging td{background:rgba(132,204,22,.08);}
 
 *{box-sizing:border-box;}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
@@ -1937,6 +1950,7 @@ function renderWizard(){
     if (!container) return;
     if (wizardStep === 1) {
         container.innerHTML = wizardStep1HTML();
+        bindWizardRowDrag(); // the positions table lives on step 1
     } else if (wizardStep === 2) {
         container.innerHTML = wizardStep2HTML();
     }
@@ -1998,9 +2012,10 @@ function wizardStep1HTML(){
                     <thead><tr><th style="width:60px;"></th><th>Position</th><th style="width:130px;">Candidates</th><th style="width:110px;">Winners</th><th style="width:170px;">Limit to see</th></tr></thead>
                     <tbody>
                         ${wizardDraft.positions.map((p,i) => `
-                        <tr>
+                        <tr data-idx="${i}">
                             <td>
-                                <div style="display:flex;gap:.2rem;">
+                                <div style="display:flex;gap:.2rem;align-items:center;">
+                                    <span class="drag-handle" title="Hold and drag to reorder">⠿</span>
                                     <button type="button" class="btn btn-secondary btn-sm" title="Move up" ${i===0?'disabled':''} onclick="movePosition(${i}, -1)" style="padding:0 .5rem;">↑</button>
                                     <button type="button" class="btn btn-secondary btn-sm" title="Move down" ${i===wizardDraft.positions.length-1?'disabled':''} onclick="movePosition(${i}, 1)" style="padding:0 .5rem;">↓</button>
                                 </div>
@@ -2083,6 +2098,24 @@ function movePosition(i, direction){
     const arr = wizardDraft.positions;
     [arr[i], arr[target]] = [arr[target], arr[i]];
     renderWizard();
+}
+// Drag-commit for the wizard position rows: read back the DOM order the
+// shared attachRowDrag helper produced, then re-render (same path the
+// arrow buttons take, so wizard state never forks).
+function commitWizardDragOrder(){
+    const tbody = document.querySelector('#positionsTable tbody');
+    if (!tbody) return;
+    const order = Array.from(tbody.querySelectorAll('tr')).map(r => parseInt(r.dataset.idx, 10));
+    wizardDraft.positions = order.map(k => wizardDraft.positions[k]);
+    renderWizard();
+}
+function bindWizardRowDrag(){
+    const tbody = document.querySelector('#positionsTable tbody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr').forEach(row => {
+        const handle = row.querySelector('.drag-handle');
+        if (handle) attachRowDrag(handle, row, tbody, commitWizardDragOrder);
+    });
 }
 function setPositionCount(n){
     n = Math.max(1, Math.min(20, parseInt(n) || 1));
@@ -2989,11 +3022,17 @@ function chartLibReady(){ return typeof Chart !== 'undefined'; }
 function resultsTabBar(){
     // Each mode gets its own literal `resultsView='…'` call site rather
     // than a shared loop, so the three entry points stay greppable.
+    // The "Reports & Export" entry is deliberately NOT a third pill: it is
+    // the panel's export surface, so it sits alone on the right end of the
+    // header row styled like every other primary action (e.g. "+ Register
+    // Student"), while Overview / Election Detail stay a plain tab pair.
     return `
-    <div class="pill-toggle" style="margin-bottom:1.25rem;">
-        <button class="${resultsView==='overview'?'selected':''}" onclick="resultsView='overview'; renderResults();">Overview</button>
-        <button class="${resultsView==='detail'?'selected':''}" onclick="resultsView='detail'; renderResults();">Election Detail</button>
-        <button class="${resultsView==='reports'?'selected':''}" onclick="resultsView='reports'; renderResults();">Reports &amp; Export</button>
+    <div class="results-tab-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+        <div class="pill-toggle">
+            <button class="${resultsView==='overview'?'selected':''}" onclick="resultsView='overview'; renderResults();">Overview</button>
+            <button class="${resultsView==='detail'?'selected':''}" onclick="resultsView='detail'; renderResults();">Election Detail</button>
+        </div>
+        <button class="btn btn-primary${resultsView==='reports'?' reports-btn-active':''}" onclick="resultsView='reports'; renderResults();">Reports &amp; Export</button>
     </div>`;
 }
 
@@ -3581,7 +3620,104 @@ async function renderReportsView(){
     `;
 }
 
-let lastReportData = null; // { type, schoolYearLabel, sections } — reused by print/export buttons
+let lastReportData = null; // { type, schoolYearLabel, sections, order, selected } — reused by print/export buttons
+
+// The one source of truth for what a report contains: the CHECKED sections,
+// in the order the admin arranged them. Preview, print, PDF, XLSX and DOC
+// all read this, so what the admin sees is exactly what every export holds.
+function reportSectionsForExport(){
+    if (!lastReportData) return [];
+    return lastReportData.order
+        .filter(i => lastReportData.selected[i])
+        .map(i => lastReportData.sections[i]);
+}
+
+function toggleAllReportSections(on){
+    if (!lastReportData) return;
+    lastReportData.selected = lastReportData.sections.map(() => on);
+    renderReportPreview();
+}
+
+function toggleReportSection(i, on){
+    if (!lastReportData) return;
+    lastReportData.selected[i] = on;
+    renderReportPreview();
+}
+
+function moveReportSection(i, dir){
+    if (!lastReportData) return;
+    const order = lastReportData.order;
+    const at = order.indexOf(i);
+    const to = at + dir;
+    if (at < 0 || to < 0 || to >= order.length) return;
+    [order[at], order[to]] = [order[to], order[at]];
+    renderReportPreview();
+}
+
+// Drag-commit for the report picker: the shared attachRowDrag helper moves
+// the row live in the DOM; on release we read back the resulting order.
+function commitReportDragOrder(){
+    const listEl = document.getElementById('reportSectionList');
+    if (!listEl || !lastReportData) return;
+    lastReportData.order = Array.from(listEl.querySelectorAll('.report-section-row'))
+        .map(r => parseInt(r.dataset.idx, 10));
+    renderReportPreview();
+}
+
+function bindReportSectionDrag(){
+    const listEl = document.getElementById('reportSectionList');
+    if (!listEl) return;
+    listEl.querySelectorAll('.report-section-row').forEach(row => {
+        const handle = row.querySelector('.drag-handle');
+        if (handle) attachRowDrag(handle, row, listEl, commitReportDragOrder);
+    });
+}
+
+// Press-hold-drag vertical row reordering. Pointer events (not HTML5 DnD)
+// so it works identically for mouse and touch. While the pointer is held
+// on the handle, the dragged row is live-moved past neighbors as it crosses
+// their midpoint; on release the caller commits the resulting DOM order.
+// `listEl` must be a container whose children ARE the rows (div list or
+// tbody); rows carry data-idx for the commit callback.
+function attachRowDrag(handle, row, listEl, onCommit){
+    handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        handle.setPointerCapture(e.pointerId);
+        row.classList.add('row-dragging');
+        const startY = e.clientY;
+        let moved = false;
+        const onMove = (ev) => {
+            if (Math.abs(ev.clientY - startY) > 2) moved = true;
+            const rows = Array.from(listEl.children).filter(r => r !== row);
+            const rowBox = row.getBoundingClientRect();
+            const rowMid = rowBox.top + rowBox.height / 2;
+            for (const other of rows) {
+                const box = other.getBoundingClientRect();
+                const mid = box.top + box.height / 2;
+                if (rowMid < mid && ev.clientY > mid) {
+                    listEl.insertBefore(row, other.nextElementSibling);
+                    moved = true;
+                    break;
+                }
+                if (rowMid > mid && ev.clientY < mid) {
+                    listEl.insertBefore(row, other);
+                    moved = true;
+                    break;
+                }
+            }
+        };
+        const onUp = () => {
+            handle.removeEventListener('pointermove', onMove);
+            handle.removeEventListener('pointerup', onUp);
+            handle.removeEventListener('pointercancel', onUp);
+            row.classList.remove('row-dragging');
+            if (moved) onCommit();
+        };
+        handle.addEventListener('pointermove', onMove);
+        handle.addEventListener('pointerup', onUp);
+        handle.addEventListener('pointercancel', onUp);
+    });
+}
 
 async function generateReport(){
     const previewArea = document.getElementById('reportPreviewArea');
@@ -3606,6 +3742,12 @@ async function generateReport(){
             type: reportType,
             schoolYearLabel: schoolYear ? schoolYear.label : '',
             sections,
+            // Export selection/reordering: `order` holds original section
+            // indexes in display order, `selected` a boolean per index.
+            // Every consumer (preview, print, PDF, XLSX, DOC) reads the
+            // same filtered+ordered list via reportSectionsForExport().
+            order: sections.map((_, i) => i),
+            selected: sections.map(() => true),
             anyUnfinished,
         };
         renderReportPreview();
@@ -3617,10 +3759,34 @@ async function generateReport(){
 function renderReportPreview(){
     const previewArea = document.getElementById('reportPreviewArea');
     if (!lastReportData) return;
-    const { type, schoolYearLabel, sections, anyUnfinished } = lastReportData;
+    const { type, schoolYearLabel, anyUnfinished } = lastReportData;
+    const sections = reportSectionsForExport();
 
     const anyTies = sections.some(s => s.positions.some(p => p.tie));
     const totalWinners = sections.reduce((a, s) => a + s.positions.reduce((b, p) => b + p.winners.length, 0), 0);
+
+    // Per-section picker: select-all / pick individual sections, reorder by
+    // drag or arrows. Starts fully selected so a freshly generated report
+    // matches the old all-sections behavior.
+    const allSelected = lastReportData.selected.length > 0 && lastReportData.selected.every(Boolean);
+    const sectionPicker = `
+        <div class="report-section-picker" style="margin:1rem 0 1.25rem;">
+            <label style="display:inline-flex;align-items:center;gap:.4rem;font-weight:600;font-size:.85rem;">
+                <input type="checkbox" id="reportSelectAll" ${allSelected ? 'checked' : ''} onchange="toggleAllReportSections(this.checked)">
+                Select all sections
+            </label>
+            <div id="reportSectionList" style="margin-top:.6rem;">
+            ${lastReportData.order.map(i => `
+                <div class="report-section-row" data-idx="${i}">
+                    <span class="drag-handle" title="Hold and drag to reorder">⠿</span>
+                    <input type="checkbox" ${lastReportData.selected[i] ? 'checked' : ''} onchange="toggleReportSection(${i}, this.checked)">
+                    <span style="flex:1;min-width:0;">${escapeHtml(lastReportData.sections[i].heading)}</span>
+                    <button type="button" class="btn btn-secondary btn-sm" title="Move up" ${lastReportData.order.indexOf(i) === 0 ? 'disabled' : ''} onclick="moveReportSection(${i}, -1)" style="padding:0 .5rem;">↑</button>
+                    <button type="button" class="btn btn-secondary btn-sm" title="Move down" ${lastReportData.order.indexOf(i) === lastReportData.order.length - 1 ? 'disabled' : ''} onclick="moveReportSection(${i}, 1)" style="padding:0 .5rem;">↓</button>
+                </div>`).join('')}
+            </div>
+            <p class="muted" style="font-size:.76rem;margin:.5rem 0 0;">Exports include only the checked sections, in the order shown. Hold a row's ⠿ handle and drag, or use the arrows.</p>
+        </div>`;
 
     // Colours come from CSS tokens (redefined for [data-theme="dark"]) via
     // the .report-* classes. The previous version inlined color:var(--navy),
@@ -3644,6 +3810,10 @@ function renderReportPreview(){
         </div>
     `).join('');
 
+    const bodyHtml = sections.length
+        ? sectionsHtml
+        : '<p class="muted" style="margin:1rem 0 0;">No sections selected — check at least one section above to include it in the report.</p>';
+
     previewArea.innerHTML = `
         <div class="card">
             <div class="panel-flex-header">
@@ -3656,11 +3826,13 @@ function renderReportPreview(){
                 </div>
             </div>
             <p class="muted" style="font-size:.76rem;margin:.5rem 0 0;">"Save as PDF" opens the same print view — choose <strong>Save as PDF</strong> as the destination and turn off headers/footers for a clean document.</p>
+            ${sectionPicker}
             ${anyTies ? '<div class="alert alert-warning">One or more positions are tied — review flagged positions before finalizing.</div>' : ''}
             ${anyUnfinished ? '<div class="alert alert-info">One or more included elections haven\u2019t ended yet — this reflects current vote counts, not final results.</div>' : ''}
-            ${sectionsHtml}
+            ${bodyHtml}
         </div>
     `;
+    bindReportSectionDrag();
 }
 
 /**
@@ -3675,7 +3847,9 @@ function renderReportPreview(){
  * printed; showing it would repeat on every page.
  */
 function reportPrintableHTML(){
-    const { type, schoolYearLabel, sections } = lastReportData;
+    const { type, schoolYearLabel } = lastReportData;
+    const sections = reportSectionsForExport();
+    if (!sections.length) return null;
     const title = `${type} Winners Report — ${schoolYearLabel}`;
 
     const sectionsHtml = sections.map(sec => `
@@ -3726,9 +3900,11 @@ function reportPrintableHTML(){
 // preview, which a hand-rolled PDF generator would not.
 function openReportPrintPreview(autoPrint){
     if (!lastReportData) return;
+    const docHtml = reportPrintableHTML();
+    if (!docHtml) { showToast('Select at least one section to export.', 'warning'); return; }
     const win = window.open('', '_blank');
     if (!win) { showToast('Please allow pop-ups to see the print preview.', 'warning'); return; }
-    win.document.write(reportPrintableHTML());
+    win.document.write(docHtml);
     win.document.close();
     win.focus();
     if (autoPrint !== false) {
@@ -3746,7 +3922,9 @@ function saveReportAsPDF(){
 // so all four outputs (screen, print, PDF, XLSX, DOC) agree.
 function exportReportXLSX(){
     if (!lastReportData || typeof XLSX === 'undefined') { showToast('Export library failed to load. Please refresh and try again.', 'error'); return; }
-    const { type, schoolYearLabel, sections } = lastReportData;
+    const { type, schoolYearLabel } = lastReportData;
+    const sections = reportSectionsForExport();
+    if (!sections.length) { showToast('Select at least one section to export.', 'warning'); return; }
     const rows = [['Section', 'Position', 'Winner', 'Note']];
     sections.forEach(sec => {
         sec.positions.forEach(p => {
@@ -3771,6 +3949,7 @@ function exportReportXLSX(){
 function exportReportDoc(){
     if (!lastReportData) return;
     const { schoolYearLabel } = lastReportData;
+    if (!reportSectionsForExport().length) { showToast('Select at least one section to export.', 'warning'); return; }
     // A .doc file that's actually HTML — Word opens this natively (the
     // xmlns namespaces below are what make Word recognize it as a real
     // document rather than "unknown format"). Avoids needing a heavy

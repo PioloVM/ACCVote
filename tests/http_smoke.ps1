@@ -264,6 +264,47 @@ Assert-True "admin reset-vote clears ballot_submissions lock" ($studentsSrc -mat
 Assert-True "voted-status compares coerce election id types" ($adminSrc -match 'String\(vid\) === String\(e\.id\)') ""
 
 # ----------------------------------------------------------------
+# Section: admin reports & export rework + wizard drag reorder
+# ----------------------------------------------------------------
+# (a) The "Reports & Export" entry leaves the 3-pill tab group and becomes
+#     a standalone primary button on the right side of the results header
+#     row (the same zone as the students panel's "+ Register Student").
+Assert-True "results tab bar is a split header with pills left" ($adminSrc -match '(?s)results-tab-row[\s\S]{0,300}class="pill-toggle">\s*<button[^>]*>Overview</button>\s*<button[^>]*>Election Detail</button>\s*</div>') "pills not isolated"
+Assert-True "Reports & Export is a standalone primary button on the right" ($adminSrc -match '(?s)results-tab-row[\s\S]{0,700}<button class="btn btn-primary[^"]*"[^>]*resultsView=.reports.; renderResults\(\);">Reports &amp; Export</button>') "reports button not primary/right-side"
+Assert-True "reports button shows an active style on the reports view" ($adminSrc -match 'reports-btn-active') "no active style"
+Assert-True "reports active style is defined in CSS" ($adminSrc -match '\.reports-btn-active\{') "CSS rule missing"
+# (b) Generated reports get per-section selection (select all / pick some)
+#     and reordering (arrows + drag), and every export output reads the
+#     same filtered+ordered section list.
+Assert-True "exports read one shared selected+ordered section helper" ($adminSrc -match '(?s)function reportSectionsForExport') "no shared helper"
+foreach ($fn in @('reportPrintableHTML','exportReportXLSX','exportReportDoc')) {
+    Assert-True "$fn uses the shared section helper" ([regex]::IsMatch($adminSrc, "(?s)function $fn\(\)\{[\s\S]{0,600}reportSectionsForExport\(\)")) "$fn still reads all sections"
+}
+Assert-True "report preview has a select-all control" ($adminSrc -match 'toggleAllReportSections') "no select-all handler"
+Assert-True "report sections have per-section checkboxes" ($adminSrc -match 'toggleReportSection\(') "no per-section handler"
+Assert-True "report sections reorderable by arrows" ($adminSrc -match 'moveReportSection\(') "no arrow handler"
+Assert-True "empty selection blocks export" ($adminSrc -match 'Select at least one section') "no empty-selection guard"
+# (c) Shared press-hold-drag reorder (pointer events, mouse + touch), used by
+#     both the report section list and the wizard position rows.
+Assert-True "shared press-hold drag helper exists" ($adminSrc -match '(?s)function attachRowDrag') "no drag helper"
+Assert-True "drag helper is pointer-based for touch support" ($adminSrc -match '(?s)function attachRowDrag[\s\S]{0,900}pointerdown') "drag helper not pointer-based"
+Assert-True "report section rows carry drag handles" ($adminSrc -match 'report-section-row[\s\S]{0,300}drag-handle') "no handle on report rows"
+Assert-True "wizard position rows carry drag handles" ($adminSrc -match '(?s)wizardDraft\.positions\.map\(\(p,i\) =>[\s\S]{0,900}drag-handle') "no handle on wizard rows"
+Assert-True "drag handle blocks page scroll while dragging" ($adminSrc -match 'touch-action:\s*none') "touch-action missing"
+
+# JS PARSE GUARD — a syntax error in a page's main inline script kills every
+# function on it (the HTML still renders; nothing responds) and the regex
+# checks above cannot see that. Extract the admin page's main script and
+# hand it to `node --check`. This caught a real bug on 2026-10-09: a botched
+# edit dropped a function body and the whole admin script died silently.
+$node = (Get-Command node -ErrorAction SilentlyContinue).Source
+if ($node) {
+    $jsPath = & "C:\xampp\php\php.exe" tests\extract_admin_js.php admin\dashboard.php
+    $nodeOut = & $node --check $jsPath 2>&1
+    Assert-True "admin page main script parses as JavaScript" ($LASTEXITCODE -eq 0) ($nodeOut -join ' ')
+}
+
+# ----------------------------------------------------------------
 # Section: perf core — gated prelude + guarded status sync (Task 10)
 # ----------------------------------------------------------------
 # (a) Guarded sync end-to-end: a scheduled election whose start has
