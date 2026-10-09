@@ -33,7 +33,7 @@ function Invoke-Get([string]$url) {
 # seed exactly one of each to exercise the 200 branches; id=2 / DSG
 # election 2 stay imageless to exercise the 404 branches.
 $mysql = "C:\xampp\mysql\bin\mysql.exe"
-& $mysql -u root voting_app -e "UPDATE candidates SET photo='$pngDataUrl' WHERE id=1; INSERT INTO site_settings (setting_key, setting_value) VALUES ('ssg_logo', '$pngDataUrl') ON DUPLICATE KEY UPDATE setting_value='$pngDataUrl';" 2>&1 | Out-Null
+& $mysql -u root voting_app -e "UPDATE candidates SET photo='$pngDataUrl' WHERE id=1; UPDATE candidates SET photo=NULL WHERE id=2; INSERT INTO site_settings (setting_key, setting_value) VALUES ('ssg_logo', '$pngDataUrl') ON DUPLICATE KEY UPDATE setting_value='$pngDataUrl';" 2>&1 | Out-Null
 
 $r = Invoke-Get "$base/photo.php?c=1"
 Assert-True "photo.php c=1 returns 200" ($r.Code -eq "200") "got $($r.Code)"
@@ -121,6 +121,46 @@ Assert-True "payload has photo_url" ($respRaw -match '"photo_url"') ""
 Assert-True "payload has icon_url" ($respRaw -match '"icon_url"') ""
 Assert-True "payload contains no inline data:image" ($respRaw -notmatch 'data:image') ($respRaw.Substring([Math]::Max(0, $respRaw.IndexOf('data:image')), [Math]::Min(120, $respRaw.Length)))
 Assert-True "payload under 50KB" ($respBytes -lt 50000) "got $respBytes bytes"
+
+# ----------------------------------------------------------------
+# Section: continuous scroll ballot (Task 6)
+# ----------------------------------------------------------------
+# Reset this student's ballot state so the target election renders a
+# fresh form. Photo fixture: candidate 1 photoed (the target ballot
+# includes it — proves the photo.php path), everyone else NULL so
+# Task 3's "no photo -> 404" invariant holds on reruns.
+$uidSql2 = "(SELECT id FROM users WHERE student_id='987654321')"
+& $mysql -u root voting_app -e @"
+DELETE FROM ballot_submissions WHERE user_id=$uidSql2;
+DELETE FROM votes WHERE user_id=$uidSql2;
+UPDATE candidates SET photo='$pngDataUrl' WHERE id = 1;
+UPDATE candidates SET photo=NULL WHERE id <> 1;
+DELETE FROM login_attempts;
+"@ 2>&1 | Out-Null
+
+$ballotTarget = $votable[0]
+$ballotHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$($ballotTarget.id)") -join "`n")
+Assert-True "ballot page renders voteForm" ($ballotHtml -match 'id="voteForm"') ""
+Assert-True "stays votable (no already-voted alert)" ($ballotHtml -notmatch 'already voted in this election') ""
+Assert-True "no step-machine JS (ballotNext)" ($ballotHtml -notmatch 'ballotNext') ""
+Assert-True "no review/summary (ballotSummaryList)" ($ballotHtml -notmatch 'ballotSummaryList') ""
+Assert-True "no Save & Exit" ($ballotHtml -notmatch 'ballotSaveExitBtn|Save &amp; Exit') ""
+Assert-True "no Back/Continue nav" ($ballotHtml -notmatch 'ballotPrev\(|ballotGoTo\(|Continue &rarr;') ""
+Assert-True "no exit-guard popup" ($ballotHtml -notmatch 'handleBallotExitClick') ""
+Assert-True "no draft endpoint refs" ($ballotHtml -notmatch 'draft\.php|saveDraftAndExit') ""
+Assert-True "no receipt sheet markup" ($ballotHtml -notmatch 'ballot-summary-sheet|Review Your Ballot') ""
+$posSections = ([regex]::Matches($ballotHtml, '<div class="ballot-step" data-step=')).Count
+Assert-True "all position sections rendered in one page" ($posSections -eq $ballotTarget.totalPositions) "got $posSections, want $($ballotTarget.totalPositions)"
+Assert-True "candidate images use photo.php" ($ballotHtml -match 'src="photo\.php\?c=') ""
+Assert-True "ballot HTML has no inline data:image" ($ballotHtml -notmatch 'data:image') ""
+Assert-True "no per-input base64 data-candidate-photo" ($ballotHtml -notmatch 'data-candidate-photo') ""
+Assert-True "submit button exists at end" ($ballotHtml -match 'id="submitBtn"') ""
+Assert-True "confirm modal: Cast My Vote + Go Back" (($ballotHtml -match 'Cast My Vote') -and ($ballotHtml -match 'Go Back')) ""
+Assert-True "answered-positions label present" ($ballotHtml -match 'ballotProgressLabel') ""
+
+$contHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$($ballotTarget.id)&continuous=1") -join "`n")
+Assert-True "continuous=1 sets data-continuous on form" ($contHtml -match 'data-continuous="1"') ""
+Assert-True "no continuous param -> no data-continuous" ($ballotHtml -notmatch 'data-continuous') ""
 
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"

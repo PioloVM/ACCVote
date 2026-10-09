@@ -1,4 +1,4 @@
-:root {
+    :root {
         --bg: #f8fafc;
         --text: #0f172a;
         --text-secondary: #64748b;
@@ -14,6 +14,14 @@
         --success: #16a34a;
         --warning: #d97706;
         --danger: #dc2626;
+        /* Inverted "selected" chips (filter pills, jump-nav links). These
+           are deliberately the SAME fixed accent colors in both themes —
+           lime fill + near-black text, matching .btn-primary. An earlier
+           version derived them from var(--text)/var(--card), which flips
+           per theme and produced white-on-white pills in dark mode. */
+        --chip-active-bg: #84cc16;
+        --chip-active-fg: #052e16;
+        --chip-active-badge: rgba(5,46,22,0.16);
     }
     /* Toggled via [data-theme="dark"] on <html> — see the theme switcher in
        the sidebar. The sidebar itself stays the same dark navy in both
@@ -33,6 +41,9 @@
         --success: #4ade80;
         --warning: #fbbf24;
         --danger: #f87171;
+        /* --chip-active-* intentionally NOT overridden here: the selected
+           chip keeps its fixed lime/dark-green pairing in dark mode too.
+           See the note in :root above. */
     }
     * { box-sizing: border-box; }
     html { -webkit-text-size-adjust: 100%; }
@@ -154,6 +165,21 @@
     .sidebar .logout-link a .nav-icon { width: 18px; height: 18px; flex-shrink: 0; display: inline-flex; }
     .sidebar .logout-link a:hover { background: rgba(248,113,113,0.12); text-decoration: none; }
 
+    .sidebar .update-year-link a {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem 0.9rem;
+        color: #94a3b8;
+        text-decoration: none;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        transition: background 0.2s, color 0.2s;
+    }
+    .sidebar .update-year-link a .nav-icon { width: 18px; height: 18px; flex-shrink: 0; display: inline-flex; }
+    .sidebar .update-year-link a:hover { background: rgba(132,204,22,0.1); color: #e2e8f0; text-decoration: none; }
+
     /* Main content */
     .main-content {
         margin-left: 240px;
@@ -168,7 +194,7 @@
         align-items: center;
         margin-bottom: 2rem;
         padding-bottom: 1rem;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--border);
         flex-wrap: wrap;
         gap: 0.5rem;
         position: sticky;
@@ -253,7 +279,7 @@
     .election-group-header .dot.scheduled { background: #6366f1; }
     .election-group-header .dot.closed { background: #ef4444; }
     .election-group-header .label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
-    .election-group-header .count { background: #f1f5f9; color: var(--text-secondary); padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .election-group-header .count { background: var(--card-2); border: 1px solid var(--border); color: var(--text-secondary); padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
     .election-group-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
     /* Status filter pills — click "Ongoing" and see only ongoing
@@ -266,9 +292,10 @@
     }
     .election-filter-bar button:hover { border-color: #94a3b8; }
     .election-filter-bar button .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .election-filter-bar button.selected { background: var(--text); color: #fff; border-color: var(--text); }
+    .election-filter-bar button.selected { background: var(--chip-active-bg); color: var(--chip-active-fg); border-color: var(--chip-active-bg); }
     .election-filter-bar button .fbadge { background: rgba(15,23,42,0.06); padding: 0.05rem 0.4rem; border-radius: 999px; font-size: 0.7rem; }
-    .election-filter-bar button.selected .fbadge { background: rgba(255,255,255,0.2); }
+    [data-theme="dark"] .election-filter-bar button .fbadge { background: rgba(255,255,255,0.1); }
+    .election-filter-bar button.selected .fbadge { background: var(--chip-active-badge); }
 
     .ec-header { display: flex; align-items: flex-start; gap: 0.9rem; position: relative; }
     .ec-icon {
@@ -347,7 +374,8 @@
         position: relative;
     }
     .ec-status-neutral {
-        background: #f8fafc; color: var(--text-secondary);
+        background: var(--card-2); color: var(--text-secondary);
+        border: 1px solid var(--border);
         border-radius: 12px; padding: 0.8rem 1.1rem; font-size: 0.85rem;
         position: relative;
     }
@@ -402,7 +430,12 @@
 
     .btn-primary {
         background: #84cc16;
-        color: #ffffff;
+        /* Near-black green label on lime, same as the landing page's CTA
+           buttons — white on this lime only reaches ~1.9:1 contrast.
+           Kept IDENTICAL in both themes on purpose: a theme-dependent
+           flip here is exactly how the old "white button, white text"
+           bug happened. */
+        color: #052e16;
         border-color: #84cc16;
     }
     .btn-primary:hover { background: #65a30d; border-color: #65a30d; }
@@ -411,7 +444,7 @@
         cursor: not-allowed;
         background: #84cc16;
         border-color: #84cc16;
-        color: #ffffff;
+        color: #052e16;
     }
 
     .btn-secondary {
@@ -607,7 +640,7 @@
         transition:.15s;white-space:nowrap;
     }
     .cand-jump-link:hover{border-color:var(--accent);}
-    .cand-jump-link.active{background:var(--text);color:var(--card);border-color:var(--text);}
+    .cand-jump-link.active{background:var(--chip-active-bg);color:var(--chip-active-fg);border-color:var(--chip-active-bg);}
 
     .cand-no-results{text-align:center;color:var(--text-secondary);padding:3rem 1rem;font-size:.92rem;}
 
@@ -713,26 +746,27 @@
 
     .ballot-shell { max-width: 720px; margin: 0 auto; }
 
-    .ballot-header { margin-bottom: 1.5rem; }
+    /* Sticky progress header: stays pinned while the whole ballot
+       scrolls beneath it, so the answered-count is always visible. */
+    .ballot-header {
+        position: sticky; top: 0; z-index: 40;
+        margin-bottom: 1.5rem;
+        background: var(--bg);
+        padding: 0.75rem 0 0.85rem;
+    }
     .ballot-header-top { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
     .ballot-title { margin: 0; font-size: 1.3rem; color: var(--text); }
     .ballot-header-actions { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
-    .ballot-save-exit {
-        font-size: 0.82rem; font-weight: 600; color: var(--text); background: var(--card-2);
-        border: none; padding: 0.45rem 0.9rem; border-radius: 8px; cursor: pointer;
-        transition: background 0.2s; white-space: nowrap;
-    }
-    .ballot-save-exit:hover { background: var(--border); }
-    .ballot-save-exit:disabled { opacity: 0.6; cursor: not-allowed; }
     .ballot-exit { font-size: 0.85rem; font-weight: 600; color: #dc2626; text-decoration: none; padding: 0.4rem 0.8rem; border-radius: 8px; transition: background 0.2s; flex-shrink: 0; }
     .ballot-exit:hover { background: rgba(239,68,68,0.08); }
 
     .ballot-progress-track { height: 10px; background: var(--border); border-radius: 999px; overflow: hidden; }
     .ballot-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #84cc16, #65a30d); border-radius: 999px; transition: width 0.35s ease; }
+    .ballot-progress-label { margin-top: 0.5rem; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
 
-    .ballot-step { display: none; }
-    .ballot-step.active { display: block; animation: ballotFadeIn 0.25s ease; }
-    @keyframes ballotFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    /* One continuous scroll: every position section is always visible. */
+    .ballot-step { display: block; }
+    .ballot-step + .ballot-step { margin-top: 2.25rem; padding-top: 2rem; border-top: 1px dashed var(--border); }
 
     .ballot-step-heading { margin-bottom: 1.25rem; }
     .ballot-step-eyebrow { display: inline-block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #65a30d; background: rgba(132,204,22,0.14); padding: 0.25rem 0.65rem; border-radius: 999px; margin-bottom: 0.6rem; }
@@ -803,44 +837,12 @@
     .ballot-candidate-meta span:not(:last-child)::after { content: '·'; margin-left: 0.5rem; color: var(--border-strong); }
     .ballot-candidate-platform { font-size: 0.82rem; color: var(--text); margin-top: 0.35rem; line-height: 1.45; }
 
-    .ballot-nav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1.75rem; }
-    .ballot-nav .btn { min-width: 130px; }
+    /* End-of-ballot submit block (no review step — the confirm modal is
+       the final gate) */
+    .ballot-submit-block { margin-top: 2.5rem; padding-top: 1.75rem; border-top: 2px solid var(--border); text-align: center; }
+    .ballot-submit-block .btn { min-width: 220px; margin-top: 1rem; }
 
-    /* Review step — styled like an actual paper ballot receipt */
-    .ballot-summary-sheet {
-        background: var(--card);
-        border: 2px dashed var(--border-strong);
-        border-radius: 16px;
-        padding: 1.5rem 1.5rem 0.5rem;
-    }
-    .ballot-summary-sheet-header { text-align: center; border-bottom: 2px solid var(--text); padding-bottom: 1rem; margin-bottom: 1rem; }
-    .ballot-summary-sheet-title { font-weight: 800; font-size: 1.1rem; color: var(--text); letter-spacing: 0.01em; }
-    .ballot-summary-sheet-sub { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); margin-top: 0.2rem; }
-
-    .ballot-summary-row {
-        display: flex; align-items: center; gap: 0.9rem;
-        padding: 0.9rem 0; border-bottom: 1px dashed var(--border);
-    }
-    .ballot-summary-row:last-child { border-bottom: none; }
-    .ballot-summary-photo { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; background: var(--card-2); flex-shrink: 0; }
-    .ballot-summary-text { flex: 1; min-width: 0; }
-    .ballot-summary-position { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
-    .ballot-summary-name { font-weight: 700; color: var(--text); font-size: 0.95rem; }
-    .ballot-summary-name.none { color: #b91c1c; font-weight: 600; font-style: italic; }
-    .ballot-summary-party { font-size: 0.78rem; color: #65a30d; font-weight: 600; }
-    .ballot-summary-change { flex-shrink: 0; border: none; background: var(--card-2); color: var(--text); font-size: 0.78rem; font-weight: 600; padding: 0.4rem 0.8rem; border-radius: 999px; cursor: pointer; }
-    .ballot-summary-change:hover { background: var(--border); }
-
-    /* Groups one or more selected candidates under a single position
-       header — used for multi-winner positions where several names can be
-       chosen for the same position. */
-    .ballot-summary-block { padding: 0.9rem 0; border-bottom: 1px dashed var(--border); }
-    .ballot-summary-block:last-child { border-bottom: none; }
-    .ballot-summary-block-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.5rem; }
-    .ballot-summary-candidates { display: flex; flex-direction: column; gap: 0.65rem; }
-    .ballot-summary-candidate-row { display: flex; align-items: center; gap: 0.75rem; }
-
-    /* Success modal */
+    /* Success/confirm modal */
     .ballot-modal-overlay {
         display: none; position: fixed; inset: 0; background: var(--overlay);
         z-index: 2000; align-items: center; justify-content: center; padding: 1.25rem;
@@ -859,14 +861,13 @@
     }
     .ballot-modal-card h2 { margin: 0 0 0.5rem; color: var(--text); }
     .ballot-modal-card p { color: var(--text-secondary); font-size: 0.92rem; margin: 0 0 1.5rem; }
+    .ballot-modal-card .modal-actions { display: flex; justify-content: center; gap: 0.75rem; margin-top: 0.25rem; }
 
     @media (max-width: 640px) {
         .ballot-candidate { flex-wrap: wrap; align-items: center; }
         .ballot-bubble { order: 1; }
         .candidate-avatar { order: 2; margin-left: auto; }
         .ballot-candidate-body { order: 3; flex-basis: 100%; margin-top: 0.6rem; }
-        .ballot-nav { flex-direction: column-reverse; }
-        .ballot-nav .btn { width: 100%; min-width: 0; }
         .ballot-title { font-size: 1.1rem; }
         .ballot-position-title { font-size: 1.25rem; }
         .candidate-avatar { width: 52px; height: 52px; }
@@ -927,14 +928,14 @@
     .ballot-progress-stepper { display: flex; align-items: center; overflow-x: auto; padding: 2px 0; scrollbar-width: thin; }
     .bps-dot {
         width: 17px; height: 17px; border-radius: 50%; flex-shrink: 0;
-        background: #e2e8f0; border: 2px solid #e2e8f0; box-sizing: border-box;
+        background: var(--border); border: 2px solid var(--border); box-sizing: border-box;
         display: flex; align-items: center; justify-content: center;
         transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
     }
     .bps-dot.filled { background: #65a30d; border-color: #65a30d; }
-    .bps-dot-num { font-size: 8px; font-weight: 800; color: #94a3b8; line-height: 1; }
+    .bps-dot-num { font-size: 8px; font-weight: 800; color: var(--text-secondary); line-height: 1; }
     .bps-dot.filled .bps-dot-num { color: #fff; }
-    .bps-line { flex: 1 0 16px; min-width: 16px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; margin: 0 -1px; }
+    .bps-line { flex: 1 0 16px; min-width: 16px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 0 -1px; }
     .bps-line-fill { height: 100%; background: linear-gradient(90deg, #84cc16, #65a30d); border-radius: 2px; transition: width 0.35s ease; }
     .bps-labels { display: flex; justify-content: space-between; margin-top: 0.4rem; }
     .bps-labels span { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; }
@@ -1043,6 +1044,91 @@
         .cand-modal-right { padding: 1.5rem; }
     }
 
+    /* ================= RESULTS > OVERVIEW (charts) =================
+       Overview is deliberately read-only: no visibility pills, no edit
+       controls, just the numbers. Anything that changes data lives in
+       "Election Detail" instead. */
+    .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 1.25rem;
+    }
+    /* The per-position bar chart needs the full width — a squeezed bar
+       chart with long candidate names is unreadable. */
+    .chart-grid .span-full { grid-column: 1 / -1; }
+    @media (max-width: 760px) { .chart-grid { grid-template-columns: 1fr; } }
+
+    .chart-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.1rem 1.25rem 1.25rem;
+        box-shadow: var(--card-shadow);
+        display: flex;
+        flex-direction: column;
+        min-width: 0;   /* lets grid children shrink instead of forcing overflow */
+    }
+    .chart-card-head {
+        display: flex; align-items: baseline; justify-content: space-between;
+        gap: .75rem; margin-bottom: .2rem; flex-wrap: wrap;
+    }
+    .chart-card-title { font-size: .95rem; font-weight: 800; color: var(--text); margin: 0; }
+    .chart-card-sub { font-size: .76rem; color: var(--text-secondary); margin: 0 0 .9rem; }
+    /* A fixed height + `maintainAspectRatio:false` is what keeps Chart.js
+       from growing the canvas indefinitely on resize. */
+    .chart-box { position: relative; height: 260px; min-width: 0; }
+    .chart-box.tall { height: 340px; }
+
+    /* The bar charts put one row per candidate, so their height has to grow
+       with the row count — a fixed 340px squeezes 12 rows into unreadable
+       2px bars (visible on a laptop, worse on a phone). JS sets an explicit
+       px height per chart once it knows how many rows there are, capped so
+       one huge election doesn't push the rest of the panel off-screen. */
+    .chart-box.grows { height: auto; }
+
+    .chart-empty {
+        display: flex; align-items: center; justify-content: center;
+        height: 100%; min-height: 120px; text-align: center;
+        color: var(--text-secondary); font-size: .85rem; padding: 1rem;
+    }
+    /* Lives OUTSIDE .chart-box on purpose. .chart-box has a fixed height so
+       Chart.js can size the canvas, which means anything inserted after the
+       canvas would overflow the card. */
+    .chart-legend-note { font-size: .72rem; color: var(--text-secondary); margin: .75rem 0 0; line-height: 1.5; }
+
+    /* Legend chips for the party / margin breakdowns, which have no
+       built-in axis labels worth reading. */
+    .chip-legend { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .8rem; }
+    .chip-legend .chip {
+        display: inline-flex; align-items: center; gap: .35rem;
+        font-size: .74rem; color: var(--text-secondary);
+        background: var(--card-2); border: 1px solid var(--border);
+        padding: .22rem .55rem; border-radius: 999px;
+    }
+    .chip-legend .swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+    /* Headline stat strip above the charts. */
+    .stat-strip {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem; margin-bottom: 1.25rem;
+    }
+    .stat-tile {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 12px; padding: .9rem 1rem; box-shadow: var(--card-shadow);
+    }
+    .stat-tile .k { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); }
+    .stat-tile .v { font-size: 1.5rem; font-weight: 800; color: var(--text); line-height: 1.2; margin-top: .15rem; }
+    .stat-tile .s { font-size: .74rem; color: var(--text-secondary); }
+
+    /* Print: the Overview is a summary, not a document. When someone
+       prints from the admin panel, collapse the charts to their headline
+       numbers rather than emitting a page of canvas bitmaps. */
+    @media print {
+        .chart-box { display: none; }
+        .chart-card { break-inside: avoid; border: 1px solid #ccc; box-shadow: none; }
+        .stat-tile { break-inside: avoid; box-shadow: none; }
+    }
+
     /* ================= LOADING SPINNER (buttons + inline states) ================= */
     .btn-spinner {
         display: inline-block; width: 15px; height: 15px; border-radius: 50%;
@@ -1050,6 +1136,10 @@
         animation: btnSpin 0.7s linear infinite; flex-shrink: 0; margin-right: 0.15rem;
     }
     .btn-spinner.dark { border-color: rgba(15,23,42,0.25); border-top-color: var(--text); }
+    /* A spinner inside a lime primary button must match the button's dark
+       label (see .btn-primary) or it disappears — the default white ring
+       is invisible on that background in BOTH themes now. */
+    .btn-primary .btn-spinner { border-color: rgba(5,46,22,0.3); border-top-color: #052e16; }
     @keyframes btnSpin { to { transform: rotate(360deg); } }
 
     /* Shimmering skeleton block — same visual language as the admin
@@ -1072,9 +1162,29 @@
     [data-theme="dark"] .status-value.not-voted { color: #f87171; background: rgba(239,68,68,0.14); }
     [data-theme="dark"] .ec-voted-banner { background: rgba(34,197,94,0.14); color: #4ade80; }
     [data-theme="dark"] .ballot-candidate-party { color: #4ade80; }
-    [data-theme="dark"] .ballot-summary-party { color: #4ade80; }
     [data-theme="dark"] .candidate-card .party { color: #4ade80; }
-    [data-theme="dark"] .btn-primary { color: #052e16; }
+
+    /* ---- Dark-mode overrides for pastel tints that hardcode a dark
+       saturated text color tuned for a WHITE card — on a dark card those
+       go muddy or invisible, so each gets a lighter-text equivalent. ---- */
+    [data-theme="dark"] .ballot-step-eyebrow { color: #a3e635; background: rgba(132,204,22,0.18); }
+    [data-theme="dark"] .ballot-select-count { color: #a3e635; }
+    [data-theme="dark"] .ballot-warning {
+        background: rgba(245,158,11,0.12);
+        color: #fbbf24;
+        border-color: rgba(251,191,36,0.3);
+    }
+    [data-theme="dark"] .ballot-exit { color: #f87171; }
+
+    /* Toast + confirm-modal icon chips follow the same pastel-on-white
+       pattern; brighten the glyph colors in dark mode (mirrors the admin
+       panel's overrides). */
+    [data-theme="dark"] .toast.success .toast-icon { background: rgba(34,197,94,0.18); color: #4ade80; }
+    [data-theme="dark"] .toast.error .toast-icon { background: rgba(239,68,68,0.18); color: #f87171; }
+    [data-theme="dark"] .toast.info .toast-icon { background: rgba(59,130,246,0.18); color: #60a5fa; }
+    [data-theme="dark"] .toast.warning .toast-icon { background: rgba(245,158,11,0.18); color: #fbbf24; }
+    [data-theme="dark"] .modal-box .modal-icon.danger { background: rgba(239,68,68,0.16); color: #f87171; }
+    [data-theme="dark"] .modal-box .modal-icon.neutral { background: rgba(59,130,246,0.16); color: #60a5fa; }
 
     /* ================= SPA PANEL SWITCHING ================= */
     /* This was the actual bug: showPanel() in dashboard.php correctly

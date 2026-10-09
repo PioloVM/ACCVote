@@ -399,22 +399,21 @@
                                     <?php endif; ?>
                                 </div>
                                 <div class="ballot-header-actions">
-                                    <button type="button" class="ballot-save-exit" id="ballotSaveExitBtn" onclick="saveDraftAndExit()">💾 Save &amp; Exit</button>
-                                    <a href="dashboard.php?page=vote" class="ballot-exit" onclick="return handleBallotExitClick(event);">Exit</a>
+                                    <a href="dashboard.php?page=vote" class="ballot-exit">Exit</a>
                                 </div>
                             </div>
                             <div class="ballot-progress-track">
                                 <div class="ballot-progress-fill" id="ballotProgressFill"></div>
                             </div>
+                            <div class="ballot-progress-label" id="ballotProgressLabel">0 of <?= $totalPositions ?> positions answered</div>
                         </div>
 
                         <div id="statusMessage" class="alert" style="display:none;"></div>
 
-                        <form id="voteForm" data-election="<?= $selectedElectionId ?>" data-total-positions="<?= $totalPositions ?>">
+                        <form id="voteForm" data-election="<?= $selectedElectionId ?>" data-total-positions="<?= $totalPositions ?>"<?= !empty($_GET['continuous']) ? ' data-continuous="1"' : '' ?>>
                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
                             <input type="hidden" name="election_id" value="<?= $selectedElectionId ?>">
 
-                            <?php $currentDraft = $draftsByElection[$selectedElectionId] ?? []; ?>
                             <?php foreach ($positions as $index => $position): ?>
                                 <?php
                                     $candidates = $candidatesByPosition[$position['position_id']] ?? [];
@@ -422,9 +421,8 @@
                                     $isMulti = $winnerCount > 1;
                                     $inputType = $isMulti ? 'checkbox' : 'radio';
                                     $inputName = 'position_' . (int) $position['position_id'] . ($isMulti ? '[]' : '');
-                                    $draftPicks = array_map('intval', $currentDraft[(string) $position['position_id']] ?? []);
                                 ?>
-                                <div class="ballot-step<?= $index === 0 ? ' active' : '' ?>" data-step="<?= $index ?>" data-kind="position" data-position-title="<?= h($position['title']) ?>" data-max-select="<?= $winnerCount ?>">
+                                <div class="ballot-step" data-step="<?= $index ?>" data-kind="position" data-position-title="<?= h($position['title']) ?>" data-max-select="<?= $winnerCount ?>">
                                     <div class="ballot-step-heading">
                                         <span class="ballot-step-eyebrow">Position <?= $index + 1 ?> of <?= $totalPositions ?></span>
                                         <h3 class="ballot-position-title"><?= h($position['title']) ?></h3>
@@ -447,10 +445,9 @@
                                         <fieldset class="ballot-candidates" data-max-select="<?= $winnerCount ?>">
                                             <?php foreach ($candidates as $candidate):
                                                 $partyLabel = (!empty($candidate['party']) && $candidate['party'] !== 'No Party / Independent') ? $candidate['party'] : 'Independent';
-                                                $isPreChecked = in_array((int) $candidate['id'], $draftPicks, true);
                                             ?>
                                                 <label class="ballot-candidate">
-                                                    <input type="<?= $inputType ?>" class="ballot-radio-input" name="<?= $inputName ?>" value="<?= (int) $candidate['id'] ?>" <?= $isPreChecked ? 'checked' : '' ?> data-candidate-name="<?= h($candidate['name']) ?>" data-candidate-photo="<?= h(!empty($candidate['photo']) ? $candidate['photo'] : 'assets/default-avatar.svg') ?>">
+                                                    <input type="<?= $inputType ?>" class="ballot-radio-input" name="<?= $inputName ?>" value="<?= (int) $candidate['id'] ?>" data-candidate-name="<?= h($candidate['name']) ?>">
                                                     <span class="ballot-bubble<?= $isMulti ? ' multi' : '' ?>" aria-hidden="true"><span class="ballot-bubble-fill"></span></span>
                                                     <span class="ballot-candidate-body">
                                                         <span class="ballot-candidate-name"><?= h($candidate['name']) ?></span>
@@ -464,43 +461,17 @@
                                                             <span class="ballot-candidate-platform"><strong>Platform:</strong> <?= h($candidate['platform']) ?></span>
                                                         <?php endif; ?>
                                                     </span>
-                                                    <img class="candidate-avatar" src="<?= h(!empty($candidate['photo']) ? $candidate['photo'] : 'assets/default-avatar.svg') ?>" alt="">
+                                                    <img class="candidate-avatar" loading="lazy" src="<?= !empty($candidate['photo']) ? h('photo.php?c=' . (int) $candidate['id']) : 'assets/default-avatar.svg' ?>" alt="">
                                                 </label>
                                             <?php endforeach; ?>
                                         </fieldset>
                                     <?php endif; ?>
-
-                                    <div class="ballot-nav">
-                                        <button type="button" class="btn btn-secondary" onclick="ballotPrev()" <?= $index === 0 ? 'style="visibility:hidden;"' : '' ?>>&larr; Back</button>
-                                        <button type="button" class="btn btn-primary" onclick="ballotNext()">Continue &rarr;</button>
-                                    </div>
                                 </div>
                             <?php endforeach; ?>
 
-                            <div class="ballot-step" data-step="<?= $totalPositions ?>" data-kind="review">
-                                <div class="ballot-step-heading">
-                                    <span class="ballot-step-eyebrow">Final Step</span>
-                                    <h3 class="ballot-position-title">Review Your Ballot</h3>
-                                    <p class="ballot-instruction">Double-check your choices below. You can go back to change any selection before submitting.</p>
-                                </div>
-
-                                <div class="ballot-summary-sheet">
-                                    <div class="ballot-summary-sheet-header">
-                                        <div class="ballot-summary-sheet-title"><?= h($config['name']) ?></div>
-                                        <div class="ballot-summary-sheet-sub">Official Ballot Summary</div>
-                                    </div>
-                                    <div id="ballotSummaryList" class="ballot-summary-list"></div>
-                                </div>
-
-                                <div class="ballot-warning">
-                                    <span>⚠️</span>
-                                    <span>Once submitted, your vote cannot be changed. Please review your selections carefully before continuing.</span>
-                                </div>
-
-                                <div class="ballot-nav">
-                                    <button type="button" class="btn btn-secondary" onclick="ballotPrev()">&larr; Back</button>
-                                    <button type="button" class="btn btn-primary" id="submitBtn" onclick="openBallotConfirm()">Submit My Vote</button>
-                                </div>
+                            <div class="ballot-submit-block">
+                                <p class="ballot-instruction">Skipping any position is allowed — leave it blank if you'd rather not choose. Your selections can't be changed after you submit.</p>
+                                <button type="submit" class="btn btn-primary" id="submitBtn">Submit My Vote</button>
                             </div>
                         </form>
                     </div>
@@ -509,9 +480,9 @@
                         <div class="ballot-modal-card">
                             <h2>Submit your vote?</h2>
                             <p>Your selections cannot be changed after submission.</p>
-                            <div class="ballot-nav" style="margin-top:0;">
-                                <button type="button" class="btn btn-secondary" onclick="closeBallotConfirm()">Cancel</button>
-                                <button type="button" class="btn btn-primary" id="confirmSubmitBtn" onclick="confirmBallotSubmit()">Confirm Vote</button>
+                            <div class="modal-actions">
+                                <button type="button" class="btn btn-secondary" onclick="closeBallotConfirm()">Go Back</button>
+                                <button type="button" class="btn btn-primary" id="confirmSubmitBtn" onclick="confirmBallotSubmit()">Cast My Vote</button>
                             </div>
                         </div>
                     </div>
@@ -521,7 +492,7 @@
                             <div class="ballot-modal-check">✔</div>
                             <h2>Vote Submitted!</h2>
                             <p id="ballotModalMessage">Thank you for participating in the election. Your voice has been counted.</p>
-                            <div class="ballot-nav" style="margin-top:0;">
+                            <div class="modal-actions">
                                 <button type="button" class="btn btn-secondary" onclick="window.location.href='dashboard.php?page=results';">View Results</button>
                                 <button type="button" class="btn btn-primary" onclick="closeBallotModal()">Return to Dashboard</button>
                             </div>
@@ -651,11 +622,13 @@
             return d.innerHTML;
         }
 
-        const steps = Array.from(voteForm.querySelectorAll('.ballot-step'));
-        let currentStep = 0;
+        // One continuous scroll: every position section lives in the DOM
+        // at once; only the sticky progress header reports how far along
+        // the student is. No per-step show/hide, no wizard navigation.
+        const positionSteps = Array.from(voteForm.querySelectorAll('.ballot-step[data-kind="position"]'));
 
         const progressFill = document.getElementById('ballotProgressFill');
-        const summaryList = document.getElementById('ballotSummaryList');
+        const progressLabel = document.getElementById('ballotProgressLabel');
         const statusMessage = document.getElementById('statusMessage');
         const submitBtn = document.getElementById('submitBtn');
         const modal = document.getElementById('ballotSuccessModal');
@@ -689,140 +662,26 @@
             if (step) updateSelectCount(step, fieldset);
         }
 
-        steps.forEach(step => {
+        positionSteps.forEach(step => {
             const fieldset = step.querySelector('.ballot-candidates');
             if (!fieldset) return;
-            fieldset.addEventListener('change', () => updateDimming(fieldset, step));
+            fieldset.addEventListener('change', () => { updateDimming(fieldset, step); updateProgress(); });
             updateDimming(fieldset, step);
         });
 
+        // Progress = answered positions / total. A position counts as
+        // answered once any candidate inside it is picked; an empty
+        // position is a legitimate skip, never a blocker.
         function updateProgress() {
-            const pct = ((currentStep + 1) / steps.length) * 100;
-            if (progressFill) progressFill.style.width = pct + '%';
-        }
-
-        function buildSummary() {
-            if (!summaryList) return;
-            const positionSteps = steps.filter(s => s.dataset.kind === 'position');
-            summaryList.innerHTML = positionSteps.map(step => {
-                const title = step.dataset.positionTitle || '';
-                const stepIndex = steps.indexOf(step);
-                const checkedInputs = Array.from(step.querySelectorAll('.ballot-radio-input:checked'));
-                if (checkedInputs.length === 0) {
-                    return `
-                    <div class="ballot-summary-block">
-                        <div class="ballot-summary-block-header">
-                            <span class="ballot-summary-position">${escHtml(title)}</span>
-                            ${step.querySelector('.ballot-candidates') ? `<button type="button" class="ballot-summary-change" onclick="ballotGoTo(${stepIndex})">Select</button>` : ''}
-                        </div>
-                        <div class="ballot-summary-candidates"><div class="ballot-summary-name none">No selection</div></div>
-                    </div>`;
-                }
-                const rows = checkedInputs.map(input => {
-                    const name = input.dataset.candidateName || '';
-                    const photo = input.dataset.candidatePhoto || 'assets/default-avatar.svg';
-                    const partyEl = input.closest('.ballot-candidate').querySelector('.ballot-candidate-party');
-                    const party = partyEl ? partyEl.textContent : '';
-                    return `
-                    <div class="ballot-summary-candidate-row">
-                        <img class="ballot-summary-photo" src="${escHtml(photo)}" alt="">
-                        <div class="ballot-summary-text">
-                            <div class="ballot-summary-name">${escHtml(name)}</div>
-                            <div class="ballot-summary-party">${escHtml(party)}</div>
-                        </div>
-                    </div>`;
-                }).join('');
-                return `
-                <div class="ballot-summary-block">
-                    <div class="ballot-summary-block-header">
-                        <span class="ballot-summary-position">${escHtml(title)}</span>
-                        <button type="button" class="ballot-summary-change" onclick="ballotGoTo(${stepIndex})">Change</button>
-                    </div>
-                    <div class="ballot-summary-candidates">${rows}</div>
-                </div>`;
-            }).join('');
-        }
-
-        function showStep(index) {
-            steps.forEach((s, i) => s.classList.toggle('active', i === index));
-            currentStep = index;
-            updateProgress();
-            if (steps[index].dataset.kind === 'review') buildSummary();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function currentStepValid() {
-            const step = steps[currentStep];
-            if (step.dataset.kind === 'review') return true;
-            const fieldset = step.querySelector('.ballot-candidates');
-            if (!fieldset) return true;
-            return !!fieldset.querySelector('.ballot-radio-input:checked');
-        }
-
-        window.ballotNext = function () {
-            if (!currentStepValid()) { showToast('Please select a candidate before continuing.', 'warning'); return; }
-            if (statusMessage) statusMessage.style.display = 'none';
-            if (currentStep < steps.length - 1) showStep(currentStep + 1);
-        };
-        window.ballotPrev = function () {
-            if (statusMessage) statusMessage.style.display = 'none';
-            if (currentStep > 0) showStep(currentStep - 1);
-        };
-        window.ballotGoTo = function (index) {
-            if (statusMessage) statusMessage.style.display = 'none';
-            showStep(index);
-        };
-        window.handleBallotExitClick = function (e) {
-            const anySelected = voteForm.querySelector('.ballot-radio-input:checked');
-            if (!anySelected) return true;
-            e.preventDefault();
-            showConfirmModal({
-                title: 'Leave without submitting?',
-                message: 'You have selections on this ballot that haven\'t been submitted. Tip: use "Save & Exit" instead to keep them.',
-                confirmLabel: 'Leave Anyway',
-                cancelLabel: 'Stay',
-                danger: true,
-            }).then(confirmed => { if (confirmed) window.location.href = 'dashboard.php?page=vote'; });
-            return false;
-        };
-
-        function gatherSelections() {
-            const selections = {};
-            voteForm.querySelectorAll('.ballot-candidates').forEach(fieldset => {
-                const checked = Array.from(fieldset.querySelectorAll('.ballot-radio-input:checked'));
-                if (checked.length === 0) return;
-                const match = checked[0].name.match(/^position_(\d+)/);
-                if (!match) return;
-                selections[match[1]] = checked.map(i => parseInt(i.value, 10));
+            let answered = 0;
+            positionSteps.forEach(step => {
+                if (step.querySelector('.ballot-radio-input:checked')) answered++;
             });
-            return selections;
+            const total = positionSteps.length;
+            if (progressFill) progressFill.style.width = (total ? (answered / total) * 100 : 0) + '%';
+            if (progressLabel) progressLabel.textContent = answered + ' of ' + total + ' positions answered';
         }
-
-        window.saveDraftAndExit = async function () {
-            const btn = document.getElementById('ballotSaveExitBtn');
-            const btnOriginalHTML = btn ? btn.innerHTML : '';
-            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner dark"></span> Saving...'; }
-            if (statusMessage) statusMessage.style.display = 'none';
-            const csrfInput = voteForm.querySelector('input[name="csrf_token"]');
-            try {
-                const res = await fetch('draft.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        csrf_token: csrfInput ? csrfInput.value : '',
-                        election_id: voteForm.dataset.election,
-                        selections: gatherSelections(),
-                    }),
-                });
-                const data = await res.json();
-                if (data.success) { window.location.href = 'dashboard.php?page=home'; return; }
-                if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
-                showToast(data.message || 'Could not save your progress. Please try again.', 'error');
-            } catch (err) {
-                if (btn) { btn.disabled = false; btn.innerHTML = btnOriginalHTML; }
-                showToast('Network error. Could not save your progress.', 'error');
-            }
-        };
+        updateProgress();
 
         window.closeBallotModal = function () { window.location.href = 'dashboard.php?page=home'; };
 
@@ -853,28 +712,20 @@
                     if (confirmModal) confirmModal.classList.remove('active');
                     showToast(data.message || 'Something went wrong. Please try again.', 'error');
                     submitBtn.disabled = false; submitBtn.textContent = 'Submit My Vote';
-                    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm Vote'; }
+                    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Cast My Vote'; }
                 }
             } catch (err) {
                 if (confirmModal) confirmModal.classList.remove('active');
                 showToast('Network error. Please try again.', 'error');
                 submitBtn.disabled = false; submitBtn.textContent = 'Submit My Vote';
-                if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm Vote'; }
+                if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Cast My Vote'; }
             }
         }
         window.confirmBallotSubmit = function () { performBallotSubmit(); };
 
-        const firstIncompleteIndex = steps.findIndex(step => {
-            if (step.dataset.kind !== 'position') return false;
-            const fieldset = step.querySelector('.ballot-candidates');
-            if (!fieldset) return false;
-            return !fieldset.querySelector('.ballot-radio-input:checked');
-        });
-        showStep(firstIncompleteIndex !== -1 ? firstIncompleteIndex : steps.length - 1);
-
         voteForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            if (steps[currentStep] && steps[currentStep].dataset.kind === 'review') window.openBallotConfirm();
+            window.openBallotConfirm();
         });
     })();
     </script>
