@@ -1,0 +1,36 @@
+name: CI
+
+# Static checks only. The full HTTP smoke suite (tests/http_smoke.ps1)
+# needs XAMPP + local MariaDB and runs on the dev machine; CI carries the
+# checks that run cross-platform:
+#   1. php -l over every PHP file.
+#   2. The inline-JS parse guard (tests/extract_admin_js.php + node
+#      --check) on both dashboards - a syntax error in either page's main
+#      script kills every function on it silently, which source greps
+#      cannot see.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Lint every PHP file
+        run: find . -type f -name "*.php" -not -path "./node_modules/*" -print0 | xargs -0 -n1 php -l
+
+      - name: Parse-check inline JS on both dashboards
+        run: |
+          set -e
+          for page in dashboard.php admin/dashboard.php; do
+            jsfile="$(php tests/extract_admin_js.php "$page")"
+            node --check "$jsfile"
+            echo "$page: inline JS parses clean"
+          done

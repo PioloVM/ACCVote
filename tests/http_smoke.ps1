@@ -398,6 +398,19 @@ $r404 = Invoke-Get "$base/__no_such_page_9_5.php"
 Assert-True "unknown path answers 404" ($r404.Code -eq '404') "got $($r404.Code)"
 Assert-True "unknown path shows the branded page" ($r404.Text -match "isn't on the ballot") "default error page served"
 
+# ----------------------------------------------------------------
+# Section: 9.5 batch — CI workflow (static checks runnable anywhere)
+# ----------------------------------------------------------------
+# The full HTTP suite needs XAMPP + local MariaDB, so it stays local; CI
+# carries the two checks that run cross-platform: php -l over every file
+# and the inline-JS parse guard on both dashboards.
+$ciSrc = if (Test-Path .\.github\workflows\ci.yml) { Get-Content .\.github\workflows\ci.yml -Raw } else { '' }
+Assert-True "CI workflow exists" ($ciSrc -ne '') ".github/workflows/ci.yml missing"
+Assert-True "CI lints every PHP file" ($ciSrc -match 'php -l') "no php -l step"
+Assert-True "CI runs the JS parse guard" ($ciSrc -match 'extract_admin_js\.php' -and $ciSrc -match 'node --check') "parse guard not wired"
+Assert-True "CI checks both dashboards" ($ciSrc -match 'dashboard\.php' -and $ciSrc -match 'admin/dashboard\.php') "a dashboard is unchecked"
+Assert-True "CI pins PHP 8.3" ($ciSrc -match "8\.3") "php version not pinned"
+
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
 # checks above cannot see that. Extract the admin page's main script and

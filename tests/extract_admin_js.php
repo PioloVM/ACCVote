@@ -29,8 +29,12 @@ foreach ($m[1] as $block) {
     if (strlen($block) > strlen($biggest)) $biggest = $block;
 }
 // Replace inline PHP echoes with harmless placeholders — the goal is to
-// validate the STRUCTURE of the generated JS, not its data.
+// validate the STRUCTURE of the generated JS, not its data. Handles both
+// tag styles: the admin page uses full "php echo" tags, the student
+// dashboard uses short "echo" tags (each opens with the respective PHP
+// open tag and closes with the PHP close tag).
 $js = preg_replace('/<\?php[\s\S]*?\?>/i', '"PHP"', $biggest);
+$js = preg_replace('/<\?=[\s\S]*?\?>/i', '"PHP"', $js);
 $out = sys_get_temp_dir() . '/opencode_admin_js_check.js';
 file_put_contents($out, $js);
 echo $out;
