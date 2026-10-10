@@ -234,7 +234,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,
 .sidebar .logout-link a:hover{background:rgba(248,113,113,.12);text-decoration:none;}
 .sidebar .logout-link a .nav-icon{width:18px;height:18px;}
 
-.main-content{margin-left:248px;flex:1;padding:2rem 2.25rem;transition:margin-left .3s;}
+.main-content{margin-left:248px;flex:1;padding:2rem 2.25rem;transition:margin-left .3s;min-width:0;}
 .page-header{
     display:flex;justify-content:space-between;align-items:center;margin-bottom:1.75rem;padding-bottom:1.1rem;
     border-bottom:1px solid var(--line);flex-wrap:wrap;gap:.5rem;position:sticky;top:0;background:var(--bg);
@@ -250,7 +250,6 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,
 .panel.active{display:block;}
 
 /* ================= SHARED COMPONENTS ================= */
-.quick-actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-bottom:1.5rem;}
 .stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:2rem;}
 .stat-box{background:var(--surface);border-radius:var(--radius-md);padding:1.1rem 1.25rem;box-shadow:var(--card-shadow);border:1px solid var(--line);display:flex;flex-direction:column;gap:.6rem;text-align:left;}
 .stat-box .stat-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -598,8 +597,6 @@ html,body{overflow-x:hidden;}
     .card-actions{flex-direction:column;align-items:stretch;}
     .action-group-primary,.action-group-secondary{flex-direction:column;width:100%;margin-left:0;}
     .card-actions .btn{width:100%;font-size:.8rem;padding:0 .5rem;}
-    .quick-actions{flex-direction:column;align-items:stretch;}
-    .quick-actions .btn{width:100%;}
 
     /* Schedule box: stack fields full-width, save button full-width */
     .schedule-box{flex-direction:column;align-items:stretch;gap:.75rem;padding:.9rem;}
@@ -1023,7 +1020,7 @@ async function showPanel(name, focusId){
     return true;
 }
 
-// Dashboard "Quick Actions" — jump straight past the panel and into the
+// Getting Started card helpers - jump straight past the panel and into the
 // create/register flow, instead of switching panels and then still
 // having to find and click the "+" button there. Bails out cleanly if
 // showPanel() itself was cancelled (e.g. the admin had unsaved wizard
@@ -1292,18 +1289,7 @@ async function renderDashboard(){
                 </div>
             </div>` : '';
 
-        // Once there's actual data, the step-by-step Getting Started card
-        // above stops showing — these two replace it as the fast path
-        // for the most common "I want to start something new" actions,
-        // right where an admin lands after logging in.
-        const quickActions = !gettingStarted ? `
-            <div class="quick-actions">
-                <button class="btn btn-primary btn-sm" onclick="quickCreateElection()">+ Create Election</button>
-                <button class="btn btn-secondary btn-sm" onclick="quickRegisterStudent()">+ Register Student</button>
-            </div>` : '';
-
         document.getElementById('panel-dashboard').innerHTML = `
-            ${quickActions}
             ${gettingStarted}
             <div class="stats-bar">
                 <div class="stat-box">

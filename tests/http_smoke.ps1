@@ -411,6 +411,22 @@ Assert-True "CI runs the JS parse guard" ($ciSrc -match 'extract_admin_js\.php' 
 Assert-True "CI checks both dashboards" ($ciSrc -match 'dashboard\.php' -and $ciSrc -match 'admin/dashboard\.php') "a dashboard is unchecked"
 Assert-True "CI pins PHP 8.3" ($ciSrc -match "8\.3") "php version not pinned"
 
+# ----------------------------------------------------------------
+# Section: admin quick actions removed + students panel boundary fix
+# ----------------------------------------------------------------
+# The two-button strip (+ Create Election / + Register Student) is gone;
+# the Getting Started card keeps its own buttons and BOTH helper
+# functions (they are that card's only callers).
+Assert-True "quick actions strip no longer rendered" ($adminSrc -notmatch 'class="quick-actions"' -and $adminSrc -notmatch 'quickActions = !gettingStarted') "quick actions strip still present"
+Assert-True "quick-actions css removed" ($adminSrc -notmatch '\.quick-actions\{') "dead .quick-actions css remains"
+Assert-True "getting-started card keeps both helper buttons" ($adminSrc -match 'onclick="quickRegisterStudent\(\)"' -and $adminSrc -match 'onclick="quickCreateElection\(\)"') "onboarding buttons lost"
+Assert-True "both quick helpers still defined" ($adminSrc -match 'function quickCreateElection\(' -and $adminSrc -match 'function quickRegisterStudent\(') "helper deleted that is still referenced"
+# Boundary: .main-content is a flex item (flex:1 1 0%) whose auto
+# min-width lets its min-content (the 9-column students table, ~1280px)
+# push the whole panel past the viewport right edge where
+# html/body overflow-x:hidden clips it. min-width:0 restores the bound.
+Assert-True "main-content is bounded against min-content push" ($adminSrc -match '\.main-content\{[^}]*min-width:0') "min-width:0 missing from .main-content"
+
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
 # checks above cannot see that. Extract the admin page's main script and
