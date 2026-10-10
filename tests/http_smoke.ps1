@@ -374,6 +374,30 @@ Assert-True "throttle implementation exists in functions.php" ($functionsSrc -ma
 # container actually exists somewhere.
 Assert-True "dead party-chart code removed" ($adminSrc -notmatch 'function drawPartyChart') "drawPartyChart still present"
 
+# ----------------------------------------------------------------
+# Section: 9.5 batch — branded 404 + credential hygiene
+# ----------------------------------------------------------------
+# The branded 404 is served two ways: Apache ErrorDocument (local) and a
+# router.php wired into the Dockerfile's php -S CMD (Render). The .htaccess
+# also stops shipping the commented-out Neon credential so it can be
+# committed as the local XAMPP config.
+$notFoundSrc = if (Test-Path .\404.php) { Get-Content .\404.php -Raw } else { '' }
+Assert-True "branded 404 page exists with the brand headline" ($notFoundSrc -match "isn't on the ballot") "404.php missing or unbranded"
+Assert-True "404 page carries the brand fonts" ($notFoundSrc -match 'family=Sora') "404 not on-brand"
+$htaccessSrc = Get-Content .\.htaccess -Raw
+Assert-True "htaccess ships an ErrorDocument 404" ($htaccessSrc -match 'ErrorDocument 404') "no ErrorDocument"
+Assert-True "htaccess carries no database credentials" ($htaccessSrc -notmatch 'npg_|postgresql://[^\s]*:[^\s]*@') "credential still in .htaccess"
+$gitignoreSrc = Get-Content .\.gitignore -Raw
+Assert-True "htaccess is no longer gitignored" ($gitignoreSrc -notmatch '(?m)^\.htaccess\s*$') ".gitignore still excludes .htaccess"
+$routerSrc = if (Test-Path .\router.php) { Get-Content .\router.php -Raw } else { '' }
+Assert-True "php -S router exists and serves the branded 404" ($routerSrc -match '404\.php' -and $routerSrc -match 'http_response_code\(404\)') "router missing"
+$dockerfileSrc = Get-Content .\Dockerfile -Raw
+Assert-True "Dockerfile wires the router" ($dockerfileSrc -match 'router\.php') "Dockerfile not using router"
+# Behavioral: an unknown path answers 404 with the branded page (Apache).
+$r404 = Invoke-Get "$base/__no_such_page_9_5.php"
+Assert-True "unknown path answers 404" ($r404.Code -eq '404') "got $($r404.Code)"
+Assert-True "unknown path shows the branded page" ($r404.Text -match "isn't on the ballot") "default error page served"
+
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
 # checks above cannot see that. Extract the admin page's main script and

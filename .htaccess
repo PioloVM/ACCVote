@@ -1,0 +1,111 @@
+# ------------------------------------------------------------------
+# LOCAL XAMPP CONFIGURATION
+#
+# DB_DRIVER=mysql forces this machine to use XAMPP's local MariaDB
+# (database "voting_app", see schema.mysql.sql). Without it, the
+# DATABASE_URL line below would silently send local traffic to the
+# LIVE Neon production database.
+#
+# To test against Neon from this machine again, add your DATABASE_URL line
+# below (keep it commented when not in use) and comment out DB_DRIVER.
+# Never paste live credentials into this file if it is committed to the
+# repository -- deployed credentials belong in Render's environment vars.
+# ------------------------------------------------------------------
+SetEnv DB_DRIVER mysql
+
+# ==================================================================
+# HARDENING
+# ==================================================================
+# The whole project sits inside the webroot, so anything that is not a
+# .php/.css/.js/.png/.jpg/.svg asset is downloadable by URL unless it is
+# blocked here. That includes editor backups, database dumps and schema
+# notes left in the project folder. Deny them by extension as
+# defence-in-depth, so a stray file cannot become a public download.
+#
+# NOTE: .htaccess itself is never served by Apache, so the DATABASE_URL
+# above is not exposed by this rule -- but keep credentials out of any
+# file that IS reachable, and prefer real environment variables on the
+# deployed host.
+# ==================================================================
+
+# Backups, archives and editor droppings
+<FilesMatch "(?i)^.*\.(sql|bak|old|orig|save|swp|tmp|temp|log|ini|conf|env|lock|py|sh|bat|ps1|md|txt|json|yml|yaml|xml|csv|zip|rar|7z|gz|tar)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Same, for editor/backup variants of real source files:
+# "index.php~", ".index.php.swp", "dashboard.php.orig", etc.
+<FilesMatch "(?i)(~|\.bak|\.orig|\.old|\.save|\.sw[opx]|\.tmp)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>
+
+# Dotfiles (.env, .git, .htpasswd, ...) are never web content.
+<FilesMatch "(?i)^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>
+
+# Extension-less files that still shouldn't be published. The Dockerfile
+# reveals the production runtime and base image, which is free recon for
+# anyone probing the host.
+<FilesMatch "(?i)^(dockerfile|docker-compose\.ya?ml|makefile|procfile|composer\.(json|lock)|package(-lock)?\.json)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>
+
+# Never hand out a directory listing.
+Options -Indexes
+
+# Branded 404 for any path the app does not serve. The path is relative to
+# the XAMPP webroot (this copy lives at /voting-app2-updated/) - if the app
+# moves to a domain root, shorten the prefix accordingly. The Render
+# deployment (php -S via Docker) ignores .htaccess and gets the same page
+# from router.php instead.
+ErrorDocument 404 /voting-app2-updated/404.php
+
+# Sensible defaults for a PHP app with no uploaded file serving.
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+
+# ==================================================================
+# PERFORMANCE - compression + browser caching (Task 11)
+# ==================================================================
+# gzip text assets on the wire via mod_deflate. Both blocks are
+# IfModule-guarded: on hosts without the module they are no-ops
+# instead of 500s. (The Docker/Render runtime uses php -S, which
+# ignores .htaccess entirely - that side gets zlib.output_compression
+# from the Dockerfile's start command instead.)
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css
+    AddOutputFilterByType DEFLATE text/javascript application/javascript application/x-javascript
+    AddOutputFilterByType DEFLATE application/json application/manifest+json
+    AddOutputFilterByType DEFLATE image/svg+xml
+</IfModule>
+
+# Far-future expiry for static assets (they are versioned via assetV()
+# cache-busters, so a long TTL is safe); HTML revalidates immediately.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType text/javascript "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+    ExpiresByType image/webp "access plus 1 year"
+    ExpiresByType text/html "access plus 0 seconds"
+</IfModule>
