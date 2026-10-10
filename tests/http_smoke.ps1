@@ -439,6 +439,14 @@ Assert-True "student cells ellipsize instead of overflowing" ($adminSrc -match '
 Assert-True "faculty cell carries a hover title" ($adminSrc -match 'td title="\$\{escapeHtml\(s\.department\)\}"') "no tooltip on faculty"
 Assert-True "name cell carries a hover title" ($adminSrc -match 'td class="name-cell" title=') "no tooltip on name"
 
+# ----------------------------------------------------------------
+# Section: students pagination page numbers + search focus retention
+# ----------------------------------------------------------------
+Assert-True "pagination renders clickable page numbers" ($adminSrc -match 'class="page-btn' -and $adminSrc -match 'goToStudentPage\(\$\{n\}\)') "no clickable page numbers"
+Assert-True "pagination keeps left/right arrows" ($adminSrc -match 'title="Previous page"' -and $adminSrc -match 'title="Next page"') "arrows lost"
+Assert-True "current page is marked" ($adminSrc -match 'aria-current="page"') "no current-page marker"
+Assert-True "search focus survives the re-render" ($adminSrc -match 'searchFocused' -and $adminSrc -match 'setSelectionRange\(searchCaret, searchCaret\)') "focus not restored after render"
+
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
 # checks above cannot see that. Extract the admin page's main script and

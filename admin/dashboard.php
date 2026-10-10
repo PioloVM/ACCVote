@@ -708,6 +708,9 @@ html,body{overflow-x:hidden;}
 .pagination-bar .page-controls button{border:1.5px solid var(--line-strong);background:var(--surface);color:var(--ink);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:.85rem;}
 .pagination-bar .page-controls button:disabled{opacity:.4;cursor:not-allowed;}
 .pagination-bar .page-controls button:not(:disabled):hover{background:var(--surface-hover);}
+.pagination-bar .page-controls .page-btn.current{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700;}
+.pagination-bar .page-controls .page-btn.current:hover{background:var(--navy);}
+.pagination-bar .page-controls .page-gap{color:var(--muted);padding:0 .1rem;font-size:.85rem;align-self:center;}
 
 /* ================= GETTING STARTED ================= */
 .getting-started{background:linear-gradient(135deg,var(--navy) 0%,#1c2a3f 100%);border-radius:var(--radius-lg);padding:2rem 2.25rem;color:#fff;margin-bottom:2rem;}
@@ -2597,17 +2600,41 @@ async function renderStudentList(forceRefresh = false){
                </td></tr>`
             : `<tr class="empty-row"><td colspan="9">No students match your filters.</td></tr>`;
 
+        // Clickable page numbers - every page when few, a windowed
+        // "1 ... p-1 p p+1 ... n" when many; arrows stay at both ends.
+        const pageNums = [];
+        if (totalPages <= 7) {
+            for (let n = 1; n <= totalPages; n++) pageNums.push(n);
+        } else {
+            pageNums.push(1);
+            const from = Math.max(2, studentPage - 1);
+            const to = Math.min(totalPages - 1, studentPage + 1);
+            if (from > 2) pageNums.push('…');
+            for (let n = from; n <= to; n++) pageNums.push(n);
+            if (to < totalPages - 1) pageNums.push('…');
+            pageNums.push(totalPages);
+        }
+        const pageButtons = pageNums.map(n => n === '…'
+            ? '<span class="page-gap">…</span>'
+            : `<button class="page-btn ${n === studentPage ? 'current' : ''}" onclick="goToStudentPage(${n})" ${n === studentPage ? 'aria-current="page"' : ''}>${n}</button>`).join('');
+
         const paginationBar = filtered.length > STUDENTS_PER_PAGE ? `
             <div class="pagination-bar">
-                <span class="page-info">Showing ${pageStart + 1}–${Math.min(pageStart + STUDENTS_PER_PAGE, filtered.length)} of ${filtered.length}</span>
+                <span class="page-info">Showing ${pageStart + 1}-${Math.min(pageStart + STUDENTS_PER_PAGE, filtered.length)} of ${filtered.length}</span>
                 <div class="page-controls">
-                    <button onclick="goToStudentPage(1)" ${studentPage<=1?'disabled':''} title="First page">«</button>
-                    <button onclick="goToStudentPage(studentPage-1)" ${studentPage<=1?'disabled':''} title="Previous page">‹</button>
-                    <span class="page-info">Page ${studentPage} of ${totalPages}</span>
-                    <button onclick="goToStudentPage(studentPage+1)" ${studentPage>=totalPages?'disabled':''} title="Next page">›</button>
-                    <button onclick="goToStudentPage(${totalPages})" ${studentPage>=totalPages?'disabled':''} title="Last page">»</button>
+                    <button onclick="goToStudentPage(1)" ${studentPage<=1?'disabled':''} title="First page">&laquo;</button>
+                    <button onclick="goToStudentPage(studentPage-1)" ${studentPage<=1?'disabled':''} title="Previous page">&lsaquo;</button>
+                    ${pageButtons}
+                    <button onclick="goToStudentPage(studentPage+1)" ${studentPage>=totalPages?'disabled':''} title="Next page">&rsaquo;</button>
+                    <button onclick="goToStudentPage(${totalPages})" ${studentPage>=totalPages?'disabled':''} title="Last page">&raquo;</button>
                 </div>
             </div>` : '';
+        // Typing in the search box re-renders the whole panel on every
+        // keystroke; without restoring focus + caret the input is destroyed
+        // mid-word ("Aet" became "A" and dropped the admin back to the page).
+        const searchEl = document.getElementById('stuSearch');
+        const searchFocused = document.activeElement === searchEl;
+        const searchCaret = searchFocused ? searchEl.selectionStart : null;
 
         document.getElementById('panel-students').innerHTML = `
             <div id="studentListView">
@@ -2665,6 +2692,11 @@ async function renderStudentList(forceRefresh = false){
             </div>
             <div id="studentFormView" style="display:none;"></div>
         `;
+        if (searchFocused) {
+            const restored = document.getElementById('stuSearch');
+            restored.focus();
+            restored.setSelectionRange(searchCaret, searchCaret);
+        }
     } catch (e) {
         document.getElementById('panel-students').innerHTML = '<div class="alert alert-error">Could not load students.</div>';
     }
