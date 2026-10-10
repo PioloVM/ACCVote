@@ -78,6 +78,21 @@ ErrorDocument 404 /voting-app2-updated/404.php
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Content-Security-Policy. 'unsafe-inline' for scripts/styles is a
+    # deliberate trade-off: both dashboards ship inline <script>/<style>
+    # blocks (no build step), and extracting them all would be a large
+    # refactor for little gain at this scale. The policy still blocks
+    # external script injection, framing, and MIME sniffing.
+    # cdnjs.cloudflare.com is load-bearing: the student dashboard loads
+    # SheetJS (XLSX export) and Chart.js from there, SRI-pinned.
+    # Keep this block in sync with router.php (the php -S production
+    # runtime ignores .htaccess and sets the same headers itself).
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+
+    # HSTS only over HTTPS - sending it on plain-HTTP localhost would do
+    # nothing useful and confuse local testing.
+    Header always set Strict-Transport-Security "max-age=31536000" "expr=%{HTTPS} == 'on'"
 </IfModule>
 
 

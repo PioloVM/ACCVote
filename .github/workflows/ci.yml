@@ -26,6 +26,13 @@ jobs:
       - name: Lint every PHP file
         run: find . -type f -name "*.php" -not -path "./node_modules/*" -print0 | xargs -0 -n1 php -l
 
+      # schema.sql (PostgreSQL/production) and schema.mysql.sql (MariaDB/
+      # local) are both fresh-install sources, so they must describe the
+      # same schema. A one-sided edit drifts them apart and only shows up
+      # at deploy time - this check catches it on every push.
+      - name: Schema parity (MariaDB vs PostgreSQL)
+        run: php tests/schema_parity.php
+
       - name: Parse-check inline JS on both dashboards
         run: |
           set -e

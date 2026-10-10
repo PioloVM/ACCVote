@@ -570,6 +570,28 @@ Assert-True "candidate modal scrolls as one page on mobile" ($ballotCss -match '
 Assert-True "candidate modal panes don't scroll independently on mobile" ($ballotCss -match '(?s)\.cand-modal-left \{ flex: 0 0 auto;[^}]*overflow: visible') "left pane still self-scrolls"
 Assert-True "candidate modal close button stays reachable when scrolled" ($ballotCss -match '(?s)@media \(max-width: 768px\) \{[^@]*?\.cand-modal-close \{ position: fixed') "close button scrolls away"
 
+# ----------------------------------------------------------------
+# Section: Batch A1+A2 - security headers + CI schema parity wiring
+# ----------------------------------------------------------------
+# php -S (Render production) never reads .htaccess, so the header block
+# must exist in BOTH .htaccess (Apache) and router.php (production). The
+# CSP must allow cdnjs (SheetJS + Chart.js on the student dashboard,
+# SRI-pinned) and Google Fonts, or those break silently.
+$r = Invoke-Get "$base/login.php"
+Assert-True "Content-Security-Policy served on pages" ($r.Headers -match "Content-Security-Policy:") "CSP header missing"
+Assert-True "CSP restricts framing to same origin" ($r.Headers -match "frame-ancestors 'self'") "frame-ancestors missing"
+Assert-True "CSP allows the cdnjs chart/export libraries" ($r.Headers -match "cdnjs\.cloudflare\.com") "cdnjs not whitelisted"
+Assert-True "X-Content-Type-Options nosniff served" ($r.Headers -match "X-Content-Type-Options:\s*nosniff") "nosniff missing"
+Assert-True "X-Frame-Options SAMEORIGIN served" ($r.Headers -match "X-Frame-Options:\s*SAMEORIGIN") "XFO missing"
+$routerSrc = Get-Content .\router.php -Raw
+Assert-True "router.php sets the security headers (production php -S)" (($routerSrc -match 'X-Content-Type-Options') -and ($routerSrc -match 'Content-Security-Policy')) "router header block missing"
+Assert-True "router.php gates HSTS behind HTTPS" (($routerSrc -match 'Strict-Transport-Security') -and ($routerSrc -match "HTTPS")) "router HSTS missing or ungated"
+$htaccessSrc = Get-Content .\.htaccess -Raw
+Assert-True ".htaccess sends HSTS only over HTTPS" ($htaccessSrc -match "expr=%\{HTTPS\}") "HSTS not HTTPS-gated"
+Assert-True ".htaccess sets a Content-Security-Policy" ($htaccessSrc -match 'Header always set Content-Security-Policy') "CSP line missing"
+$ciSrc = Get-Content .\.github\workflows\ci.yml -Raw
+Assert-True "CI runs the schema parity check" ($ciSrc -match 'schema_parity\.php') "not wired into CI"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
