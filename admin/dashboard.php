@@ -2406,7 +2406,7 @@ let studentFilters = { search:'', department:'', year:'', voter:'', account:'', 
 let studentDraft = null;
 let allStudentsCache = null;   // cached student list — avoids refetching on every keystroke/filter change
 let studentPage = 1;
-const STUDENTS_PER_PAGE = 50;
+const STUDENTS_PER_PAGE = 15;
 let lastFilteredStudents = []; // the filtered (but not yet paginated) list from the most recent render, used by CSV export
 
 // Fetches the student list once and reuses it until something invalidates
@@ -2618,7 +2618,11 @@ async function renderStudentList(forceRefresh = false){
             ? '<span class="page-gap">…</span>'
             : `<button class="page-btn ${n === studentPage ? 'current' : ''}" onclick="goToStudentPage(${n})" ${n === studentPage ? 'aria-current="page"' : ''}>${n}</button>`).join('');
 
-        const paginationBar = filtered.length > STUDENTS_PER_PAGE ? `
+        // The bar stays visible whenever there is anything to page through,
+        // even on a single page (arrows/page 1 disabled there) - the admin
+        // should always see where records sit, not discover pagination only
+        // after the roster crosses a threshold.
+        const paginationBar = filtered.length > 0 ? `
             <div class="pagination-bar">
                 <span class="page-info">Showing ${pageStart + 1}-${Math.min(pageStart + STUDENTS_PER_PAGE, filtered.length)} of ${filtered.length}</span>
                 <div class="page-controls">

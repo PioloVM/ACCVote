@@ -446,6 +446,8 @@ Assert-True "pagination renders clickable page numbers" ($adminSrc -match 'class
 Assert-True "pagination keeps left/right arrows" ($adminSrc -match 'title="Previous page"' -and $adminSrc -match 'title="Next page"') "arrows lost"
 Assert-True "current page is marked" ($adminSrc -match 'aria-current="page"') "no current-page marker"
 Assert-True "search focus survives the re-render" ($adminSrc -match 'searchFocused' -and $adminSrc -match 'setSelectionRange\(searchCaret, searchCaret\)') "focus not restored after render"
+Assert-True "students page size is 15" ($adminSrc -match 'STUDENTS_PER_PAGE = 15') "page size not 15"
+Assert-True "pagination bar shows whenever there are rows" ($adminSrc -match 'const paginationBar = filtered\.length > 0 \?') "bar still hidden on a single page"
 
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
