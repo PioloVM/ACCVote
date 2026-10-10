@@ -293,11 +293,14 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,
    loose pills which read as sort/filter actions (Elections statuses). */
 .view-switch{display:inline-flex;gap:.2rem;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:.22rem;}
 .view-switch button{
-    border:none;background:transparent;color:var(--muted);padding:.42rem 1.1rem;border-radius:8px;
+    border:1px solid transparent;background:transparent;color:var(--muted);padding:.42rem 1.1rem;border-radius:8px;
     font-size:.78rem;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap;
 }
 .view-switch button:hover{color:var(--ink);}
 .view-switch button.selected{background:var(--navy);color:#fff;box-shadow:0 1px 3px rgba(16,24,40,.18);}
+/* Dark mode: navy #101828 sits on the near-black track and disappears -
+   the selected segment becomes a visibly raised navy-2 slab instead. */
+[data-theme="dark"] .view-switch button.selected{background:var(--navy-2);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.45);border:1px solid var(--line-strong);}
 .alert{padding:.9rem 1rem;border-radius:var(--radius-sm);margin-bottom:1rem;font-size:.9rem;display:flex;align-items:flex-start;gap:.6rem;}
 .alert-success{background:#ecfdf3;color:#065f46;border:1px solid #d1fae5;}
 .alert-error{background:#fef2f2;color:#991b1b;border:1px solid #fee2e2;}

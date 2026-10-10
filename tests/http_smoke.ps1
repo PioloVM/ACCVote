@@ -461,6 +461,7 @@ Assert-True "results tabs use the segmented view switch" ($adminSrc -match 'func
 Assert-True "view-switch css exists" ($adminSrc -match '\.view-switch\{display:inline-flex') "no .view-switch rule"
 Assert-True "view switch active state is a filled segment" ($adminSrc -match '(?s)\.view-switch button\.selected\{[^}]*background:var\(--navy\)') "no segment active style"
 Assert-True "view-switch button keyboard focus styled" ($adminSrc -match '\.view-switch button:focus-visible') "focus missing"
+Assert-True "view switch selected segment visible in dark mode" ($adminSrc -match '(?s)\[data-theme="dark"\] \.view-switch button\.selected\{[^}]*background:var\(--navy-2\)') "dark-mode selected state missing"
 
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
