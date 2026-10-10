@@ -708,6 +708,132 @@ Assert-True "prune handler exists in settings" ($adminSrc -match 'function prune
 & $mysql -u root voting_app -e "DELETE FROM vote_drafts WHERE election_id IN (SELECT id FROM elections WHERE name LIKE 'PRUNE FIXTURE%'); DELETE FROM elections WHERE name LIKE 'PRUNE FIXTURE%'; DELETE FROM activity_logs WHERE admin_username='fixture'; DELETE FROM login_attempts WHERE identifier IN ('old_prune:1','hot_prune:1');" 2>&1 | Out-Null
 Remove-Item $mjar -Force -ErrorAction SilentlyContinue
 
+# ----------------------------------------------------------------
+# Section: Batch B1 - admin account management (admins API + card)
+# ----------------------------------------------------------------
+# Fixture: a throwaway admin account (suitexadmin) created and removed
+# through the API itself; the real admin/admin123 account is NEVER
+# mutated (the wrong-current self-change is asserted as a refusal only,
+# so a green run can never brick the fixture credentials).
+& $mysql -u root voting_app -e "DELETE FROM login_attempts; DELETE FROM admins WHERE username='suitexadmin';" 2>&1 | Out-Null
+
+$bjar = [System.IO.Path]::GetTempFileName()
+$bLoginHtml = ((curl.exe -s -c $bjar "$base/admin/login.php") -join "`n")
+$bToken = [regex]::Match($bLoginHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$bCode = curl.exe -s -b $bjar -c $bjar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$bToken&username=admin&password=admin123"
+Assert-True "B1 admin session login (302)" ($bCode -eq "302") "got $bCode"
+$bDash = ((curl.exe -s -b $bjar "$base/admin/dashboard.php") -join "`n")
+$bCsrf = [regex]::Match($bDash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+
+# GET list
+$listJson = ((curl.exe -s -b $bjar "$base/admin/api/admins.php") -join "")
+Assert-True "admins list returns the real admin" ($listJson -match '"username":"admin"') "missing: $listJson"
+
+$bBody = [System.IO.Path]::GetTempFileName()
+$mkBody = { param($csrf, $json) [System.IO.File]::WriteAllText($bBody, $json.Replace('@@CSRF@@', $csrf)) }
+
+# create
+& $mkBody $bCsrf '{ "csrf_token": "@@CSRF@@", "username": "suitexadmin", "email": "suitex@acc.test", "password": "SuitePass1" }'
+$mk1 = ((curl.exe -s -b $bjar -X POST "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "create admin succeeds" ($mk1 -match '"success":true') "got: $mk1"
+
+# duplicate username refused
+& $mkBody $bCsrf '{ "csrf_token": "@@CSRF@@", "username": "suitexadmin", "password": "SuitePass1" }'
+$mk2 = ((curl.exe -s -b $bjar -X POST "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "duplicate username refused (409)" ($mk2 -match 'already exists') "got: $mk2"
+
+# password policy
+& $mkBody $bCsrf '{ "csrf_token": "@@CSRF@@", "username": "suitexadmin2", "password": "short" }'
+$mk3 = ((curl.exe -s -b $bjar -X POST "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "short password refused by policy" ($mk3 -match 'at least 8') "got: $mk3"
+& $mkBody $bCsrf '{ "csrf_token": "@@CSRF@@", "username": "suitexadmin2", "password": "onlyletters" }'
+$mk4 = ((curl.exe -s -b $bjar -X POST "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "letters-only password refused by policy" ($mk4 -match 'letters and numbers') "got: $mk4"
+
+# CSRF guard
+& $mkBody 'bogus-token' '{ "csrf_token": "@@CSRF@@", "username": "suitexadmin3", "password": "SuitePass1" }'
+$mk5 = ((curl.exe -s -b $bjar -X POST "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "create refuses bogus csrf" ($mk5 -match 'session expired') "got: $mk5"
+
+# the new admin can log in
+$sjar = [System.IO.Path]::GetTempFileName()
+$sLoginHtml = ((curl.exe -s -c $sjar "$base/admin/login.php") -join "`n")
+$sToken = [regex]::Match($sLoginHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$sCode = curl.exe -s -b $sjar -c $sjar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$sToken&username=suitexadmin&password=SuitePass1"
+Assert-True "new admin logs in (302)" ($sCode -eq "302") "got $sCode"
+$sDash = ((curl.exe -s -b $sjar "$base/admin/dashboard.php") -join "`n")
+$sCsrf = [regex]::Match($sDash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+$sId = [regex]::Match($listJson + ((curl.exe -s -b $bjar "$base/admin/api/admins.php") -join ""), '"id":"?(\d+)"?,"username":"suitexadmin"').Groups[1].Value
+Assert-True "new admin appears in list with an id" ($sId -ne "") "not found in: $listJson"
+
+# admin resets the new admin's password (no current password needed for OTHERS)
+& $mkBody $bCsrf ('{ "csrf_token": "@@CSRF@@", "id": ' + $sId + ', "password": "SuitePass2" }')
+$pw1 = ((curl.exe -s -b $bjar -X PUT "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "admin resets another admin's password" ($pw1 -match '"success":true') "got: $pw1"
+
+# old password no longer works, new one does. Each attempt uses a FRESH
+# jar + token scraped from a fresh GET: a successful login unsets the
+# pre-auth CSRF token (admin/login.php), and an already-authenticated
+# jar would just 302 to the dashboard - masking the real check.
+function New-AdminLoginProbe([string]$user, [string]$pass) {
+    $j = [System.IO.Path]::GetTempFileName()
+    $h = ((curl.exe -s -c $j "$base/admin/login.php") -join "`n")
+    $t = [regex]::Match($h, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+    $code = curl.exe -s -b $j -c $j -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$t&username=$user&password=$pass"
+    Remove-Item $j -Force -ErrorAction SilentlyContinue
+    return $code
+}
+$oCode = New-AdminLoginProbe 'suitexadmin' 'SuitePass1'
+Assert-True "old password rejected after reset (not 302)" ($oCode -ne "302") "got $oCode"
+$nCode = New-AdminLoginProbe 'suitexadmin' 'SuitePass2'
+Assert-True "new password accepted after reset (302)" ($nCode -eq "302") "got $nCode"
+
+# self-change requires the CORRECT current password - refused with wrong one
+& $mkBody $sCsrf ('{ "csrf_token": "@@CSRF@@", "id": ' + $sId + ', "password": "SuitePass9", "current_password": "wrongpass" }')
+$selfBad = ((curl.exe -s -b $sjar -X PUT "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "self-change with wrong current password refused" ($selfBad -match 'Current password is incorrect') "got: $selfBad"
+
+# self-change with the correct current password succeeds (safe: suitexadmin only)
+& $mkBody $sCsrf ('{ "csrf_token": "@@CSRF@@", "id": ' + $sId + ', "password": "SuitePass3", "current_password": "SuitePass2" }')
+$selfOk = ((curl.exe -s -b $sjar -X PUT "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "self-change with correct current password succeeds" ($selfOk -match '"success":true') "got: $selfOk"
+$cCode = New-AdminLoginProbe 'suitexadmin' 'SuitePass3'
+Assert-True "self-changed password works (302)" ($cCode -eq "302") "got $cCode"
+
+# deleting your OWN account is refused
+$adminId = [regex]::Match(((curl.exe -s -b $bjar "$base/admin/api/admins.php") -join ""), '"id":"?(\d+)"?,"username":"admin"').Groups[1].Value
+Assert-True "real admin id extracted from list" ($adminId -ne "") "regex missed (PDO stringifies ids as JSON strings)"
+& $mkBody $bCsrf ('{ "csrf_token": "@@CSRF@@", "id": ' + $adminId + ' }')
+$selfDel = ((curl.exe -s -b $bjar -X DELETE "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "cannot delete your own account" ($selfDel -match 'your own account') "got: $selfDel"
+
+# deleting another admin works, and their login stops working
+& $mkBody $bCsrf ('{ "csrf_token": "@@CSRF@@", "id": ' + $sId + ' }')
+$del1 = ((curl.exe -s -b $bjar -X DELETE "$base/admin/api/admins.php" --data-binary "@$bBody") -join "")
+Assert-True "delete admin succeeds" ($del1 -match '"success":true') "got: $del1"
+$gCode = New-AdminLoginProbe 'suitexadmin' 'SuitePass3'
+Assert-True "deleted admin cannot log in (not 302)" ($gCode -ne "302") "got $gCode"
+$cntLeft = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM admins;" | Out-String)
+Assert-True "at least the real admin remains" ($cntLeft -match '[1-9]') "admins table empty!"
+
+# students are locked out of the admins API
+$stuCode = curl.exe -s -b $jar -o NUL -w "%{http_code}" "$base/admin/api/admins.php"
+Assert-True "students get 401 from admins API" ($stuCode -eq "401") "got $stuCode"
+
+# audit lines
+$audit = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM activity_logs WHERE action LIKE 'Created admin account%' OR action LIKE 'Removed admin account%' OR action LIKE 'Changed%password%' OR action LIKE 'Reset password%';" | Out-String)
+Assert-True "admin account actions are audited" ($audit -match '[1-9]') "no audit rows"
+
+# UI contract: Settings carries the Admin accounts card
+Assert-True "settings renders the Admin accounts card" ($adminSrc -match 'Admin accounts') "card missing"
+Assert-True "create admin handler exists" ($adminSrc -match 'function createAdmin') "handler missing"
+Assert-True "delete admin handler exists" ($adminSrc -match 'function deleteAdmin') "handler missing"
+Assert-True "password change handler exists" ($adminSrc -match 'function changeAdminPassword') "handler missing"
+
+# cleanup
+& $mysql -u root voting_app -e "DELETE FROM login_attempts; DELETE FROM activity_logs WHERE action LIKE '%suitexadmin%' OR action LIKE 'Created admin account%' OR action LIKE 'Removed admin account%' OR action LIKE 'Changed password%';" 2>&1 | Out-Null
+Remove-Item $bBody, $sjar -Force -ErrorAction SilentlyContinue
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

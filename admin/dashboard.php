@@ -496,6 +496,14 @@ table.pos-table input, table.pos-table select{width:100%;padding:.4rem .5rem;bor
 .mt-info{display:flex;flex-direction:column;gap:.1rem;flex:1;min-width:0}
 .mt-info strong{font-size:.82rem}
 .mt-count{font-size:.72rem;color:var(--muted);font-family:var(--font-mono)}
+/* Batch B1: admin accounts card */
+.adminacct-row{display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-top:1px solid var(--line)}
+.adminacct-row:first-of-type{border-top:none}
+.adminacct-info{display:flex;flex-direction:column;gap:.1rem;flex:1;min-width:0}
+.adminacct-info strong{font-size:.85rem}
+.you-badge{font-size:.65rem;background:var(--lime);color:#1a2e05;padding:.1rem .45rem;border-radius:99px;margin-left:.4rem;vertical-align:middle;font-weight:700;letter-spacing:.04em}
+.adminacct-meta{font-size:.72rem;color:var(--muted);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adminacct-add{flex-wrap:wrap}
 .log-item{position:relative;}
 .log-item .log-dot{width:7px;height:7px;border-radius:50%;background:var(--lime);flex-shrink:0;margin-top:.4rem;}
 
@@ -4450,8 +4458,21 @@ function renderSettingsContent(){
                 <button class="btn btn-secondary btn-sm" onclick="pruneMaintenance('prune_logs')" title="Keeps the current school year's trail">Clean up</button>
             </div>
         </div>
+    
+        <div class="card">
+            <h2 class="section-title">Admin accounts</h2>
+            <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">Who can sign in to this panel. Adding, resetting, or removing an account is recorded in the activity log.</p>
+            <div id="adminAcctList"><p class="settings-empty">Loading accounts...</p></div>
+            <div class="settings-add-row adminacct-add">
+                <input type="text" id="newAdminUser" placeholder="Username (3-50 chars)" maxlength="50" style="max-width:180px;">
+                <input type="email" id="newAdminEmail" placeholder="Email (optional)" maxlength="100" style="max-width:220px;">
+                <input type="password" id="newAdminPass" placeholder="Initial password (8+ chars, letters + numbers)" maxlength="128" style="max-width:270px;">
+                <button class="btn btn-primary btn-sm" onclick="createAdmin()">+ Add Admin</button>
+            </div>
+        </div>
     `;
     loadMaintenanceCounts();
+    loadAdminAccounts();
 }
 
 // ---------- Maintenance (Batch A4) ----------
@@ -4486,6 +4507,95 @@ async function pruneMaintenance(action){
         }
     } catch (e) {
         showToast('Cleanup failed.', 'error');
+    }
+}
+// ---------- Admin accounts (Batch B1) ----------
+async function loadAdminAccounts(){
+    try {
+        const res = await fetch('api/admins.php');
+        const list = await res.json();
+        const host = document.getElementById('adminAcctList');
+        if (!host || !Array.isArray(list)) return;
+        host.innerHTML = list.map(a => `
+            <div class="adminacct-row">
+                <div class="adminacct-info">
+                    <strong>${escapeHtml(a.username)}${a.is_me ? '<span class="you-badge">You</span>' : ''}</strong>
+                    <span class="adminacct-meta">${escapeHtml(a.email || 'no email')} &middot; added ${escapeHtml(String(a.created_at || '').slice(0, 10))}${a.last_login ? ' &middot; last login ' + escapeHtml(String(a.last_login).slice(0, 16).replace('T', ' ')) : ' &middot; never logged in'}</span>
+                </div>
+                <button class="btn btn-secondary btn-sm" data-id="${a.id}" data-user="${escapeHtml(a.username)}" data-me="${a.is_me ? 1 : 0}" onclick="changeAdminPassword(this.dataset.id, this.dataset.user, this.dataset.me === '1')">Password</button>
+                ${a.is_me ? '' : `<button class="btn btn-danger btn-sm" data-id="${a.id}" data-user="${escapeHtml(a.username)}" onclick="deleteAdmin(this.dataset.id, this.dataset.user)" title="Remove this admin">Delete</button>`}
+            </div>`).join('') || '<p class="settings-empty">No accounts.</p>';
+    } catch (e) { /* card keeps its loading line */ }
+}
+async function createAdmin(){
+    const username = document.getElementById('newAdminUser').value.trim();
+    const email = document.getElementById('newAdminEmail').value.trim();
+    const password = document.getElementById('newAdminPass').value;
+    if (!username) { showToast('Enter a username.', 'error'); return; }
+    if (!password) { showToast('Enter an initial password.', 'error'); return; }
+    try {
+        const res = await fetch('api/admins.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ csrf_token: CSRF_TOKEN, username, email, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Admin account "${username}" created.`, 'success');
+            document.getElementById('newAdminUser').value = '';
+            document.getElementById('newAdminEmail').value = '';
+            document.getElementById('newAdminPass').value = '';
+            loadAdminAccounts();
+        } else {
+            showToast(data.error || 'Could not create the account.', 'error');
+        }
+    } catch (e) {
+        showToast('Could not create the account.', 'error');
+    }
+}
+async function changeAdminPassword(id, username, isMe){
+    const next = prompt(`New password for "${username}" (8+ chars, letters and numbers):`, '');
+    if (next === null || next === '') return;
+    const payload = { csrf_token: CSRF_TOKEN, id: Number(id), password: next };
+    if (isMe) {
+        const cur = prompt('This is your own account - enter your CURRENT password to confirm:', '');
+        if (cur === null) return;
+        payload.current_password = cur;
+    }
+    try {
+        const res = await fetch('api/admins.php', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Password updated for "${username}".`, 'success');
+            loadAdminAccounts();
+        } else {
+            showToast(data.error || 'Could not update the password.', 'error');
+        }
+    } catch (e) {
+        showToast('Could not update the password.', 'error');
+    }
+}
+async function deleteAdmin(id, username){
+    if (!confirm(`Remove the admin account "${username}"? They will no longer be able to sign in.`)) return;
+    try {
+        const res = await fetch('api/admins.php', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ csrf_token: CSRF_TOKEN, id: Number(id) })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Admin account "${username}" removed.`, 'success');
+            loadAdminAccounts();
+        } else {
+            showToast(data.error || 'Could not remove the account.', 'error');
+        }
+    } catch (e) {
+        showToast('Could not remove the account.', 'error');
     }
 }
 // ---------- Departments ----------
