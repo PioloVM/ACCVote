@@ -269,7 +269,9 @@ Assert-True "voted-status compares coerce election id types" ($adminSrc -match '
 # (a) The "Reports & Export" entry leaves the 3-pill tab group and becomes
 #     a standalone primary button on the right side of the results header
 #     row (the same zone as the students panel's "+ Register Student").
-Assert-True "results tab bar is a split header with pills left" ($adminSrc -match '(?s)results-tab-row[\s\S]{0,300}class="pill-toggle">\s*<button[^>]*>Overview</button>\s*<button[^>]*>Election Detail</button>\s*</div>') "pills not isolated"
+#     (2026-10-10 redesign: the Overview/Election Detail pair moved from
+#     pill-toggle sort-style pills to a segmented .view-switch.)
+Assert-True "results tab bar is a split header with the view switch left" ($adminSrc -match '(?s)results-tab-row[\s\S]{0,300}class="view-switch">\s*<button[^>]*>Overview</button>\s*<button[^>]*>Election Detail</button>\s*</div>') "view switch not isolated"
 Assert-True "Reports & Export is a standalone primary button on the right" ($adminSrc -match '(?s)results-tab-row[\s\S]{0,700}<button class="btn btn-primary[^"]*"[^>]*resultsView=.reports.; renderResults\(\);">Reports &amp; Export</button>') "reports button not primary/right-side"
 Assert-True "reports button shows an active style on the reports view" ($adminSrc -match 'reports-btn-active') "no active style"
 Assert-True "reports active style is defined in CSS" ($adminSrc -match '\.reports-btn-active\{') "CSS rule missing"
@@ -448,6 +450,17 @@ Assert-True "current page is marked" ($adminSrc -match 'aria-current="page"') "n
 Assert-True "search focus survives the re-render" ($adminSrc -match 'searchFocused' -and $adminSrc -match 'setSelectionRange\(searchCaret, searchCaret\)') "focus not restored after render"
 Assert-True "students page size is 15" ($adminSrc -match 'STUDENTS_PER_PAGE = 15') "page size not 15"
 Assert-True "pagination bar shows whenever there are rows" ($adminSrc -match 'const paginationBar = filtered\.length > 0 \?') "bar still hidden on a single page"
+
+# ----------------------------------------------------------------
+# Section: results view switch (Overview / Election Detail)
+# ----------------------------------------------------------------
+# These two switch the RESULTS VIEW, unlike the Elections status pills
+# (sorters) - they get a segmented-control look: one joined track, the
+# active view a filled segment.
+Assert-True "results tabs use the segmented view switch" ($adminSrc -match 'function resultsTabBar\(\)\{[\s\S]{0,1600}?<div class="view-switch">') "resultsTabBar still on pill-toggle"
+Assert-True "view-switch css exists" ($adminSrc -match '\.view-switch\{display:inline-flex') "no .view-switch rule"
+Assert-True "view switch active state is a filled segment" ($adminSrc -match '(?s)\.view-switch button\.selected\{[^}]*background:var\(--navy\)') "no segment active style"
+Assert-True "view-switch button keyboard focus styled" ($adminSrc -match '\.view-switch button:focus-visible') "focus missing"
 
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex

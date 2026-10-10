@@ -288,6 +288,16 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,
     font-size:.78rem;font-weight:600;cursor:pointer;transition:.15s;
 }
 .pill-toggle button.selected{background:var(--navy);color:#fff;border-color:var(--navy);}
+/* Segmented view switch - for pairs that SWITCH THE VIEW of the same
+   content (Results: Overview / Election Detail), unlike pill-toggle's
+   loose pills which read as sort/filter actions (Elections statuses). */
+.view-switch{display:inline-flex;gap:.2rem;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:.22rem;}
+.view-switch button{
+    border:none;background:transparent;color:var(--muted);padding:.42rem 1.1rem;border-radius:8px;
+    font-size:.78rem;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap;
+}
+.view-switch button:hover{color:var(--ink);}
+.view-switch button.selected{background:var(--navy);color:#fff;box-shadow:0 1px 3px rgba(16,24,40,.18);}
 .alert{padding:.9rem 1rem;border-radius:var(--radius-sm);margin-bottom:1rem;font-size:.9rem;display:flex;align-items:flex-start;gap:.6rem;}
 .alert-success{background:#ecfdf3;color:#065f46;border:1px solid #d1fae5;}
 .alert-error{background:#fef2f2;color:#991b1b;border:1px solid #fee2e2;}
@@ -517,7 +527,7 @@ table.students-table tr:hover td{background:var(--surface-hover);}
 
 /* Visible focus rings — helps anyone navigating by keyboard or with
    assistive tech on mobile, without adding an outline to every mouse click. */
-.btn:focus-visible,.pill-toggle button:focus-visible,.sidebar nav a:focus-visible,
+.btn:focus-visible,.pill-toggle button:focus-visible,.view-switch button:focus-visible,.sidebar nav a:focus-visible,
 .row-actions button:focus-visible,.type-choice:focus-visible{
     outline:2px solid var(--lime-dark);outline-offset:2px;
 }
@@ -3067,10 +3077,12 @@ function resultsTabBar(){
     // The "Reports & Export" entry is deliberately NOT a third pill: it is
     // the panel's export surface, so it sits alone on the right end of the
     // header row styled like every other primary action (e.g. "+ Register
-    // Student"), while Overview / Election Detail stay a plain tab pair.
+    // Student"), while Overview / Election Detail are a segmented VIEW
+    // switch - they change what the panel shows, so they get one joined
+    // track with a filled active segment, not loose sort-style pills.
     return `
     <div class="results-tab-row" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem;">
-        <div class="pill-toggle">
+        <div class="view-switch">
             <button class="${resultsView==='overview'?'selected':''}" onclick="resultsView='overview'; renderResults();">Overview</button>
             <button class="${resultsView==='detail'?'selected':''}" onclick="resultsView='detail'; renderResults();">Election Detail</button>
         </div>
