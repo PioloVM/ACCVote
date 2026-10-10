@@ -480,13 +480,17 @@ table.pos-table input, table.pos-table select{width:100%;padding:.4rem .5rem;bor
 .students-table-wrap{background:var(--surface);border-radius:var(--radius-md);box-shadow:var(--card-shadow);border:1px solid var(--line);overflow-x:auto;}
 .student-avatar{width:32px;height:32px;border-radius:9px;background:var(--navy-3);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:.78rem;flex-shrink:0;}
 .name-cell-flex{display:flex;align-items:center;gap:.65rem;}
-table.students-table{width:100%;border-collapse:collapse;font-size:.85rem;min-width:920px;}
-table.students-table th{text-align:left;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;padding:.85rem 1rem;border-bottom:2px solid var(--line);white-space:nowrap;}
-table.students-table td{padding:.7rem 1rem;border-bottom:1px solid var(--border-soft);vertical-align:middle;white-space:nowrap;}
+table.students-table{width:100%;border-collapse:collapse;font-size:.85rem;table-layout:fixed;}
+table.students-table th{text-align:left;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.03em;padding:.55rem .6rem;border-bottom:2px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+table.students-table td{padding:.55rem .6rem;border-bottom:1px solid var(--border-soft);vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 table.students-table tr:last-child td{border-bottom:none;}
 table.students-table tr:hover td{background:var(--surface-hover);}
-.name-cell{white-space:normal !important;min-width:160px;}
-.name-cell .sub{font-size:.72rem;color:var(--muted);}
+.name-cell{white-space:normal !important;min-width:0;}
+.name-cell-text{min-width:0;flex:1;}
+.name-cell .nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.name-cell .sub{font-size:.72rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Compact pills so status text fits the fixed columns without scrolling */
+.students-table .status-pill{padding:.2rem .45rem;font-size:.68rem;gap:.25rem;}
 .status-pill{display:inline-flex;align-items:center;gap:.35rem;font-size:.72rem;font-weight:700;padding:.28rem .65rem;border-radius:999px;white-space:nowrap;}
 .status-pill.voted{color:#15803d;background:rgba(34,197,94,.12);}
 .status-pill.not-voted{color:#b45309;background:rgba(245,158,11,.12);}
@@ -494,7 +498,7 @@ table.students-table tr:hover td{background:var(--surface-hover);}
 .status-pill.suspended{color:#b91c1c;background:rgba(239,68,68,.1);}
 .status-pill.unregistered{color:#6b7280;background:rgba(107,114,128,.12);}
 .status-pill.normal{color:#475569;background:rgba(100,116,139,.14);}
-.row-actions{display:flex;gap:.4rem;}
+.row-actions{display:flex;gap:.4rem;justify-content:flex-end;}
 .row-actions button{border:none;background:var(--surface-2);color:var(--ink);width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:.85rem;display:inline-flex;align-items:center;justify-content:center;}
 .row-actions button:hover{background:var(--surface-hover);}
 .row-actions button.danger{color:#dc2626;}
@@ -2559,14 +2563,14 @@ async function renderStudentList(forceRefresh = false){
             const vs = voteStatusForStudent(s, studentFilters.election);
             return `
             <tr>
-                <td>${escapeHtml(s.student_id)}</td>
-                <td class="name-cell"><div class="name-cell-flex"><span class="student-avatar">${escapeHtml((s.name || '?').trim().charAt(0).toUpperCase())}</span><span>${escapeHtml(s.name)}<div class="sub">${escapeHtml(s.email || '—')}</div></span></div></td>
-                <td>${escapeHtml(s.department)}</td>
-                <td>${escapeHtml(s.school_year_label || '—')}</td>
-                <td>${escapeHtml(s.year_level || '—')}</td>
-                <td><span class="status-pill ${vs.cssClass}">${vs.label}</span></td>
-                <td><span class="status-pill ${escapeHtml(s.status)}">${escapeHtml(statusLabelMap[s.status] || s.status)}</span></td>
-                <td>${(s.account_status && s.account_status !== 'normal') ? `<span class="status-pill suspended">${escapeHtml(ACCOUNT_STATUS_LABEL[s.account_status] || s.account_status)}</span>` : '<span class="status-pill normal">Normal</span>'}</td>
+                <td title="${escapeHtml(s.student_id)}">${escapeHtml(s.student_id)}</td>
+                <td class="name-cell" title="${escapeHtml(s.name)}${s.email ? ' — ' + escapeHtml(s.email) : ''}"><div class="name-cell-flex"><span class="student-avatar">${escapeHtml((s.name || '?').trim().charAt(0).toUpperCase())}</span><span class="name-cell-text"><span class="nm">${escapeHtml(s.name)}</span><div class="sub">${escapeHtml(s.email || '-')}</div></span></div></td>
+                <td title="${escapeHtml(s.department)}">${escapeHtml(s.department)}</td>
+                <td title="${escapeHtml(s.school_year_label || '-')}">${escapeHtml(s.school_year_label || '-')}</td>
+                <td>${escapeHtml(s.year_level || '-')}</td>
+                <td title="${escapeHtml(vs.label)}"><span class="status-pill ${vs.cssClass}">${vs.label}</span></td>
+                <td title="${escapeHtml(statusLabelMap[s.status] || s.status)}"><span class="status-pill ${escapeHtml(s.status)}">${escapeHtml(statusLabelMap[s.status] || s.status)}</span></td>
+                <td title="${(s.account_status && s.account_status !== 'normal') ? escapeHtml(ACCOUNT_STATUS_LABEL[s.account_status] || s.account_status) : 'Normal'}">${(s.account_status && s.account_status !== 'normal') ? `<span class="status-pill suspended">${escapeHtml(ACCOUNT_STATUS_LABEL[s.account_status] || s.account_status)}</span>` : '<span class="status-pill normal">Normal</span>'}</td>
                 <td>
                     <div class="row-actions">
                         <button title="Edit" onclick="editStudent(${s.id})">✎</button>
@@ -2648,6 +2652,9 @@ async function renderStudentList(forceRefresh = false){
                 </div>
                 <div class="students-table-wrap">
                     <table class="students-table">
+                        <colgroup>
+                            <col style="width:10%"><col style="width:22%"><col style="width:18%"><col style="width:9%"><col style="width:8%"><col style="width:10%"><col style="width:8%"><col style="width:7%"><col style="width:6%">
+                        </colgroup>
                         <thead><tr>
                             <th>Student ID</th><th>Full Name</th><th>Faculty</th><th>School Year</th><th>Year Level</th><th>Voter Status</th><th>Account</th><th>Lifecycle</th><th></th>
                         </tr></thead>

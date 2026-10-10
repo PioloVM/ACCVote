@@ -427,6 +427,18 @@ Assert-True "both quick helpers still defined" ($adminSrc -match 'function quick
 # html/body overflow-x:hidden clips it. min-width:0 restores the bound.
 Assert-True "main-content is bounded against min-content push" ($adminSrc -match '\.main-content\{[^}]*min-width:0') "min-width:0 missing from .main-content"
 
+# ----------------------------------------------------------------
+# Section: students table fits its width (no sideways scroll)
+# ----------------------------------------------------------------
+# Partner approved vertical scrolling but wants every column visible
+# left-to-right: fixed layout + colgroup widths + ellipsis + tooltips
+# replace the min-width:920px horizontal-scroll design.
+Assert-True "students table uses fixed layout, no forced min-width" ($adminSrc -match 'table\.students-table\{[^}]*table-layout:fixed' -and $adminSrc -notmatch 'min-width:920px') "table still forced wide"
+Assert-True "students table declares colgroup widths" ($adminSrc -match '<colgroup>' -and $adminSrc -match '<col style="width:22%">') "no colgroup widths"
+Assert-True "student cells ellipsize instead of overflowing" ($adminSrc -match '(?s)table\.students-table td\{[^}]*text-overflow:ellipsis') "cells not ellipsized"
+Assert-True "faculty cell carries a hover title" ($adminSrc -match 'td title="\$\{escapeHtml\(s\.department\)\}"') "no tooltip on faculty"
+Assert-True "name cell carries a hover title" ($adminSrc -match 'td class="name-cell" title=') "no tooltip on name"
+
 # JS PARSE GUARD — a syntax error in a page's main inline script kills every
 # function on it (the HTML still renders; nothing responds) and the regex
 # checks above cannot see that. Extract the admin page's main script and
