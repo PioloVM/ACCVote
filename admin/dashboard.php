@@ -490,6 +490,12 @@ table.pos-table input, table.pos-table select{width:100%;padding:.4rem .5rem;bor
 .throttle-info strong{font-size:.82rem}
 .throttle-id{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .throttle-count{font-size:.75rem;color:var(--muted);white-space:nowrap}
+/* Batch A4: maintenance card in Settings */
+.maintenance-row{display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-top:1px solid var(--line)}
+.maintenance-row:first-of-type{border-top:none}
+.mt-info{display:flex;flex-direction:column;gap:.1rem;flex:1;min-width:0}
+.mt-info strong{font-size:.82rem}
+.mt-count{font-size:.72rem;color:var(--muted);font-family:var(--font-mono)}
 .log-item{position:relative;}
 .log-item .log-dot{width:7px;height:7px;border-radius:50%;background:var(--lime);flex-shrink:0;margin-top:.4rem;}
 
@@ -4427,9 +4433,61 @@ function renderSettingsContent(){
                 <button class="btn btn-primary btn-sm" onclick="createYearLevel()">+ Add Year Level</button>
             </div>
         </div>
+    
+        <div class="card">
+            <h2 class="section-title">Maintenance</h2>
+            <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">One-click cleanups for tables that only grow. Each action asks for confirmation and is recorded in the activity log.</p>
+            <div class="maintenance-row">
+                <div class="mt-info"><strong>Vote drafts from closed or archived elections</strong><span class="mt-count" id="mt-drafts-count">...</span></div>
+                <button class="btn btn-secondary btn-sm" onclick="pruneMaintenance('prune_drafts')" title="These drafts can never be submitted any more">Clean up</button>
+            </div>
+            <div class="maintenance-row">
+                <div class="mt-info"><strong>Login attempt rows older than 7 days</strong><span class="mt-count" id="mt-attempts-count">...</span></div>
+                <button class="btn btn-secondary btn-sm" onclick="pruneMaintenance('prune_attempts')" title="Keeps the active 5-minute throttle window intact">Clean up</button>
+            </div>
+            <div class="maintenance-row">
+                <div class="mt-info"><strong>Activity log lines older than one year</strong><span class="mt-count" id="mt-logs-count">...</span></div>
+                <button class="btn btn-secondary btn-sm" onclick="pruneMaintenance('prune_logs')" title="Keeps the current school year's trail">Clean up</button>
+            </div>
+        </div>
     `;
+    loadMaintenanceCounts();
 }
 
+// ---------- Maintenance (Batch A4) ----------
+async function loadMaintenanceCounts(){
+    try {
+        const res = await fetch(`${SETTINGS_API}?type=maintenance`);
+        const c = await res.json();
+        document.getElementById('mt-drafts-count').textContent = c.drafts_closed_elections + ' row(s)';
+        document.getElementById('mt-attempts-count').textContent = c.attempts_older_than_7d + ' row(s)';
+        document.getElementById('mt-logs-count').textContent = c.logs_older_than_365d + ' row(s)';
+    } catch (e) { /* counts stay "..." - the actions still work */ }
+}
+async function pruneMaintenance(action){
+    const labels = {
+        prune_drafts: 'Delete vote drafts belonging to closed or archived elections?',
+        prune_attempts: 'Delete login attempt rows older than 7 days?',
+        prune_logs: 'Delete activity log lines older than one year?'
+    };
+    if (!confirm(labels[action] || 'Run this cleanup?')) return;
+    try {
+        const res = await fetch(SETTINGS_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ csrf_token: CSRF_TOKEN, type: 'maintenance', action })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Cleanup done - ${data.removed} row(s) removed.`, 'success');
+            loadMaintenanceCounts();
+        } else {
+            showToast(data.error || 'Cleanup failed.', 'error');
+        }
+    } catch (e) {
+        showToast('Cleanup failed.', 'error');
+    }
+}
 // ---------- Departments ----------
 async function createDepartment(){
     const name = document.getElementById('newDeptName').value.trim();

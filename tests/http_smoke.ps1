@@ -649,6 +649,65 @@ Assert-True "unblock handler exists in the logs view" ($adminSrc -match 'functio
 & $mysql -u root voting_app -e "DELETE FROM login_attempts WHERE identifier LIKE '%203.0.113.9' OR identifier='vote_submit:user:3';" 2>&1 | Out-Null
 Remove-Item $ajar -Force -ErrorAction SilentlyContinue
 
+# ----------------------------------------------------------------
+# Section: Batch A4 - maintenance prune (Settings view)
+# ----------------------------------------------------------------
+# Fixture: one stale + one live row of every prunable kind. A CLOSED and
+# an ONGOING fixture election each carry a draft - only the closed one's
+# draft may be pruned. Fresh admin session (mjar): A3 deleted its own jar.
+& $mysql -u root voting_app -e "DELETE FROM vote_drafts WHERE election_id IN (SELECT id FROM elections WHERE name LIKE 'PRUNE FIXTURE%'); DELETE FROM elections WHERE name LIKE 'PRUNE FIXTURE%'; DELETE FROM activity_logs WHERE admin_username='fixture'; DELETE FROM login_attempts; INSERT INTO login_attempts (identifier, attempted_at) VALUES ('old_prune:1', NOW() - INTERVAL 10 DAY), ('hot_prune:1', NOW()); INSERT INTO activity_logs (admin_username, action, created_at) VALUES ('fixture', 'old log line', NOW() - INTERVAL 400 DAY); INSERT INTO elections (name, type, status, start_date, end_date) VALUES ('PRUNE FIXTURE closed', 'SSG', 'closed', NOW() - INTERVAL 10 DAY, NOW() - INTERVAL 5 DAY), ('PRUNE FIXTURE ongoing', 'SSG', 'ongoing', NOW() - INTERVAL 1 DAY, NOW() + INTERVAL 5 DAY); INSERT INTO vote_drafts (user_id, election_id, selections) SELECT 3, id, '{}' FROM elections WHERE name LIKE 'PRUNE FIXTURE%';" 2>&1 | Out-Null
+
+$mjar = [System.IO.Path]::GetTempFileName()
+$mLoginHtml = ((curl.exe -s -c $mjar "$base/admin/login.php") -join "`n")
+$mToken = [regex]::Match($mLoginHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$mCode = curl.exe -s -b $mjar -c $mjar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$mToken&username=admin&password=admin123"
+Assert-True "maintenance section: admin login succeeds (302)" ($mCode -eq "302") "got $mCode"
+$mDash = ((curl.exe -s -b $mjar "$base/admin/dashboard.php") -join "`n")
+$mCsrf = [regex]::Match($mDash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+
+$mc = ((curl.exe -s -b $mjar "$base/admin/api/settings.php?type=maintenance") -join "") | ConvertFrom-Json
+Assert-True "maintenance counts include closed-election drafts" ($mc.drafts_closed_elections -ge 1) "got $($mc.drafts_closed_elections)"
+Assert-True "maintenance counts include stale attempts" ($mc.attempts_older_than_7d -ge 1) "got $($mc.attempts_older_than_7d)"
+Assert-True "maintenance counts include year-old logs" ($mc.logs_older_than_365d -ge 1) "got $($mc.logs_older_than_365d)"
+
+$mBody = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($mBody, '{ "csrf_token": "' + $mCsrf + '", "type": "maintenance", "action": "prune_drafts" }')
+$pr1 = ((curl.exe -s -b $mjar -X POST "$base/admin/api/settings.php" --data-binary "@$mBody") -join "")
+$pr1o = $pr1 | ConvertFrom-Json
+Assert-True "prune_drafts succeeds" ($pr1o.success -eq $true) $pr1
+$closedLeft = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM vote_drafts vd JOIN elections e ON e.id=vd.election_id WHERE e.name='PRUNE FIXTURE closed';" | Out-String)
+Assert-True "closed election's draft pruned" ($closedLeft -match '\b0\b') "left: $closedLeft"
+$openLeft = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM vote_drafts vd JOIN elections e ON e.id=vd.election_id WHERE e.name='PRUNE FIXTURE ongoing';" | Out-String)
+Assert-True "ongoing election's draft survives" ($openLeft -match '\b1\b') "left: $openLeft"
+
+[System.IO.File]::WriteAllText($mBody, '{ "csrf_token": "' + $mCsrf + '", "type": "maintenance", "action": "prune_attempts" }')
+$pr2 = ((curl.exe -s -b $mjar -X POST "$base/admin/api/settings.php" --data-binary "@$mBody") -join "")
+$pr2o = $pr2 | ConvertFrom-Json
+Assert-True "prune_attempts succeeds" ($pr2o.success -eq $true) $pr2
+$attLeft = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM login_attempts WHERE identifier='hot_prune:1';" | Out-String)
+Assert-True "hot attempt row survives prune_attempts" ($attLeft -match '\b1\b') "left: $attLeft"
+
+[System.IO.File]::WriteAllText($mBody, '{ "csrf_token": "' + $mCsrf + '", "type": "maintenance", "action": "prune_logs" }')
+$pr3 = ((curl.exe -s -b $mjar -X POST "$base/admin/api/settings.php" --data-binary "@$mBody") -join "")
+$pr3o = $pr3 | ConvertFrom-Json
+Assert-True "prune_logs succeeds" ($pr3o.success -eq $true) $pr3
+$logsLeft = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM activity_logs WHERE admin_username='fixture';" | Out-String)
+Assert-True "year-old log line pruned" ($logsLeft -match '\b0\b') "left: $logsLeft"
+
+[System.IO.File]::WriteAllText($mBody, '{ "csrf_token": "' + $mCsrf + '", "type": "maintenance", "action": "drop_everything" }')
+$badAct = ((curl.exe -s -b $mjar -X POST "$base/admin/api/settings.php" --data-binary "@$mBody") -join "")
+Assert-True "unknown maintenance action refused" ($badAct -match 'Unknown maintenance action') "got: $badAct"
+Remove-Item $mBody -Force -ErrorAction SilentlyContinue
+
+# UI contract: Settings carries the maintenance card + prune handler.
+Assert-True "settings renders maintenance rows" ($adminSrc -match 'maintenance-row') "markup missing"
+Assert-True "settings loads maintenance counts" ($adminSrc -match 'type=maintenance') "counts fetch missing"
+Assert-True "prune handler exists in settings" ($adminSrc -match 'function pruneMaintenance') "handler missing"
+
+# cleanup fixture
+& $mysql -u root voting_app -e "DELETE FROM vote_drafts WHERE election_id IN (SELECT id FROM elections WHERE name LIKE 'PRUNE FIXTURE%'); DELETE FROM elections WHERE name LIKE 'PRUNE FIXTURE%'; DELETE FROM activity_logs WHERE admin_username='fixture'; DELETE FROM login_attempts WHERE identifier IN ('old_prune:1','hot_prune:1');" 2>&1 | Out-Null
+Remove-Item $mjar -Force -ErrorAction SilentlyContinue
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

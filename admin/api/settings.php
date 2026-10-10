@@ -94,6 +94,35 @@ function validateLogoUpload(?string $value): ?string
 }
 
 // ------------------------------------------------------------------
+// GET ?type=maintenance: prune candidates (Settings > Maintenance card)
+// ------------------------------------------------------------------
+// Counts only - the actual pruning is a POST below. Cutoffs are computed
+// in PHP so the SQL stays valid on BOTH engines (MySQL and PostgreSQL
+// quote INTERVAL literals differently).
+if ($method === 'GET' && ($_GET['type'] ?? '') === 'maintenance') {
+    $attemptsCutoff = date('Y-m-d H:i:s', time() - 7 * 86400);
+    $logsCutoff = date('Y-m-d H:i:s', time() - 365 * 86400);
+
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM vote_drafts vd JOIN elections e ON e.id = vd.election_id WHERE e.status IN (\'closed\', \'archived\')');
+    $stmt->execute();
+    $draftsClosed = (int) $stmt->fetchColumn();
+
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM login_attempts WHERE attempted_at < :cutoff');
+    $stmt->execute(['cutoff' => $attemptsCutoff]);
+    $attemptsOld = (int) $stmt->fetchColumn();
+
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM activity_logs WHERE created_at < :cutoff');
+    $stmt->execute(['cutoff' => $logsCutoff]);
+    $logsOld = (int) $stmt->fetchColumn();
+
+    respond([
+        'drafts_closed_elections' => $draftsClosed,
+        'attempts_older_than_7d' => $attemptsOld,
+        'logs_older_than_365d' => $logsOld,
+    ]);
+}
+
+// ------------------------------------------------------------------
 // GET: everything needed to populate dropdowns + the Settings panel
 // ------------------------------------------------------------------
 if ($method === 'GET') {
@@ -139,7 +168,7 @@ if (isRateLimitedKey($pdo, $adminWriteKey, 120, 60)) {
 recordAttemptKey($pdo, $adminWriteKey);
 
 $type = $body['type'] ?? '';
-if (!in_array($type, ['department', 'school_year', 'year_level', 'department_logo', 'site_setting'], true)) {
+if (!in_array($type, ['department', 'school_year', 'year_level', 'department_logo', 'site_setting', 'maintenance'], true)) {
     respond(['error' => 'Invalid type.'], 400);
 }
 
@@ -147,6 +176,50 @@ if (!in_array($type, ['department', 'school_year', 'year_level', 'department_log
 // POST: create
 // ------------------------------------------------------------------
 if ($method === 'POST') {
+    // Maintenance prunes (Settings > Maintenance card). Every action is
+    // idempotent, deletes only clearly-dead rows, and is audit-logged
+    // with its count. SELECT-then-DELETE keeps the draft prune portable
+    // (MySQL has no DELETE ... USING, PostgreSQL has no multi-table
+    // DELETE ... FROM syntax).
+    if ($type === 'maintenance') {
+        $action = (string) ($body['action'] ?? '');
+        $removed = 0;
+        if ($action === 'prune_drafts') {
+            $stmt = $pdo->prepare('SELECT vd.id FROM vote_drafts vd JOIN elections e ON e.id = vd.election_id WHERE e.status IN (\'closed\', \'archived\')');
+            $stmt->execute();
+            $ids = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'id');
+            if ($ids) {
+                $ph = implode(',', array_fill(0, count($ids), '?'));
+                $del = $pdo->prepare("DELETE FROM vote_drafts WHERE id IN ($ph)");
+                $del->execute($ids);
+                $removed = (int) $del->rowCount();
+            }
+            $label = 'Pruned ' . $removed . ' vote draft(s) from closed/archived elections';
+        } elseif ($action === 'prune_attempts') {
+            $cutoff = date('Y-m-d H:i:s', time() - 7 * 86400);
+            $del = $pdo->prepare('DELETE FROM login_attempts WHERE attempted_at < :cutoff');
+            $del->execute(['cutoff' => $cutoff]);
+            $removed = (int) $del->rowCount();
+            $label = 'Pruned ' . $removed . ' login attempt row(s) older than 7 days';
+        } elseif ($action === 'prune_logs') {
+            $cutoff = date('Y-m-d H:i:s', time() - 365 * 86400);
+            $del = $pdo->prepare('DELETE FROM activity_logs WHERE created_at < :cutoff');
+            $del->execute(['cutoff' => $cutoff]);
+            $removed = (int) $del->rowCount();
+            $label = 'Pruned ' . $removed . ' activity log line(s) older than one year';
+        } else {
+            respond(['error' => 'Unknown maintenance action.'], 400);
+        }
+
+        $log = $pdo->prepare('INSERT INTO activity_logs (admin_username, action) VALUES (:username, :action)');
+        $log->execute([
+            'username' => $_SESSION['admin_username'] ?? 'admin',
+            'action' => $label,
+        ]);
+
+        respond(['success' => true, 'removed' => $removed]);
+    }
+
     if ($type === 'department') {
         // The admin only enters a Faculty NAME now — "Code" was removed
         // from the UI as redundant (adviser wants everything labeled with
