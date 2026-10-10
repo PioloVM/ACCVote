@@ -592,6 +592,63 @@ Assert-True ".htaccess sets a Content-Security-Policy" ($htaccessSrc -match 'Hea
 $ciSrc = Get-Content .\.github\workflows\ci.yml -Raw
 Assert-True "CI runs the schema parity check" ($ciSrc -match 'schema_parity\.php') "not wired into CI"
 
+# ----------------------------------------------------------------
+# Section: Batch A3 - admin throttle unlock (logs view)
+# ----------------------------------------------------------------
+# Fixture: one HOT student bucket (inside the 300s window), one STALE
+# bucket (outside it - must NOT be listed), and a vote bucket, all for
+# a documentation-only IP so the real login buckets stay untouched.
+& $mysql -u root voting_app -e "DELETE FROM login_attempts; INSERT INTO login_attempts (identifier, attempted_at) VALUES ('student_login:203.0.113.9', NOW()), ('admin_login:203.0.113.9', NOW() - INTERVAL 2 HOUR), ('vote_submit:user:3', NOW());" 2>&1 | Out-Null
+
+$ajar = [System.IO.Path]::GetTempFileName()
+$adminLoginHtml = ((curl.exe -s -c $ajar "$base/admin/login.php") -join "`n")
+$adminToken = [regex]::Match($adminLoginHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$adminCode = curl.exe -s -b $ajar -c $ajar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$adminToken&username=admin&password=admin123"
+Assert-True "admin login succeeds (302)" ($adminCode -eq "302") "got $adminCode"
+
+$adminDash = ((curl.exe -s -b $ajar "$base/admin/dashboard.php") -join "`n")
+$adminCsrf = [regex]::Match($adminDash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+Assert-True "admin dashboard yields the API csrf token" ($adminCsrf -ne "") "not found"
+
+$thJson = ((curl.exe -s -b $ajar "$base/admin/api/logs.php?throttled=1") -join "")
+$th = $thJson | ConvertFrom-Json
+$thIds = @($th | ForEach-Object { $_.identifier })
+Assert-True "throttled list shows the hot student bucket" ($thIds -contains 'student_login:203.0.113.9') "missing hot id in: $thJson"
+Assert-True "throttled list shows the vote bucket" ($thIds -contains 'vote_submit:user:3') "missing vote id"
+Assert-True "throttled list ignores stale attempts" ($thIds -notcontains 'admin_login:203.0.113.9') "stale id leaked"
+
+# JSON bodies via temp file: PowerShell strips embedded double quotes from
+# native-command arguments (curl received `{ a: 1 }`), so -d '...' can never
+# carry JSON on Windows. Writing the body to a file sidesteps the quoting.
+$delFile = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($delFile, '{ "csrf_token": "' + $adminCsrf + '", "identifier": "student_login:203.0.113.9" }')
+$delJson = ((curl.exe -s -b $ajar -X DELETE "$base/admin/api/logs.php" --data-binary "@$delFile") -join "")
+$delObj = $delJson | ConvertFrom-Json
+Assert-True "unblock succeeds" ($delObj.success -eq $true) $delJson
+$left = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM login_attempts WHERE identifier='student_login:203.0.113.9';" | Out-String)
+Assert-True "throttle rows deleted" ($left -match '\b0\b') "still present: $left"
+$logHit = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM activity_logs WHERE action LIKE 'Unblocked rate-limit bucket%';" | Out-String)
+Assert-True "unblock writes an audit log line" ($logHit -match '[1-9]') "no audit row"
+
+[System.IO.File]::WriteAllText($delFile, '{ "csrf_token": "bogus", "identifier": "student_login:203.0.113.9" }')
+$badJson = ((curl.exe -s -b $ajar -X DELETE "$base/admin/api/logs.php" --data-binary "@$delFile") -join "")
+Assert-True "unblock refuses a bogus csrf token" ($badJson -match 'expired') "accepted: $badJson"
+
+[System.IO.File]::WriteAllText($delFile, '{ "csrf_token": "' + $token + '", "identifier": "vote_submit:user:3" }')
+$sDelCode = curl.exe -s -b $jar -o NUL -w "%{http_code}" -X DELETE "$base/admin/api/logs.php" --data-binary "@$delFile"
+Remove-Item $delFile -Force -ErrorAction SilentlyContinue
+Assert-True "students cannot unblock (401 from api guard)" ($sDelCode -eq '401') "got $sDelCode"
+$voteLeft = (& $mysql -u root voting_app -e "SELECT COUNT(*) FROM login_attempts WHERE identifier='vote_submit:user:3';" | Out-String)
+Assert-True "student attempt left the vote bucket intact" ($voteLeft -match '[1-9]') "bucket was cleared"
+
+# UI contract: the Logs view carries the throttle card + unblock handler.
+Assert-True "logs view renders the throttle card" ($adminSrc -match 'throttle-card') "CSS/markup missing"
+Assert-True "logs view fetches the throttled list" ($adminSrc -match 'throttled=1') "fetch missing"
+Assert-True "unblock handler exists in the logs view" ($adminSrc -match 'function unblockThrottle') "handler missing"
+
+& $mysql -u root voting_app -e "DELETE FROM login_attempts WHERE identifier LIKE '%203.0.113.9' OR identifier='vote_submit:user:3';" 2>&1 | Out-Null
+Remove-Item $ajar -Force -ErrorAction SilentlyContinue
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

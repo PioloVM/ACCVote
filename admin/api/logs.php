@@ -30,7 +30,7 @@ function respond(array $payload, int $status = 200): void
 }
 
 // ---------- GET: most recent activity first ----------
-if ($method === 'GET') {
+if ($method === 'GET' && !isset($_GET['throttled'])) {
     $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 200;
     $limit = max(1, min(500, $limit));
 
@@ -42,6 +42,32 @@ if ($method === 'GET') {
     ');
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
     $stmt->execute();
+
+    respond($stmt->fetchAll());
+}
+
+// ---------- GET ?throttled=1: rate-limit buckets hit inside the window --
+// Backs the Logs view's "Login throttle" card: shows which buckets are
+// currently hot (same 300s window the logins use) so an admin can
+// unblock a student who locked themselves out - or a colleague. Only
+// the user-facing buckets are listed; the internal admin_write keys
+// would just be noise. Cutoff computed in PHP so the SQL stays valid
+// on BOTH engines (MySQL NOW() and Postgres NOW() quote intervals
+// differently).
+if ($method === 'GET' && isset($_GET['throttled'])) {
+    $cutoff = date('Y-m-d H:i:s', time() - 300);
+    $stmt = $pdo->prepare('
+        SELECT identifier, COUNT(*) AS attempts, MAX(attempted_at) AS latest
+        FROM login_attempts
+        WHERE attempted_at > :cutoff
+          AND (identifier LIKE \'student_login:%\'
+            OR identifier LIKE \'admin_login:%\'
+            OR identifier LIKE \'vote_submit:%\')
+        GROUP BY identifier
+        ORDER BY MAX(attempted_at) DESC
+        LIMIT 50
+    ');
+    $stmt->execute(['cutoff' => $cutoff]);
 
     respond($stmt->fetchAll());
 }
@@ -79,6 +105,42 @@ if ($method === 'POST') {
     }
 
     respond(['success' => true]);
+}
+
+// ---------- DELETE: unblock a throttled bucket ------------------------
+// Removes every attempt row for one identifier so a locked-out student
+// (or admin) can try again immediately. Same CSRF + per-admin write
+// throttle + audit logging as the other mutations; the acting admin
+// comes from the session, never the body.
+if ($method === 'DELETE') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($input)) respond(['error' => 'Invalid request body.'], 400);
+    if (!verifyCsrfToken($input['csrf_token'] ?? null)) {
+        respond(['error' => 'Your session expired. Please refresh and try again.'], 403);
+    }
+
+    $adminWriteKey = 'admin_write:admin:' . (int) ($_SESSION['admin_id'] ?? 0);
+    if (isRateLimitedKey($pdo, $adminWriteKey, 120, 60)) {
+        respond(['error' => 'Too many requests. Please slow down.'], 429);
+    }
+    recordAttemptKey($pdo, $adminWriteKey);
+
+    $identifier = trim((string) ($input['identifier'] ?? ''));
+    if ($identifier === '' || mb_strlen($identifier) > 150) {
+        respond(['error' => 'Missing or invalid identifier.'], 400);
+    }
+
+    $stmt = $pdo->prepare('DELETE FROM login_attempts WHERE identifier = :id');
+    $stmt->execute(['id' => $identifier]);
+    $removed = (int) $stmt->rowCount();
+
+    $log = $pdo->prepare('INSERT INTO activity_logs (admin_username, action) VALUES (:username, :action)');
+    $log->execute([
+        'username' => $_SESSION['admin_username'] ?? 'admin',
+        'action' => 'Unblocked rate-limit bucket ' . $identifier . ' (' . $removed . ' attempt row(s) cleared)',
+    ]);
+
+    respond(['success' => true, 'removed' => $removed]);
 }
 
 respond(['error' => 'Method not allowed.'], 405);

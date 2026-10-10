@@ -480,6 +480,16 @@ table.pos-table input, table.pos-table select{width:100%;padding:.4rem .5rem;bor
 .logs-full .log-item{padding:.85rem 1.5rem;}
 .logs-filter{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;}
 .log-day-header{padding:.7rem 1.5rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--surface-2);border-bottom:1px solid var(--line);}
+/* Batch A3: throttle card in the Logs view */
+.throttle-card{margin:0 0 1rem;padding:1rem 1.25rem;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.throttle-head h3{margin:0 0 .15rem;font-size:.95rem}
+.throttle-head p{margin:0 0 .75rem;font-size:.78rem;color:var(--muted)}
+.throttle-row{display:flex;align-items:center;gap:.75rem;padding:.5rem 0;border-top:1px solid var(--line)}
+.throttle-row:first-of-type{border-top:none}
+.throttle-info{display:flex;flex-direction:column;gap:.1rem;min-width:0;flex:1}
+.throttle-info strong{font-size:.82rem}
+.throttle-id{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.throttle-count{font-size:.75rem;color:var(--muted);white-space:nowrap}
 .log-item{position:relative;}
 .log-item .log-dot{width:7px;height:7px;border-radius:50%;background:var(--lime);flex-shrink:0;margin-top:.4rem;}
 
@@ -4183,11 +4193,61 @@ async function renderLogs(){
             html += `<div class="log-item"><span class="log-dot"></span><span class="log-time">${escapeHtml(logTimeOnly(l.created_at))}</span><span class="log-text">${l.admin_username ? `<strong>${escapeHtml(l.admin_username)}</strong> — ` : ''}${escapeHtml(l.action)}</span></div>`;
         });
 
+                // Batch A3: fetch the currently-hot throttle buckets for the card
+        // above the log (non-critical - a failed fetch just skips the card,
+        // the activity list still renders).
+        let throttleHtml = '';
+        try {
+            const th = await fetch(`${LOGS_API}?throttled=1`).then(r => r.json());
+            if (Array.isArray(th) && th.length) throttleHtml = renderThrottleCard(th);
+        } catch (e) { /* card omitted */ }
+
         document.getElementById('panel-logs').innerHTML = `
-            <div class="logs-full">${html || '<div class="coming-soon"><div class="cs-icon">📜</div><h3>No activity yet</h3><p>Actions admins take will show up here.</p></div>'}</div>
+            ${throttleHtml}<div class="logs-full">${html || '<div class="coming-soon"><div class="cs-icon">📜</div><h3>No activity yet</h3><p>Actions admins take will show up here.</p></div>'}</div>
         `;
     } catch (e) {
         document.getElementById('panel-logs').innerHTML = '<div class="alert alert-error">Could not load activity logs.</div>';
+    }
+}
+
+// Batch A3: the "Login throttle" card - buckets that hit the 8-per-5-min
+// rate limit inside the current window, with one-click unblock.
+const THROTTLE_LABELS = { student_login: 'Student login', admin_login: 'Admin login', vote_submit: 'Vote submission' };
+function throttleLabel(identifier){
+    const prefix = Object.keys(THROTTLE_LABELS).find(p => identifier.startsWith(p + ':'));
+    return prefix ? THROTTLE_LABELS[prefix] : 'Other';
+}
+function renderThrottleCard(rows){
+    const itemHtml = rows.map(r => `
+        <div class="throttle-row">
+            <div class="throttle-info">
+                <strong>${escapeHtml(throttleLabel(r.identifier))}</strong>
+                <span class="throttle-id">${escapeHtml(r.identifier)}</span>
+            </div>
+            <span class="throttle-count">${escapeHtml(String(r.attempts))} attempt(s)</span>
+            <button class="btn btn-sm" onclick="unblockThrottle('${escapeHtml(r.identifier)}')">Unblock</button>
+        </div>`).join('');
+    return `<div class="throttle-card">
+        <div class="throttle-head"><h3>Login throttle</h3><p>Buckets that hit the rate limit in the last 5 minutes. Unblock to let them try again immediately.</p></div>
+        ${itemHtml}
+    </div>`;
+}
+async function unblockThrottle(identifier){
+    try {
+        const res = await fetch(LOGS_API, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ csrf_token: CSRF_TOKEN, identifier })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Unblocked ${identifier} - ${data.removed} attempt row(s) cleared.`, 'success');
+            renderLogs();
+        } else {
+            showToast(data.error || 'Could not unblock that bucket.', 'error');
+        }
+    } catch (e) {
+        showToast('Could not unblock that bucket.', 'error');
     }
 }
 
