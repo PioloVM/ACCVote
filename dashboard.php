@@ -8,14 +8,25 @@
     $pdo = getDbConnection();
     syncElectionStatuses($pdo);
 
-    // Get current user
-    $stmt = $pdo->prepare('SELECT id, name, department, year_level FROM users WHERE id = :id');
+    // Get current user - including the password_reset_pending flag the
+    // forced-change gate below reads (Batch B2). One query, no extra hit.
+    $stmt = $pdo->prepare('SELECT id, name, department, year_level, password_reset_pending FROM users WHERE id = :id');
     $stmt->execute(['id' => $_SESSION['user_id']]);
     $user = $stmt->fetch();
 
     if (!$user) {
         session_destroy();
         header('Location: index.php');
+        exit;
+    }
+
+    // Forced password change gate: an admin-issued temporary password
+    // (admin/api/students.php resetPassword) sets the flag, and the
+    // dashboard renders NOTHING until the student picks a real password.
+    // change-password.php is the only way out - it validates the policy,
+    // updates the hash, and clears the flag.
+    if (!empty($user['password_reset_pending'])) {
+        header('Location: change-password.php');
         exit;
     }
 

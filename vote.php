@@ -46,13 +46,22 @@ try {
 
     // Lock the user row so two rapid submissions (double-click, two tabs)
     // can't both pass validation before either has inserted a vote.
-    $stmt = $pdo->prepare('SELECT id, department, year_level FROM users WHERE id = :id FOR UPDATE');
+    $stmt = $pdo->prepare('SELECT id, department, year_level, password_reset_pending FROM users WHERE id = :id FOR UPDATE');
     $stmt->execute(['id' => $userId]);
     $voter = $stmt->fetch();
 
     if (!$voter) {
         $pdo->rollBack();
         jsonResponse(['success' => false, 'message' => 'User not found.'], 404);
+    }
+
+    // Forced password change: an admin-issued temporary password sets
+    // users.password_reset_pending - no ballot may be cast until the
+    // student picks a real one. The dashboard gate (change-password.php)
+    // handles the UI side; this closes the hand-crafted POST path too.
+    if (!empty($voter['password_reset_pending'])) {
+        $pdo->rollBack();
+        jsonResponse(['success' => false, 'message' => 'You must set a new password before voting.'], 403);
     }
 
     // Load the election and confirm it's actually open right now.

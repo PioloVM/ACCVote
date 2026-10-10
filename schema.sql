@@ -128,6 +128,7 @@ CREATE TABLE users (
     email               VARCHAR(100),
     school_year_id      INTEGER REFERENCES school_years(id),
     account_status      VARCHAR(30) NOT NULL DEFAULT 'normal',
+    password_reset_pending BOOLEAN NOT NULL DEFAULT FALSE,
     CONSTRAINT users_account_status_check CHECK (account_status IN (
         'normal','repeating','undergrad_repeating',
         'suspended_repeating','dropped','graduated'))

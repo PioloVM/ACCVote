@@ -2860,6 +2860,11 @@ function renderStudentForm(){
             </div>
             <p class="pw-hint">Passwords are hashed. Setting a new one marks account Active.</p>
         </div>
+        ${isEdit ? `<div class="form-row" style="max-width:460px;">
+            <label>Account Recovery</label>
+            <button type="button" class="btn btn-danger btn-sm" onclick="resetStudentPassword()" title="Issue a one-time temporary password">Reset Password</button>
+            <p class="pw-hint">Issues a one-time temporary password (shown once). The student must set a real password at their next login - voting stays locked until they do.</p>
+        </div>` : ''}
     </div>
     ${isEdit ? `
     <div class="wizard-section">
@@ -2966,6 +2971,33 @@ async function resetVoteForElection(electionId){
     } catch (e) { showToast('Network error. Please try again.', 'error'); }
 }
 
+// Issues a one-time temporary password (Batch B2 - password recovery
+// without an email service). The clear value is shown ONCE via toast;
+// only the hash is stored, and users.password_reset_pending forces the
+// student through the change-password gate at their next login.
+async function resetStudentPassword(){
+    const confirmed = await showConfirmModal({
+        title: "Reset this student's password?",
+        message: `A one-time temporary password will be generated for ${studentDraft.fullName || 'this student'}. It is shown only once - write it down now. They must choose a new password at their next login.`,
+        confirmLabel: 'Generate Temporary Password',
+    });
+    if (!confirmed) return;
+    try {
+        const res = await fetch(STUDENTS_API, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({csrf_token: CSRF_TOKEN, id: studentDraft.id, resetPassword: true})
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            allStudentsCache = null;
+            addLog(`Reset password for ${studentDraft.fullName} (${studentDraft.studentId})`);
+            showToast(`Temporary password for ${studentDraft.studentId}: ${data.temp_password} - shown once.`, 'info', { duration: 30000 });
+        } else {
+            showToast(data.error || 'Failed to reset password.', 'error');
+        }
+    } catch (e) { showToast('Network error. Please try again.', 'error'); }
+}
 async function saveStudent(){
     // Clear any previous inline error states before re-validating.
     ['s_studentId','s_fullName','s_department','s_schoolYear','s_password','s_yearLevel','s_accountStatus'].forEach(id => {

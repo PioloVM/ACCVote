@@ -141,6 +141,7 @@ CREATE TABLE users (
     email VARCHAR(100) NULL,
     school_year_id INT NULL,
     account_status VARCHAR(30) NOT NULL DEFAULT 'normal',
+    password_reset_pending BOOLEAN NOT NULL DEFAULT 0,
     KEY users_school_year_id_idx (school_year_id),
     CONSTRAINT users_school_year_id_fkey FOREIGN KEY (school_year_id)
         REFERENCES school_years(id),

@@ -831,8 +831,137 @@ Assert-True "delete admin handler exists" ($adminSrc -match 'function deleteAdmi
 Assert-True "password change handler exists" ($adminSrc -match 'function changeAdminPassword') "handler missing"
 
 # cleanup
-& $mysql -u root voting_app -e "DELETE FROM login_attempts; DELETE FROM activity_logs WHERE action LIKE '%suitexadmin%' OR action LIKE 'Created admin account%' OR action LIKE 'Removed admin account%' OR action LIKE 'Changed password%';" 2>&1 | Out-Null
+& $mysql -u root voting_app -e "DELETE FROM login_attempts; DELETE FROM activity_logs WHERE action LIKE '%suitexadmin%' OR action LIKE 'Created admin account%' OR action LIKE 'Removed admin account%' OR action LIKE 'Changed%password%' OR action LIKE 'Reset password for admin%';" 2>&1 | Out-Null
 Remove-Item $bBody, $sjar -Force -ErrorAction SilentlyContinue
+
+# ----------------------------------------------------------------
+# Section: Batch B2 - student password recovery (temp password flow)
+# ----------------------------------------------------------------
+# Source pins: BOTH schema files must carry the flag column so fresh
+# installs on either engine get it (schema_parity keeps them equal),
+# and the gate page must exist.
+Assert-True "mysql schema has password_reset_pending" ((Get-Content .\schema.mysql.sql -Raw) -match 'password_reset_pending') "missing"
+Assert-True "pg schema has password_reset_pending" ((Get-Content .\schema.sql -Raw) -match 'password_reset_pending') "missing"
+$ccSrc = Get-Content .\change-password.php -Raw -ErrorAction SilentlyContinue
+Assert-True "change-password.php gate page exists" ($ccSrc -and $ccSrc -match 'pw-reset-gate') "missing"
+
+# Save the fixture student's exact credentials for a byte-exact restore
+# AFTER the flow - this account (987654321/password123) is the human's
+# login, so a green run must never leave it changed.
+# NOTE: the suite runs with $ErrorActionPreference='Stop', so a mysql
+# stderr line through 2>&1 would be a TERMINATING error record. The
+# helper drops to Continue around the call - RED runs (missing column)
+# must fail assertions, not kill the script.
+function Invoke-MysqlOut([string]$sql) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { return (& $mysql -N -B -u root voting_app -e $sql 2>&1 | Out-String).Trim() }
+    finally { $ErrorActionPreference = $old }
+}
+$fixTsv = Invoke-MysqlOut "SELECT id, password, IFNULL(password_reset_pending,0) FROM users WHERE student_id='987654321';"
+$fixParts = $fixTsv -split "`t"
+$fixId = $fixParts[0]; $fixHash = $fixParts[1]; $fixFlag = $fixParts[2]
+Assert-True "fixture student + hash saved" (($fixId -ne '') -and ($fixHash -ne '') -and ($fixId -match '^\d+$')) "got: $fixTsv"
+
+# Admin session for the reset call.
+$ajar2 = [System.IO.Path]::GetTempFileName()
+$a2h = ((curl.exe -s -c $ajar2 "$base/admin/login.php") -join "`n")
+$a2t = [regex]::Match($a2h, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$a2code = curl.exe -s -b $ajar2 -c $ajar2 -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$a2t&username=admin&password=admin123"
+Assert-True "B2 admin session login (302)" ($a2code -eq "302") "got $a2code"
+$a2dash = ((curl.exe -s -b $ajar2 "$base/admin/dashboard.php") -join "`n")
+$a2csrf = [regex]::Match($a2dash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+
+# Admin issues a temporary password through students.php.
+$rBody = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($rBody, '{ "csrf_token": "' + $a2csrf + '", "id": ' + $fixId + ', "resetPassword": true }')
+$r1 = ((curl.exe -s -b $ajar2 -X PUT "$base/admin/api/students.php" --data-binary "@$rBody") -join "")
+Assert-True "admin temp-password reset succeeds" ($r1 -match '"success":true') "got: $r1"
+$tempPw = [regex]::Match($r1, '"temp_password":"([^"]+)"').Groups[1].Value
+Assert-True "temp password meets policy (8+, letters+numbers)" (($tempPw.Length -ge 8) -and ($tempPw -match '[A-Za-z]') -and ($tempPw -match '\d')) "got: $tempPw"
+
+# Fresh-jar student login probe (same reasoning as the admin probes:
+# a success rotates the session and drops the pre-auth token).
+function New-StudentLoginProbe([string]$sid, [string]$pw) {
+    $j = [System.IO.Path]::GetTempFileName()
+    $h = ((curl.exe -s -c $j "$base/login.php") -join "`n")
+    $t = [regex]::Match($h, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+    $code = curl.exe -s -b $j -c $j -o NUL -w "%{http_code}" -X POST "$base/login.php" -d "csrf_token=$t&student_id=$sid&password=$pw"
+    Remove-Item $j -Force -ErrorAction SilentlyContinue
+    return $code
+}
+
+# Sticky session logged in WITH the temp password - used for the gate.
+$pjar = [System.IO.Path]::GetTempFileName()
+$ph = ((curl.exe -s -c $pjar "$base/login.php") -join "`n")
+$pt = [regex]::Match($ph, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$pcode = curl.exe -s -b $pjar -c $pjar -o NUL -w "%{http_code}" -X POST "$base/login.php" -d "csrf_token=$pt&student_id=987654321&password=$tempPw"
+Assert-True "student session with temp password (302)" ($pcode -eq "302") "got $pcode"
+
+# Dashboard must bounce the pending student to the gate.
+$gHdr = [System.IO.Path]::GetTempFileName()
+$gCode = curl.exe -s -b $pjar -c $pjar -o NUL -D $gHdr -w "%{http_code}" "$base/dashboard.php"
+$gLoc = ((Get-Content $gHdr) | Select-String '^Location:').ToString()
+Remove-Item $gHdr -Force -ErrorAction SilentlyContinue
+Assert-True "dashboard redirects pending student to the gate" (($gCode -eq "302") -and ($gLoc -match 'change-password\.php')) "got $gCode / $gLoc"
+
+$gateHtml = ((curl.exe -s -b $pjar "$base/change-password.php") -join "`n")
+Assert-True "gate page renders (pw-reset-gate)" ($gateHtml -match 'pw-reset-gate') "missing"
+$gTok = [regex]::Match($gateHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+Assert-True "gate form carries a csrf token" ($gTok -ne "") "not found"
+
+# Weak password refused, flag untouched.
+$wCode = curl.exe -s -b $pjar -c $pjar -o NUL -w "%{http_code}" -X POST "$base/change-password.php" -d "csrf_token=$gTok&password=short&confirm=short"
+Assert-True "gate refuses weak password (200)" ($wCode -eq "200") "got $wCode"
+$flagA = Invoke-MysqlOut "SELECT password_reset_pending FROM users WHERE student_id='987654321';"
+Assert-True "flag still set after weak attempt" ($flagA -eq "1") "got '$flagA'"
+
+# Bogus CSRF refused.
+$bCode = curl.exe -s -b $pjar -o NUL -w "%{http_code}" -X POST "$base/change-password.php" -d "csrf_token=bogus&password=StudentNew1&confirm=StudentNew1"
+Assert-True "gate refuses bad csrf (200)" ($bCode -eq "200") "got $bCode"
+
+# Valid change succeeds and clears the flag.
+$chHdr = [System.IO.Path]::GetTempFileName()
+$cCode = curl.exe -s -b $pjar -c $pjar -o NUL -D $chHdr -w "%{http_code}" -X POST "$base/change-password.php" -d "csrf_token=$gTok&password=StudentNew1&confirm=StudentNew1"
+Remove-Item $chHdr -Force -ErrorAction SilentlyContinue
+Assert-True "password change succeeds (302)" ($cCode -eq "302") "got $cCode"
+$flagB = Invoke-MysqlOut "SELECT password_reset_pending FROM users WHERE student_id='987654321';"
+Assert-True "flag cleared after change" ($flagB -eq "0") "got '$flagB'"
+
+# Gate no longer intercepts this session.
+$ccNow = curl.exe -s -b $pjar -o NUL -w "%{http_code}" "$base/change-password.php"
+Assert-True "change-password redirects when not pending (302)" ($ccNow -eq "302") "got $ccNow"
+$dashNow = curl.exe -s -b $pjar -o NUL -w "%{http_code}" "$base/dashboard.php"
+Assert-True "dashboard serves normally after change (200)" ($dashNow -eq "200") "got $dashNow"
+
+# Old temp is dead; the new password works.
+$oldCode = New-StudentLoginProbe '987654321' $tempPw
+Assert-True "temp password dead after change (not 302)" ($oldCode -ne "302") "got $oldCode"
+$newCode = New-StudentLoginProbe '987654321' 'StudentNew1'
+Assert-True "new password works (302)" ($newCode -eq "302") "got $newCode"
+
+# Enforcement + audit + UI source pins.
+$voteSrc = Get-Content .\vote.php -Raw
+Assert-True "vote.php blocks pending-password students" ($voteSrc -match 'password_reset_pending') "missing"
+$audB2 = Invoke-MysqlOut "SELECT COUNT(*) FROM activity_logs WHERE action LIKE 'Reset password for student%';"
+Assert-True "temp reset is audited" ($audB2 -match '^[1-9][0-9]*$') "got '$audB2'"
+Assert-True "student form has Reset password handler" ($adminSrc -match 'function resetStudentPassword') "handler missing"
+Assert-True "reset action sends the resetPassword flag" ($adminSrc -match 'resetPassword: true') "payload missing"
+
+# RESTORE the fixture student byte-for-byte (saved hash + flag), then
+# prove the human's original password works again.
+$sqlFile = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($sqlFile, "UPDATE users SET password='" + $fixHash + "', password_reset_pending=" + $fixFlag + " WHERE id=" + $fixId + ";")
+$oldEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try { (Get-Content $sqlFile -Raw) | & $mysql -u root voting_app 2>&1 | Out-Null }
+finally { $ErrorActionPreference = $oldEap }
+Remove-Item $sqlFile -Force -ErrorAction SilentlyContinue
+$restoreCode = New-StudentLoginProbe '987654321' 'password123'
+Assert-True "fixture credentials restored (302)" ($restoreCode -eq "302") "got $restoreCode"
+
+& $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE 'Reset password for student%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
+Remove-Item $rBody, $pjar, $ajar2 -Force -ErrorAction SilentlyContinue
 
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"

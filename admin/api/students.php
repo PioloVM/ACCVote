@@ -276,6 +276,26 @@ if ($method === 'PUT') {
         respond(['error' => 'Student not found.'], 404);
     }
 
+    // Special action: issue a one-time temporary password (Batch B2 -
+    // password recovery without an email service). The clear value is
+    // returned exactly ONCE for the admin to hand over; only the hash
+    // is stored, and users.password_reset_pending forces the student
+    // through the change-password gate (dashboard.php ->
+    // change-password.php) on their next login.
+    if (!empty($body['resetPassword'])) {
+        do {
+            $tmp = 'Temp' . bin2hex(random_bytes(5));
+        } while (passwordPolicyError($tmp) !== null);
+        $upd = $pdo->prepare('UPDATE users SET password = :pw, password_reset_pending = 1 WHERE id = :id');
+        $upd->execute(['pw' => password_hash($tmp, PASSWORD_DEFAULT), 'id' => $id]);
+        $log = $pdo->prepare('INSERT INTO activity_logs (admin_username, action) VALUES (:u, :a)');
+        $log->execute([
+            'u' => $_SESSION['admin_username'] ?? 'admin',
+            'a' => 'Reset password for student ' . $current['student_id'],
+        ]);
+        respond(['success' => true, 'temp_password' => $tmp]);
+    }
+
     // Special action: actually deletes the student's cast votes for ONE
     // specific election (not just flipping a display flag), so the
     // Students panel's real per-election status reflects it immediately
