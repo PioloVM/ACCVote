@@ -1116,6 +1116,43 @@ Assert-True "C2 fixture deleted in cleanup" ($pvd -match '"success":true') "got:
 & $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE '%C2 PREVIEW FIXTURE%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
 Remove-Item $pvjar, $pvCreate, $pvPromote, $pvPromote2, $pvDel -Force -ErrorAction SilentlyContinue
 
+# ----------------------------------------------------------------
+# Section: Batch D1 - database backup tool + weekly workflow
+# ----------------------------------------------------------------
+# (Subprocess/missing-file paths are guarded so a RED run fails these
+# assertions instead of terminating the suite on a native-command error.)
+$d1Script = Test-Path .\tools\backup.ps1
+Assert-True "D1 backup script exists" ($d1Script) "missing tools\backup.ps1"
+Assert-True "D1 backup workflow exists" (Test-Path .\.github\workflows\db-backup.yml) "missing workflow"
+
+# Refusal: no DATABASE_URL -> nonzero exit + a clear message, nothing dumped.
+$envBackup = $env:DATABASE_URL
+$env:DATABASE_URL = $null
+# Child stderr lines become terminating records under the suite-wide
+# $ErrorActionPreference=Stop - drop to Continue around the captures.
+$oldEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$refuse = if ($d1Script) { (& powershell -NoProfile -File .\tools\backup.ps1 2>&1 | Out-String) } else { 'missing script' }
+$refuseCode = if ($d1Script) { $LASTEXITCODE } else { -1 }
+$env:DATABASE_URL = $envBackup
+$ErrorActionPreference = $oldEAP
+Assert-True "D1 backup refuses without DATABASE_URL" (($refuseCode -ne 0) -and ($refuse -match 'DATABASE_URL')) "code $refuseCode out: $refuse"
+
+# Dry-run: prints the pg_dump invocation WITHOUT the password.
+$ErrorActionPreference = 'Continue'
+$show = if ($d1Script) { (& powershell -NoProfile -File .\tools\backup.ps1 -ConnectionString 'postgres://backupuser:SECRETPW123@ep-example.neon.tech/neondb?sslmode=require' -ShowCommand 2>&1 | Out-String) } else { 'missing script' }
+$ErrorActionPreference = $oldEAP
+Assert-True "D1 show-command prints a pg_dump invocation" ($show -match 'pg_dump') "got: $show"
+Assert-True "D1 show-command redacts the password" ($show -notmatch 'SECRETPW123') "password leaked!"
+Assert-True "D1 show-command keeps host and db visible" ($show -match 'ep-example\.neon\.tech') "got: $show"
+
+# Workflow + gitignore source pins.
+$wfSrc = if (Test-Path .\.github\workflows\db-backup.yml) { Get-Content .\.github\workflows\db-backup.yml -Raw } else { '' }
+Assert-True "D1 workflow is scheduled" ($wfSrc -match 'schedule:') "missing"
+Assert-True "D1 workflow guards on the DATABASE_URL secret" ($wfSrc -match 'secrets\.DATABASE_URL') "missing"
+Assert-True "D1 workflow dumps with pg_dump" ($wfSrc -match 'pg_dump') "missing"
+Assert-True "D1 backups dir is gitignored" ((Get-Content .gitignore -Raw) -match '/backups/') "missing"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

@@ -18,3 +18,6 @@ node_modules/
 
 # Logs
 *.log
+
+# Database backups (local pg_dump output from tools/backup.ps1)
+/backups/

@@ -1,0 +1,38 @@
+# Weekly database backup (Batch D1).
+#
+# Runs tools/backup.ps1's CI equivalent against the Neon Postgres database
+# and uploads the dump as a build artifact (30-day retention). Requires the
+# DATABASE_URL repository secret (Settings > Secrets and variables >
+# Actions). Until that secret is configured the job is SKIPPED - the
+# workflow stays green and silent instead of failing every week.
+name: Weekly database backup
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'   # Mondays 03:00 UTC = 11:00 AM PHT
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg_dump:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.DATABASE_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dump database (pg_dump custom format)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          mkdir -p backups
+          pg_dump "$DATABASE_URL" -Fc -f "backups/neon-$(date +%Y%m%d-%H%M%S).dump"
+          ls -lh backups
+
+      - name: Upload dump (kept 30 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: neon-backup
+          path: backups/*.dump
+          retention-days: 30
