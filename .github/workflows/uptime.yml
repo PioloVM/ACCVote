@@ -1,0 +1,83 @@
+# Uptime monitor (Batch D2).
+#
+# Probes {SITE_URL}/health.php every 15 minutes and files a GitHub issue
+# when it stops answering 200 (or the site is unreachable at all). While
+# the outage continues the SAME open issue gets a comment each run
+# instead of a new duplicate.
+#
+# Requires the SITE_URL repository VARIABLE (Settings > Secrets and
+# variables > Actions > Variables), e.g. https://your-app.onrender.com
+# (no trailing path). Until it is set the job is skipped - silent green,
+# same philosophy as the backup workflow's DATABASE_URL guard.
+name: Uptime monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    if: ${{ vars.SITE_URL != '' }}
+    steps:
+      - name: Probe /health.php
+        id: probe
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          # curl writes %{http_code} even on failure (000 when unreachable);
+          # `|| true` keeps the step green so the issue step can react.
+          code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 "$SITE_URL/health.php" || true)
+          [ -n "$code" ] || code=000
+          echo "health.php returned $code"
+          cat body.txt || true
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: File or update the incident issue
+        if: steps.probe.outputs.code != '200'
+        uses: actions/github-script@v7
+        env:
+          CODE: ${{ steps.probe.outputs.code }}
+        with:
+          script: |
+            const code = process.env.CODE;
+            const { owner, repo } = context.repo;
+            const title = 'Site down: health endpoint failing';
+            const when = new Date().toISOString();
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
+            const existing = open.data.find(i => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: existing.number,
+                body: `Still failing: \`/health.php\` returned HTTP ${code} at ${when}.`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner, repo, title,
+                body: `Scheduled uptime check failed: \`/health.php\` returned HTTP ${code} at ${when}.\n\nThe check runs every 15 minutes; this issue is updated rather than duplicated while the outage continues, and a recovery comment is added below once the endpoint returns 200.`,
+              });
+              core.notice(`Health check failed with HTTP ${code} - incident issue created`);
+            }
+
+      - name: Resolve the incident issue
+        if: steps.probe.outputs.code == '200'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const title = 'Site down: health endpoint failing';
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
+            const existing = open.data.find(i => i.title === title);
+            if (existing) {
+              const when = new Date().toISOString();
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: existing.number,
+                body: `Recovered: \`/health.php\` returned 200 at ${when}. Closing.`,
+              });
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: 'closed' });
+            }

@@ -1153,6 +1153,35 @@ Assert-True "D1 workflow guards on the DATABASE_URL secret" ($wfSrc -match 'secr
 Assert-True "D1 workflow dumps with pg_dump" ($wfSrc -match 'pg_dump') "missing"
 Assert-True "D1 backups dir is gitignored" ((Get-Content .gitignore -Raw) -match '/backups/') "missing"
 
+# ----------------------------------------------------------------
+# Section: Batch D2 - health endpoint + uptime workflow
+# ----------------------------------------------------------------
+$d2Health = Test-Path .\health.php
+Assert-True "D2 health endpoint exists" ($d2Health) "missing health.php"
+
+# Live: DB up -> 200, ok/db-up JSON, nothing internal, nothing cached.
+$healthCode = curl.exe -s -o NUL -w "%{http_code}" "$base/health.php"
+$healthBody = ((curl.exe -s "$base/health.php") -join "`n")
+Assert-True "D2 health endpoint is 200 when DB is up" ($healthCode -eq "200") "got $healthCode"
+Assert-True "D2 health body reports ok" ($healthBody -match '"ok":true') "got: $healthBody"
+Assert-True "D2 health body reports db up" ($healthBody -match '"db":"up"') "got: $healthBody"
+Assert-True "D2 health body leaks no internals" ($healthBody -notmatch 'password|3306|root@|localhost|PDOException|voting_app') "got: $healthBody"
+$healthHdr = ((curl.exe -s -D - -o NUL "$base/health.php") -join "`n")
+Assert-True "D2 health response is not cacheable" ($healthHdr -match 'no-store') "got headers: $healthHdr"
+
+# Source pins: 503 failure path, public probe stays stateless.
+$healthSrc = if ($d2Health) { Get-Content .\health.php -Raw } else { '' }
+Assert-True "D2 health answers 503 on failure" ($healthSrc -match '503') "missing"
+Assert-True "D2 health never starts a session" ($healthSrc -notmatch 'session_start|startSecureSession') "sessions in health check"
+
+# Workflow source pins.
+$wf2Src = if (Test-Path .\.github\workflows\uptime.yml) { Get-Content .\.github\workflows\uptime.yml -Raw } else { '' }
+Assert-True "D2 uptime workflow exists" (Test-Path .\.github\workflows\uptime.yml) "missing"
+Assert-True "D2 uptime workflow is scheduled" ($wf2Src -match 'schedule:') "missing"
+Assert-True "D2 uptime workflow guards on SITE_URL" ($wf2Src -match 'vars\.SITE_URL') "missing"
+Assert-True "D2 uptime workflow probes health.php" ($wf2Src -match 'health\.php') "missing"
+Assert-True "D2 uptime workflow files an issue on failure" ($wf2Src -match 'issues\.create') "missing"
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0
