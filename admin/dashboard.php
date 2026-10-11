@@ -1554,9 +1554,10 @@ function renderElectionCard(e){
         <button class="btn btn-secondary" onclick="viewElectionResults(${e.id})">View Results</button>
     `;
     const secondaryActions = isClosed
-        ? `<button class="btn btn-primary" onclick="archiveElection(${e.id})">Archive</button>`
+        ? `<button class="btn btn-primary" onclick="archiveElection(${e.id})">Archive</button><button class="btn btn-secondary" onclick="duplicateElection(${e.id})" title="Copy this election into a new draft">Duplicate</button>`
         : `
             <button class="btn btn-secondary" onclick="editElection(${e.id})">Edit</button>
+            <button class="btn btn-secondary" onclick="duplicateElection(${e.id})" title="Copy this election into a new draft">Duplicate</button>
             <button class="btn btn-danger" onclick="deleteElection(${e.id})">Delete</button>
         `;
 
@@ -1766,6 +1767,33 @@ async function setElectionVisibility(id, visibility){
     if (document.getElementById('panel-results').classList.contains('active')) renderResults();
 }
 
+// Duplicates an election into a brand-new DRAFT copy (Batch C1): the
+// copy gets fresh position/candidate rows and NO votes, so it is a
+// clean slate for the next cycle with the same roster. Photos survive
+// the copy (data URLs are re-validated, legacy assets/ paths pass
+// through saveCandidatePhoto unchanged).
+async function duplicateElection(id){
+    const e = currentElections.find(e => e.id === id);
+    const confirmed = await showConfirmModal({
+        title: 'Duplicate this election?',
+        message: `"${e ? e.name : 'This election'}" will be copied as a new DRAFT election with the same positions and candidates but no votes. You can then rename and schedule the copy.`,
+        confirmLabel: 'Create Copy',
+        danger: false,
+    });
+    if (!confirmed) return;
+    try {
+        const res = await fetch(ELECTIONS_API, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({csrf_token: CSRF_TOKEN, duplicateOf: id})
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) { showToast(data.error || 'Duplicate failed.', 'error'); return; }
+        addLog(`Duplicated election: ${e ? e.name : id}`);
+        showToast(`Draft copy created${data.id ? ' (election #' + data.id + ')' : ''}.`, 'success');
+        await loadElectionList();
+    } catch (err) { showToast('Network error. Please try again.', 'error'); }
+}
 async function deleteElection(id){
     const e = currentElections.find(e => e.id === id);
     const confirmed = await showConfirmModal({

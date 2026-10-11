@@ -963,6 +963,85 @@ Assert-True "fixture credentials restored (302)" ($restoreCode -eq "302") "got $
 & $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE 'Reset password for student%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
 Remove-Item $rBody, $pjar, $ajar2 -Force -ErrorAction SilentlyContinue
 
+# ----------------------------------------------------------------
+# Section: Batch C1 - duplicate election (draft copy)
+# ----------------------------------------------------------------
+# Admin session (fresh jar - a login success rotates the session and
+# drops the pre-auth token, same as every other section here).
+$cjar = [System.IO.Path]::GetTempFileName()
+$ch = ((curl.exe -s -c $cjar "$base/admin/login.php") -join "`n")
+$ct = [regex]::Match($ch, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$cc = curl.exe -s -b $cjar -c $cjar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$ct&username=admin&password=admin123"
+Assert-True "C1 admin session login (302)" ($cc -eq "302") "got $cc"
+$cdash = ((curl.exe -s -b $cjar "$base/admin/dashboard.php") -join "`n")
+$ccsrf = [regex]::Match($cdash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+
+# Source fixture: a full election created through the API itself, so
+# the duplicate has a real roster (position + candidate) to copy.
+$dept = Invoke-MysqlOut "SELECT code FROM departments LIMIT 1;"
+Assert-True "department code fixture available" ($dept -ne '' -and $dept -notmatch 'ERROR') "got '$dept'"
+$srcBody = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($srcBody, '{ "csrf_token": "' + $ccsrf + '", "type": "SSG", "name": "C1 SOURCE FIXTURE", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Alice Cruz", "department": "' + $dept + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+$src1 = ((curl.exe -s -b $cjar -X POST "$base/admin/api/elections.php" --data-binary "@$srcBody") -join "")
+Assert-True "C1 source election created" ($src1 -match '"success":true') "got: $src1"
+$srcId = [regex]::Match($src1, '"id":(\d+)').Groups[1].Value
+Assert-True "source id extracted" ($srcId -match '^[1-9]\d*$') "got: $src1"
+
+# Duplicate it through the special action.
+$dupBody = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($dupBody, '{ "csrf_token": "' + $ccsrf + '", "duplicateOf": ' + $srcId + ' }')
+$dup1 = ((curl.exe -s -b $cjar -X POST "$base/admin/api/elections.php" --data-binary "@$dupBody") -join "")
+Assert-True "duplicate succeeds" ($dup1 -match '"success":true') "got: $dup1"
+$dupId = [regex]::Match($dup1, '"id":(\d+)').Groups[1].Value
+Assert-True "copy id differs from source" (($dupId -match '^[1-9]\d*$') -and ($dupId -ne $srcId)) "got: $dup1"
+
+# The copy is a draft named "<source> (Copy)".
+$copyRow = Invoke-MysqlOut "SELECT CONCAT(name, '|', status) FROM elections WHERE id=$dupId;"
+Assert-True "copy is a draft named '(Copy)'" ($copyRow -eq 'C1 SOURCE FIXTURE (Copy)|draft') "got '$copyRow'"
+
+# Roster copied as FRESH rows (candidates are never shared).
+$copyPos = Invoke-MysqlOut "SELECT COUNT(*) FROM election_positions ep JOIN positions p ON p.id = ep.position_id WHERE ep.election_id=$dupId AND p.title='President' AND ep.winner_count=1;"
+Assert-True "copy has the President position" ($copyPos -eq '1') "got '$copyPos'"
+$copyCand = Invoke-MysqlOut "SELECT COUNT(*) FROM candidates c JOIN election_positions ep ON ep.position_id = c.position_id WHERE ep.election_id=$dupId AND c.name='Alice Cruz';"
+Assert-True "copy has Alice Cruz as candidate" ($copyCand -eq '1') "got '$copyCand'"
+$srcCandId = Invoke-MysqlOut "SELECT c.id FROM candidates c JOIN election_positions ep ON ep.position_id = c.position_id WHERE ep.election_id=$srcId LIMIT 1;"
+$dupCandId = Invoke-MysqlOut "SELECT c.id FROM candidates c JOIN election_positions ep ON ep.position_id = c.position_id WHERE ep.election_id=$dupId LIMIT 1;"
+Assert-True "candidates are fresh rows, not shared" (($srcCandId -match '^\d+$') -and ($dupCandId -match '^\d+$') -and ($srcCandId -ne $dupCandId)) "src=$srcCandId dup=$dupCandId"
+
+# Source untouched.
+$srcStill = Invoke-MysqlOut "SELECT CONCAT((SELECT COUNT(*) FROM elections WHERE id=$srcId), '|', (SELECT COUNT(*) FROM election_positions WHERE election_id=$srcId), '|', (SELECT name FROM elections WHERE id=$srcId));"
+Assert-True "source election untouched" ($srcStill -eq '1|1|C1 SOURCE FIXTURE') "got '$srcStill'"
+
+# Guards: unknown source, bogus csrf, student session.
+$badIdBody = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($badIdBody, '{ "csrf_token": "' + $ccsrf + '", "duplicateOf": 999999 }')
+$badId = ((curl.exe -s -b $cjar -X POST "$base/admin/api/elections.php" --data-binary "@$badIdBody") -join "")
+Assert-True "unknown source refused (404)" ($badId -match 'not found') "got: $badId"
+$badCsrfBody = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($badCsrfBody, '{ "csrf_token": "bogus", "duplicateOf": ' + $srcId + ' }')
+$badCsrf = ((curl.exe -s -b $cjar -X POST "$base/admin/api/elections.php" --data-binary "@$badCsrfBody") -join "")
+Assert-True "duplicate refuses bogus csrf" ($badCsrf -match 'session expired') "got: $badCsrf"
+$stuDup = curl.exe -s -b $jar -o NUL -w "%{http_code}" -X POST "$base/admin/api/elections.php" --data-binary "@$dupBody"
+Assert-True "students get 401 from duplicate" ($stuDup -eq "401") "got $stuDup"
+
+# Audit + UI source pins.
+$cAudit = Invoke-MysqlOut "SELECT COUNT(*) FROM activity_logs WHERE action LIKE 'Duplicated election%';"
+Assert-True "duplicate is audited" ($cAudit -match '^[1-9][0-9]*$') "got '$cAudit'"
+Assert-True "duplicate handler exists" ($adminSrc -match 'function duplicateElection') "handler missing"
+Assert-True "election card shows Duplicate button" ($adminSrc -match 'onclick="duplicateElection') "button missing"
+
+# cleanup: both elections removed through the API (cascade), then logs/jars
+$delBody1 = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($delBody1, '{ "csrf_token": "' + $ccsrf + '", "id": ' + $dupId + ', "confirm_delete": true }')
+$del1 = ((curl.exe -s -b $cjar -X DELETE "$base/admin/api/elections.php" --data-binary "@$delBody1") -join "")
+Assert-True "copy deleted in cleanup" ($del1 -match '"success":true') "got: $del1"
+$delBody2 = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($delBody2, '{ "csrf_token": "' + $ccsrf + '", "id": ' + $srcId + ', "confirm_delete": true }')
+$del2 = ((curl.exe -s -b $cjar -X DELETE "$base/admin/api/elections.php" --data-binary "@$delBody2") -join "")
+Assert-True "source deleted in cleanup" ($del2 -match '"success":true') "got: $del2"
+& $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE 'Duplicated election%' OR action LIKE '%C1 SOURCE FIXTURE%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
+Remove-Item $cjar, $srcBody, $dupBody, $badIdBody, $badCsrfBody, $delBody1, $delBody2 -Force -ErrorAction SilentlyContinue
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

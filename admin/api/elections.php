@@ -431,6 +431,111 @@ recordAttemptKey($pdo, $adminWriteKey);
 // POST: create a brand-new election (always a "full" payload)
 // ------------------------------------------------------------------
 if ($method === 'POST') {
+    // ------------------------------------------------------------------
+    // Special action: duplicate an existing election (Batch C1).
+    // Copies the election row plus its whole position/candidate roster as
+    // FRESH rows - candidates are never shared between elections (a
+    // candidate's election is derived through position_id), and votes are
+    // never carried over: the copy is a brand-new, empty ballot. It lands
+    // as a draft named "<source> (Copy)" with the same schedule and
+    // settings, ready to rename/reschedule before it goes live.
+    // ------------------------------------------------------------------
+    if (!empty($input['duplicateOf'])) {
+        $sourceId = (int) $input['duplicateOf'];
+
+        $srcStmt = $pdo->prepare('SELECT * FROM elections WHERE id = :id');
+        $srcStmt->execute(['id' => $sourceId]);
+        $src = $srcStmt->fetch();
+        if (!$src) {
+            respond(['error' => 'Source election not found.'], 404);
+        }
+
+        // Each election owns its own positions rows, so position_id alone
+        // scopes the candidate query correctly (same note as in the GET
+        // detail branch below).
+        $posStmt = $pdo->prepare('
+            SELECT ep.position_id, ep.winner_count, ep.year_restriction, p.title
+            FROM election_positions ep
+            JOIN positions p ON p.id = ep.position_id
+            WHERE ep.election_id = :eid
+            ORDER BY ep.id ASC
+        ');
+        $posStmt->execute(['eid' => $sourceId]);
+        $srcPositions = $posStmt->fetchAll();
+
+        $candStmt = $pdo->prepare('
+            SELECT name, photo, candidate_year, department, platform, party
+            FROM candidates WHERE position_id = :pid
+            ORDER BY name ASC
+        ');
+        $positions = [];
+        foreach ($srcPositions as $sp) {
+            $candStmt->execute(['pid' => $sp['position_id']]);
+            $positions[] = [
+                'title' => $sp['title'],
+                'winner_count' => (int) $sp['winner_count'],
+                'year_restriction' => (string) ($sp['year_restriction'] ?? ''),
+                // candidate_limit is recomputed by insertPositionsAndCandidates
+                // from the candidate count - same rule the wizard applies.
+                'candidates' => $candStmt->fetchAll(),
+            ];
+        }
+
+        try {
+            $pdo->beginTransaction();
+
+            $copyName = mb_substr(trim($src['name']) . ' (Copy)', 0, 100);
+            if (isMysql()) {
+                $stmt = $pdo->prepare('
+                    INSERT INTO elections (name, type, department, status, start_date, end_date,
+                                           results_visibility, parties_enabled, parties, target_school_year_id)
+                    VALUES (:name, :type, :department, :status, :start, :end, :visibility, :parties_enabled, :parties, :target_sy)
+                ');
+            } else {
+                $stmt = $pdo->prepare('
+                    INSERT INTO elections (name, type, department, status, start_date, end_date,
+                                           results_visibility, parties_enabled, parties, target_school_year_id)
+                    VALUES (:name, :type, :department, :status, :start, :end, :visibility, :parties_enabled, :parties::jsonb, :target_sy)
+                    RETURNING id
+                ');
+            }
+            $stmt->execute([
+                'name' => $copyName,
+                'type' => $src['type'],
+                'department' => $src['department'],
+                // Draft, exactly like a wizard-created election: the copy
+                // never inherits a live/closed status, so nothing can open
+                // or close on its own until the admin schedules it.
+                'status' => 'draft',
+                'start' => $src['start_date'],
+                'end' => $src['end_date'],
+                'visibility' => $src['results_visibility'],
+                // 1/0, not a raw bool - PDO stringifies false to '' which
+                // Postgres rejects as boolean input (same as the create
+                // flow above).
+                'parties_enabled' => !empty($src['parties_enabled']) ? 1 : 0,
+                'parties' => (string) ($src['parties'] ?? '[]'),
+                'target_sy' => $src['target_school_year_id'],
+            ]);
+            $electionId = isMysql() ? (int) $pdo->lastInsertId() : (int) $stmt->fetchColumn();
+
+            insertPositionsAndCandidates($pdo, $electionId, $positions, !empty($src['parties_enabled']));
+
+            $pdo->prepare('INSERT INTO activity_logs (admin_username, action) VALUES (:u, :a)')
+                ->execute([
+                    'u' => 'admin:' . ($_SESSION['admin_username'] ?? 'unknown'),
+                    'a' => sprintf('Duplicated election #%d as #%d "%s" (draft copy)', $sourceId, $electionId, $copyName),
+                ]);
+
+            $pdo->commit();
+            respond(['success' => true, 'id' => $electionId]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('Duplicate election failed: ' . $e->getMessage());
+            respond(['error' => 'Could not duplicate the election.'], 500);
+        }
+    }
+
     $errors = validatePayload($input, true, validDepartmentCodes($pdo));
     if ($errors) respond(['error' => implode(' ', $errors)], 400);
 
