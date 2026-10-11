@@ -1042,6 +1042,80 @@ Assert-True "source deleted in cleanup" ($del2 -match '"success":true') "got: $d
 & $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE 'Duplicated election%' OR action LIKE '%C1 SOURCE FIXTURE%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
 Remove-Item $cjar, $srcBody, $dupBody, $badIdBody, $badCsrfBody, $delBody1, $delBody2 -Force -ErrorAction SilentlyContinue
 
+# ----------------------------------------------------------------
+# Section: Batch C2 - ballot preview (admin session, submit off)
+# ----------------------------------------------------------------
+# Fixture: create + promote an election. The ballot branch only builds
+# data for non-archived elections; preview mode additionally lets
+# drafts through so admins can check a ballot before scheduling it.
+$pvjar = [System.IO.Path]::GetTempFileName()
+$pvh = ((curl.exe -s -c $pvjar "$base/admin/login.php") -join "`n")
+$pvt = [regex]::Match($pvh, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$pvc = curl.exe -s -b $pvjar -c $pvjar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$pvt&username=admin&password=admin123"
+Assert-True "C2 admin session login (302)" ($pvc -eq "302") "got $pvc"
+$pvdash = ((curl.exe -s -b $pvjar "$base/admin/dashboard.php") -join "`n")
+$pvcsrf = [regex]::Match($pvdash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+
+$dept2 = Invoke-MysqlOut "SELECT code FROM departments LIMIT 1;"
+$pvCreate = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($pvCreate, '{ "csrf_token": "' + $pvcsrf + '", "type": "SSG", "name": "C2 PREVIEW FIXTURE", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Bob Santos", "department": "' + $dept2 + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+$pv1 = ((curl.exe -s -b $pvjar -X POST "$base/admin/api/elections.php" --data-binary "@$pvCreate") -join "")
+$prevId = [regex]::Match($pv1, '"id":(\d+)').Groups[1].Value
+Assert-True "C2 fixture election created" (($pv1 -match '"success":true') -and ($prevId -match '^[1-9]\d*$')) "got: $pv1"
+
+# 1a. Draft preview - the whole point of previewing BEFORE scheduling:
+# the ballot must render for a draft even though it isn't open yet
+# (preview lets drafts through and skips the not-open gate).
+$pvDraft = ((curl.exe -s -b $pvjar "$base/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
+Assert-True "draft ballot previews before scheduling" (($pvDraft -match 'id="voteForm"') -and ($pvDraft -match 'preview-banner') -and ($pvDraft -notmatch 'not currently open')) "draft preview broken"
+$pvPromote = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($pvPromote, '{ "csrf_token": "' + $pvcsrf + '", "id": ' + $prevId + ', "start": "2026-10-01 08:00", "end": "2026-12-31 17:00" }')
+$pv2 = ((curl.exe -s -b $pvjar -X PUT "$base/admin/api/elections.php" --data-binary "@$pvPromote") -join "")
+Assert-True "C2 fixture scheduled (draft -> scheduled)" ($pv2 -match '"success":true') "got: $pv2"
+# Draft cannot jump straight to ongoing - the wizard's own rule (save a
+# schedule first) - so promote in two steps, with a window that spans now.
+$pvPromote2 = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($pvPromote2, '{ "csrf_token": "' + $pvcsrf + '", "id": ' + $prevId + ', "status": "ongoing" }')
+$pv2b = ((curl.exe -s -b $pvjar -X PUT "$base/admin/api/elections.php" --data-binary "@$pvPromote2") -join "")
+Assert-True "C2 fixture promoted to ongoing" ($pv2b -match '"success":true') "got: $pv2b"
+
+# 1. Admin + preview=1 renders the REAL ballot, banner on, submit off.
+$pvHtml = ((curl.exe -s -b $pvjar "$base/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
+Assert-True "preview renders for the admin session" ($pvHtml -match 'id="voteForm"') "ballot missing"
+Assert-True "preview banner is shown" ($pvHtml -match 'preview-banner') "banner missing"
+Assert-True "submit disabled server-side in preview" ($pvHtml -match 'id="submitBtn"[^>]*disabled') "submit not disabled"
+Assert-True "confirm-cast disabled too in preview" ($pvHtml -match 'id="confirmSubmitBtn"[^>]*disabled') "confirm not disabled"
+Assert-True "preview shows the fixture candidate" ($pvHtml -match 'Bob Santos') "roster missing"
+
+# 2. Admin without the flag does NOT get the ballot.
+$pvNo = curl.exe -s -b $pvjar -o NUL -w "%{http_code}" "$base/dashboard.php?page=vote&election_id=$prevId"
+Assert-True "no preview flag = no ballot for admin" ($pvNo -ne "200") "got $pvNo"
+
+# 3. Anonymous + preview=1 refused.
+$pvAnon = curl.exe -s -o NUL -w "%{http_code}" "$base/dashboard.php?page=vote&election_id=$prevId&preview=1"
+Assert-True "anonymous preview refused" ($pvAnon -ne "200") "got $pvAnon"
+
+# 4. Student + preview=1 sees their NORMAL ballot (no banner).
+$pvStu = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
+Assert-True "student ballot renders without the banner" (($pvStu -match 'id="voteForm"') -and ($pvStu -notmatch 'preview-banner')) "unexpected preview state"
+
+# 5. The preview admin session cannot actually vote.
+$pvVote = curl.exe -s -b $pvjar -o NUL -w "%{http_code}" -X POST "$base/vote.php" -d "election_id=$prevId"
+Assert-True "preview session cannot submit votes (401)" ($pvVote -eq "401") "got $pvVote"
+
+# 6. Source pins.
+$dashSrcC2 = Get-Content .\dashboard.php -Raw
+Assert-True "dashboard has preview mode" ($dashSrcC2 -match '\$isPreview') "missing"
+Assert-True "preview forces hasVoted off" ($dashSrcC2 -match 'isPreview \? false : userHasVotedInElection') "missing"
+
+# cleanup: fixture removed through the API, logs/jars cleared.
+$pvDel = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($pvDel, '{ "csrf_token": "' + $pvcsrf + '", "id": ' + $prevId + ', "confirm_delete": true }')
+$pvd = ((curl.exe -s -b $pvjar -X DELETE "$base/admin/api/elections.php" --data-binary "@$pvDel") -join "")
+Assert-True "C2 fixture deleted in cleanup" ($pvd -match '"success":true') "got: $pvd"
+& $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE '%C2 PREVIEW FIXTURE%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
+Remove-Item $pvjar, $pvCreate, $pvPromote, $pvPromote2, $pvDel -Force -ErrorAction SilentlyContinue
+
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"
 exit 0

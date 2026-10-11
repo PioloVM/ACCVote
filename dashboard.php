@@ -3,21 +3,43 @@
     require_once __DIR__ . '/config/db.php';
 
     startSecureSession();
-    requireLogin();
+
+    // Ballot preview (Batch C2): an admin can look at the EXACT ballot a
+    // student would see - dashboard.php?page=vote&election_id=X&preview=1
+    // - without needing a student account. Preview requires the ADMIN
+    // session and only unlocks the vote branch; every other page still
+    // demands a student login. The submit buttons render disabled here,
+    // and vote.php rejects the preview session anyway (it checks
+    // user_id, which an admin-only session does not have).
+    $isPreview = isset($_GET['preview']) && (int) $_GET['preview'] === 1
+        && ($_GET['page'] ?? '') === 'vote'
+        && !empty($_SESSION['admin_id']);
+
+    if (!$isPreview) {
+        requireLogin();
+    }
 
     $pdo = getDbConnection();
     syncElectionStatuses($pdo);
 
     // Get current user - including the password_reset_pending flag the
     // forced-change gate below reads (Batch B2). One query, no extra hit.
-    $stmt = $pdo->prepare('SELECT id, name, department, year_level, password_reset_pending FROM users WHERE id = :id');
-    $stmt->execute(['id' => $_SESSION['user_id']]);
-    $user = $stmt->fetch();
+    if ($isPreview && empty($_SESSION['user_id'])) {
+        // Previewing admin with no student account of their own: a
+        // synthetic, department/year-less viewer. The visibility filters
+        // below treat null as "no limit", so every election and every
+        // position is on display.
+        $user = ['id' => -1, 'name' => 'Preview', 'department' => null, 'year_level' => null, 'password_reset_pending' => 0];
+    } else {
+        $stmt = $pdo->prepare('SELECT id, name, department, year_level, password_reset_pending FROM users WHERE id = :id');
+        $stmt->execute(['id' => $_SESSION['user_id']]);
+        $user = $stmt->fetch();
 
-    if (!$user) {
-        session_destroy();
-        header('Location: index.php');
-        exit;
+        if (!$user) {
+            session_destroy();
+            header('Location: index.php');
+            exit;
+        }
     }
 
     // Forced password change gate: an admin-issued temporary password
@@ -161,17 +183,19 @@
     // 'draft' elections aren't visible to students yet; 'archived'
     // elections are past cycles the admin has explicitly tucked away —
     // neither belongs on a student's dashboard or ballot picker.
+    // PREVIEW is the exception for drafts: letting the admin open a
+    // draft's ballot is the whole point of checking it before scheduling.
     $rawElections = $pdo->query("
         SELECT e.*, sy.label AS target_school_year_label
         FROM elections e
         LEFT JOIN school_years sy ON sy.id = e.target_school_year_id
-        WHERE e.status NOT IN ('draft', 'archived')
+        WHERE e.status NOT IN (" . ($isPreview ? "'archived'" : "'draft', 'archived'") . ")
         ORDER BY e.start_date ASC
     ")->fetchAll();
 
     foreach ($rawElections as $e) {
-        if ($e['type'] === 'DSG' && $e['department'] !== $user['department']) {
-            continue; // not this student's department
+        if (!$isPreview && $e['type'] === 'DSG' && $e['department'] !== $user['department']) {
+            continue; // not this student's department (preview shows all)
         }
 
         $posStmt = $pdo->prepare('
@@ -184,9 +208,10 @@
         $posStmt->execute(['eid' => $e['id']]);
         $allPositions = $posStmt->fetchAll();
 
-        // "Limit to see" — hide positions restricted to a year level this
-        // student isn't in.
-        $positions = array_values(array_filter($allPositions, function ($p) use ($user) {
+        // "Limit to see" — hide positions restricted by a year level this
+        // student isn't in. Preview shows every position regardless: the
+        // admin needs the full roster on one screen.
+        $positions = $isPreview ? $allPositions : array_values(array_filter($allPositions, function ($p) use ($user) {
             return empty($p['year_restriction']) || $p['year_restriction'] === $user['year_level'];
         }));
 
@@ -232,7 +257,9 @@
             'positions' => $positions,
             'candidatesByPosition' => $candidatesByPosition,
             'totalPositions' => count($positions),
-            'hasVoted' => userHasVotedInElection($pdo, (int) $user['id'], (int) $e['id']),
+            // Preview always shows the OPEN ballot, not the "you already
+            // voted" state - the admin needs to see the roster itself.
+            'hasVoted' => $isPreview ? false : userHasVotedInElection($pdo, (int) $user['id'], (int) $e['id']),
         ];
     }
     } // end heavy-block gate (page=vote && election_id) — Branch B never runs it
@@ -315,6 +342,10 @@
             <span class="date"><?= date('l, F j, Y') ?></span>
         </div>
 
+        <?php if ($isPreview): ?>
+        <div class="preview-banner" style="background:#101828;color:#d9f99d;border:1px dashed #84cc16;border-radius:12px;text-align:center;padding:.65rem 1rem;margin:0 0 1.25rem;font-family:'IBM Plex Mono',monospace;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;">PREVIEW &mdash; ballot view only, voting is disabled</div>
+        <?php endif; ?>
+
         <?php
             $now = new DateTime();
             if (!isset($electionData[$selectedElectionId])) {
@@ -328,7 +359,7 @@
 
                 if ($data['hasVoted']) {
                     echo '<div class="alert alert-info">You have already voted in this election.</div>';
-                } elseif (!$isOpen) {
+                } elseif (!$isOpen && !$isPreview) {
                     echo '<div class="alert alert-error">This election is not currently open.</div>';
                 } elseif (empty($positions)) {
                     echo '<div class="alert alert-info">No positions are available to you in this election yet.</div>';
@@ -419,7 +450,7 @@
 
                             <div class="ballot-submit-block">
                                 <p class="ballot-instruction">Skipping any position is allowed — leave it blank if you'd rather not choose. Your selections can't be changed after you submit.</p>
-                                <button type="submit" class="btn btn-primary" id="submitBtn">Submit My Vote</button>
+                                <button type="submit" class="btn btn-primary" id="submitBtn"<?= $isPreview ? ' disabled' : '' ?>>Submit My Vote</button>
                             </div>
                         </form>
                     </div>
@@ -430,7 +461,7 @@
                             <p>Your selections cannot be changed after submission.</p>
                             <div class="modal-actions">
                                 <button type="button" class="btn btn-secondary" onclick="closeBallotConfirm()">Go Back</button>
-                                <button type="button" class="btn btn-primary" id="confirmSubmitBtn" onclick="confirmBallotSubmit()">Cast My Vote</button>
+                                <button type="button" class="btn btn-primary" id="confirmSubmitBtn"<?= $isPreview ? ' disabled' : '' ?> onclick="confirmBallotSubmit()">Cast My Vote</button>
                             </div>
                         </div>
                     </div>
