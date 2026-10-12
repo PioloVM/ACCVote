@@ -830,6 +830,13 @@ Assert-True "create admin handler exists" ($adminSrc -match 'function createAdmi
 Assert-True "delete admin handler exists" ($adminSrc -match 'function deleteAdmin') "handler missing"
 Assert-True "password change handler exists" ($adminSrc -match 'function changeAdminPassword') "handler missing"
 
+# UI contract: the add-admin row's email/password inputs must be covered by
+# the shared .settings-add-row rules — a type=text-only selector leaves them
+# at the browser default (white boxes that break the dark theme).
+Assert-True "settings add-row styles type=email inputs" ($adminSrc -match '\.settings-add-row input\[type=email\]') "email input falls back to browser default"
+Assert-True "settings add-row styles type=password inputs" ($adminSrc -match '\.settings-add-row input\[type=password\]') "password input falls back to browser default"
+Assert-True "add-admin inputs use shared row sizing" ($adminSrc -notmatch 'id="newAdmin(User|Email|Pass)"[^>]*style=') "inline width caps bypass the shared flex sizing"
+
 # cleanup
 & $mysql -u root voting_app -e "DELETE FROM login_attempts; DELETE FROM activity_logs WHERE action LIKE '%suitexadmin%' OR action LIKE 'Created admin account%' OR action LIKE 'Removed admin account%' OR action LIKE 'Changed%password%' OR action LIKE 'Reset password for admin%';" 2>&1 | Out-Null
 Remove-Item $bBody, $sjar -Force -ErrorAction SilentlyContinue

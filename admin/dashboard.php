@@ -772,7 +772,7 @@ html,body{overflow-x:hidden;}
 .settings-row .reorder-btns{display:flex;gap:.2rem;flex-shrink:0;}
 .settings-row .reorder-btns .btn{padding:0 .6rem;}
 .settings-add-row{display:flex;gap:.5rem;margin-top:.9rem;flex-wrap:wrap;align-items:center;}
-.settings-add-row input[type=text]{flex:1;min-width:110px;padding:.55rem .7rem;border:1px solid var(--line-strong);border-radius:8px;font-size:.85rem;background:var(--input-bg);color:var(--ink);}
+.settings-add-row input[type=text], .settings-add-row input[type=email], .settings-add-row input[type=password]{flex:1;min-width:110px;padding:.55rem .7rem;border:1px solid var(--line-strong);border-radius:8px;font-size:.85rem;background:var(--input-bg);color:var(--ink);}
 .settings-empty{color:var(--muted);font-size:.85rem;padding:.5rem 0;}
 
 /* ================= IDLE / SESSION BANNER ================= */
@@ -4524,9 +4524,9 @@ function renderSettingsContent(){
             <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">Who can sign in to this panel. Adding, resetting, or removing an account is recorded in the activity log.</p>
             <div id="adminAcctList"><p class="settings-empty">Loading accounts...</p></div>
             <div class="settings-add-row adminacct-add">
-                <input type="text" id="newAdminUser" placeholder="Username (3-50 chars)" maxlength="50" style="max-width:180px;">
-                <input type="email" id="newAdminEmail" placeholder="Email (optional)" maxlength="100" style="max-width:220px;">
-                <input type="password" id="newAdminPass" placeholder="Initial password (8+ chars, letters + numbers)" maxlength="128" style="max-width:270px;">
+                <input type="text" id="newAdminUser" placeholder="Username (3-50 chars)" maxlength="50">
+                <input type="email" id="newAdminEmail" placeholder="Email (optional)" maxlength="100">
+                <input type="password" id="newAdminPass" placeholder="Initial password (8+ chars, letters + numbers)" maxlength="128">
                 <button class="btn btn-primary btn-sm" onclick="createAdmin()">+ Add Admin</button>
             </div>
         </div>
