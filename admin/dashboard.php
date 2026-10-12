@@ -4493,7 +4493,7 @@ function renderSettingsContent(){
             </div>
         </div>
 
-        <div class="card">
+        <div class="card" style="margin-bottom:1.5rem;">
             <h2 class="section-title">Year Levels</h2>
             ${yearRows || '<p class="settings-empty">No year levels yet — add one below.</p>'}
             <div class="settings-add-row">
@@ -4502,7 +4502,7 @@ function renderSettingsContent(){
             </div>
         </div>
     
-        <div class="card">
+        <div class="card" style="margin-bottom:1.5rem;">
             <h2 class="section-title">Maintenance</h2>
             <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">One-click cleanups for tables that only grow. Each action asks for confirmation and is recorded in the activity log.</p>
             <div class="maintenance-row">

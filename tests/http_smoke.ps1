@@ -704,6 +704,12 @@ Assert-True "settings renders maintenance rows" ($adminSrc -match 'maintenance-r
 Assert-True "settings loads maintenance counts" ($adminSrc -match 'type=maintenance') "counts fetch missing"
 Assert-True "prune handler exists in settings" ($adminSrc -match 'function pruneMaintenance') "handler missing"
 
+# UI contract: every settings card except the last carries the 1.5rem gap;
+# the .card class has no margin of its own, so a card missing the inline
+# style sits flush against the one above it.
+$spacedSettingsCards = ([regex]::Matches($adminSrc, 'class="card" style="margin-bottom:1\.5rem;"')).Count
+Assert-True "settings cards carry inter-card spacing" ($spacedSettingsCards -ge 5) "only $spacedSettingsCards spaced cards; the rest render flush"
+
 # cleanup fixture
 & $mysql -u root voting_app -e "DELETE FROM vote_drafts WHERE election_id IN (SELECT id FROM elections WHERE name LIKE 'PRUNE FIXTURE%'); DELETE FROM elections WHERE name LIKE 'PRUNE FIXTURE%'; DELETE FROM activity_logs WHERE admin_username='fixture'; DELETE FROM login_attempts WHERE identifier IN ('old_prune:1','hot_prune:1');" 2>&1 | Out-Null
 Remove-Item $mjar -Force -ErrorAction SilentlyContinue
