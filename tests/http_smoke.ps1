@@ -710,6 +710,9 @@ Assert-True "prune handler exists in settings" ($adminSrc -match 'function prune
 $spacedSettingsCards = ([regex]::Matches($adminSrc, 'class="card" style="margin-bottom:1\.5rem;"')).Count
 Assert-True "settings cards carry inter-card spacing" ($spacedSettingsCards -ge 5) "only $spacedSettingsCards spaced cards; the rest render flush"
 
+# UI contract: the SSG logo card is titled for what it actually configures.
+Assert-True "settings SSG card titled Supreme Student Government (SSG)" ($adminSrc -match 'section-title">Supreme Student Government \(SSG\)</h2>') "title missing"
+
 # cleanup fixture
 & $mysql -u root voting_app -e "DELETE FROM vote_drafts WHERE election_id IN (SELECT id FROM elections WHERE name LIKE 'PRUNE FIXTURE%'); DELETE FROM elections WHERE name LIKE 'PRUNE FIXTURE%'; DELETE FROM activity_logs WHERE admin_username='fixture'; DELETE FROM login_attempts WHERE identifier IN ('old_prune:1','hot_prune:1');" 2>&1 | Out-Null
 Remove-Item $mjar -Force -ErrorAction SilentlyContinue

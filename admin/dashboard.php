@@ -4460,7 +4460,7 @@ function renderSettingsContent(){
 
     document.getElementById('panel-settings').innerHTML = `
         <div class="card" style="margin-bottom:1.5rem;">
-            <h2 class="section-title">General</h2>
+            <h2 class="section-title">Supreme Student Government (SSG)</h2>
             <p class="muted" style="margin:-0.5rem 0 1rem;font-size:.82rem;">Shown next to Supreme Student Government (SSG) elections across the site.</p>
             <div class="logo-upload-row">
                 <div class="election-logo-badge">${electionLogoHtml('SSG', null)}</div>
