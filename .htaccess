@@ -67,11 +67,17 @@ SetEnv DB_DRIVER mysql
 Options -Indexes
 
 # Branded 404 for any path the app does not serve. The path is relative to
-# the XAMPP webroot (this copy lives at /voting-app2-updated/) - if the app
-# moves to a domain root, shorten the prefix accordingly. The Render
-# deployment (php -S via Docker) ignores .htaccess and gets the same page
-# from router.php instead.
-ErrorDocument 404 /voting-app2-updated/404.php
+# the XAMPP webroot (this copy lives at /voting-app3/) - if the app moves
+# to a domain root, shorten the prefix accordingly. The Render deployment
+# (php -S via Docker) ignores .htaccess and gets the same page from
+# router.php instead.
+#
+# NOTE: this MUST point at THIS app's own 404.php. Pointing it at another
+# copy of the app makes Apache execute that copy, so the page renders with
+# the other app's branding AND its $base (computed from SCRIPT_NAME) resolves
+# to the other app's folder - which silently sends "Back to login" / "Go
+# home" links to the wrong app.
+ErrorDocument 404 /voting-app3/404.php
 
 # Sensible defaults for a PHP app with no uploaded file serving.
 <IfModule mod_headers.c>

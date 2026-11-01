@@ -2,7 +2,7 @@
 # PASS = app page reachable (HTTP 200), local voting_app schema present,
 # and the baseline timings file exists.
 $ErrorActionPreference = 'Stop'
-$code = (curl.exe -o NUL -s -w "%{http_code}" "http://localhost/voting-app2-updated/landingpage.php")
+$code = (curl.exe -o NUL -s -w "%{http_code}" "http://localhost/voting-app3/landingpage.php")
 $tables = (& "C:\xampp\mysql\bin\mysql.exe" -u root voting_app -N -e "SHOW TABLES" | Measure-Object -Line).Lines
 $hasBaseline = Test-Path (Join-Path $PSScriptRoot "baseline-timings.md")
 if ($code -eq "200" -and $tables -ge 15 -and $hasBaseline) {
