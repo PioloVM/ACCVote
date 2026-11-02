@@ -27,8 +27,8 @@
  * other level (or 5+ years) needs one of the three repeater statuses.
  */
 
-require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../config/db.php';
 
 startSecureSession();
 requireLogin();

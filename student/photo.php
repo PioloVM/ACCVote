@@ -11,8 +11,8 @@
  * candidate/photo is missing or malformed. Errors go to error_log only —
  * never to the response body.
  */
-require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../config/db.php';
 
 /**
  * Emit a stored `data:image/...;base64,...` value as real image bytes

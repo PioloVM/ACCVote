@@ -12,8 +12,8 @@
  * Contract: 200 + image bytes + Cache-Control on a hit; bare 404
  * otherwise. Errors go to error_log only.
  */
-require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../config/db.php';
 
 // Same emitter as photo.php (kept local: each endpoint stays a single
 // self-contained file; see photo.php for the full contract).
