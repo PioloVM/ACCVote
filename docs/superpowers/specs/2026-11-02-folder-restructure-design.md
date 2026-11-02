@@ -210,6 +210,10 @@ keep their existing "keep in sync" convention.
 | Guide anchors reference edited source lines | Guide pass deferred; guide's own validator (`test.sh`) proves resolution |
 | POST through 302 edge case | All form actions are same-folder relative → new URLs directly; redirects only as fallback |
 
+## Amendment (2026-11-02, found during plan self-review)
+
+Section B's row `public/index.php | Location: dashboard.php → ../student/dashboard.php` is **superseded**: via `DirectoryIndex` the browser URL for the main entry (`/`) is the *directory* URL, so `../student/dashboard.php` resolves outside the app (`/student/dashboard.php` → 404). `public/index.php` is reachable from two different base URLs (`/voting-app3/` and `/voting-app3/public/index.php`), so it must compute an app-root-absolute target from `SCRIPT_NAME` — the same pattern already required for `404.php` (strip a trailing `/public`, else fall back to `''` for the domain-root runtime). The implementation plan's Task 4 carries the exact code. All other rows stand.
+
 ## Pinned assumptions (grep-verified during design)
 
 - `requireLogin()` is called only from pages that end up in `student/`.
