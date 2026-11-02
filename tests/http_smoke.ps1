@@ -1,10 +1,19 @@
-# HTTP smoke tests — voting-app2-updated (XAMPP Apache + local MariaDB).
-# Created by Task 3 (image endpoints); Tasks 4, 5, 7, 8, 10 append sections.
+# HTTP smoke tests — voting-app3 (XAMPP Apache + local MariaDB).
+# Originally built against voting-app2-updated; repointed 2026-10-30 and
+# extended (SY1/WF1/API1/INT1/RPT1 sections) for the school-year system.
 # Run: powershell -NoProfile -File tests/http_smoke.ps1
 # Exit 0 = all PASS. Any FAIL prints and exits 1 at the end.
+#
+# The voting-flow sections below open elections and vote as the fixture
+# student exactly as the app would. This database is the human's live
+# demo data, so the SUITE PRELUDE snapshots every row the sections touch
+# and the SUITE EPILOGUE (always the last block) restores it. The
+# epilogue only runs if the script reaches it — a red run that dies on a
+# terminating error can leave fixtures behind, same as any section
+# cleanup.
 
 $ErrorActionPreference = 'Stop'
-$base = "http://localhost/voting-app2-updated"
+$base = "http://localhost/voting-app3"
 $failures = 0
 
 function Assert-True([string]$name, [bool]$ok, [string]$detail = '') {
@@ -25,6 +34,58 @@ function Invoke-Get([string]$url) {
     Remove-Item $bodyFile, $headerFile -Force
     return [pscustomobject]@{ Code = ($code -join '').Trim(); Headers = $headers; Body = $body; Text = $bodyText }
 }
+
+# ----------------------------------------------------------------
+# Section: SUITE PRELUDE — snapshot the human's live demo data
+# ----------------------------------------------------------------
+# Several sections mutate rows that already exist: elections 1-2's
+# status/schedule (Task 4/7 fixtures), the fixture student's ballots
+# and votes, candidate photos, and the SSG logo (Task 3). Snapshot all
+# of them here; the SUITE EPILOGUE at the very end puts them back, so
+# a green run leaves the database exactly as it found it.
+$mysql = "C:\xampp\mysql\bin\mysql.exe"
+
+function Invoke-Mysql([string]$sql) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { return (& $mysql -N -B -u root voting_app -e $sql 2>&1 | Out-String).Trim() }
+    finally { $ErrorActionPreference = $old }
+}
+
+# JSON parse helper for the new sections: a malformed API body must
+# FAIL an assertion, not raise a terminating error that kills the run
+# before the epilogue can restore the demo data.
+function ConvertFrom-JsonSafe([string]$s) {
+    try { return ($s | ConvertFrom-Json) } catch { return $null }
+}
+
+# Elections 1-2 are the only pre-existing elections the fixtures touch.
+$eSnap = Invoke-Mysql "SELECT id, status, start_date, end_date FROM elections WHERE id IN (1,2) ORDER BY id;"
+# Fixture student 987654321 (Juan): votes + ballot locks + legacy flag.
+$uidFix = Invoke-Mysql "SELECT id FROM users WHERE student_id='987654321';"
+$vSnap = Invoke-Mysql "SELECT user_id, candidate_id, position_id, voted_at FROM votes WHERE user_id=$uidFix ORDER BY id;"
+$bSnap = Invoke-Mysql "SELECT user_id, election_id, submitted_at FROM ballot_submissions WHERE user_id=$uidFix ORDER BY user_id, election_id;"
+$hvSnap = Invoke-Mysql "SELECT has_voted FROM users WHERE id=$uidFix;"
+# Photos and the SSG logo (Task 3 rewrites both).
+$phSnap = Invoke-Mysql "SELECT id, IFNULL(photo,'@@NULL@@') FROM candidates ORDER BY id;"
+$logoSnap = Invoke-Mysql "SELECT IFNULL(setting_value,'@@NULL@@') FROM site_settings WHERE setting_key='ssg_logo';"
+# updated_at carries ON UPDATE CURRENT_TIMESTAMP — snapshot id+timestamp
+# so the epilogue can put the timestamp back after restoring the value.
+$logoMeta = Invoke-Mysql "SELECT id, IFNULL(updated_at,'@@NULL@@') FROM site_settings WHERE setting_key='ssg_logo';"
+# activity_logs: the A4 maintenance and logs sections append audit lines
+# as the REAL admin (Pruned… / Unblocked…), which A4's own fixture cleanup
+# (admin_username='fixture') misses — they'd accumulate every run. Snapshot
+# the high-water id; the epilogue truncates back to it. (A4's age-prune only
+# removes rows >365 days old; this demo DB has none, so truncation is exact.)
+$logMaxId = Invoke-Mysql "SELECT IFNULL(MAX(id),0) FROM activity_logs;"
+Assert-True "prelude: activity_logs high-water id captured" ($logMaxId -match '^\d+$') "got '$logMaxId'"
+Assert-True "prelude: fixture student id found" ($uidFix -match '^[1-9]\d*$') "got '$uidFix'"
+Assert-True "prelude: elections 1-2 snapshotted" ((($eSnap -split "`n") | Where-Object { $_ -ne '' }).Count -eq 2) "got: $eSnap"
+Assert-True "prelude: candidate photos snapshotted" ($phSnap -ne '') "nothing captured"
+Assert-True "prelude: ssg_logo snapshotted" ($logoSnap -ne '') "nothing captured"
+# $vSnap/$bSnap/$hvSnap are deliberately unasserted: a prior crashed
+# run may legitimately have left them empty, and the epilogue's
+# delete+reinsert restore handles empty snapshots correctly.
 
 # ----------------------------------------------------------------
 # Section: image endpoints (Task 3)
@@ -92,15 +153,14 @@ Assert-True "fixture yields at least 2 votable elections" ($votable.Count -ge 2)
 $first = $votable[0]
 
 # 1. Empty ballot (no position_* fields at all) must be accepted as an
-#    abstention and report the next election in the chain.
+#    abstention. Response contract after the combined-ballot rework:
+#    submitted_elections names every election this submit locked.
 $respText = ((curl.exe -s -b $jar -X POST "$base/vote.php" -d "csrf_token=$token&election_id=$($first.id)") -join "")
 $resp = $respText | ConvertFrom-Json
 Assert-True "empty ballot accepted" ($resp.success -eq $true) $respText
-Assert-True "response carries next_election key" (($resp.PSObject.Properties.Name -contains 'next_election')) $respText
-Assert-True "response carries remaining count" (($resp.PSObject.Properties.Name -contains 'remaining')) $respText
-if (($resp.PSObject.Properties.Name -contains 'next_election')) {
-    Assert-True "next_election is the next votable id in dashboard-data order" ($resp.next_election.id -eq $votable[1].id) "got $($resp.next_election.id), want $($votable[1].id)"
-    Assert-True "remaining equals votable minus submitted" ([int]$resp.remaining -eq ($votable.Count - 1)) "got $($resp.remaining), want $($votable.Count - 1)"
+Assert-True "response carries submitted_elections key" (($resp.PSObject.Properties.Name -contains 'submitted_elections')) $respText
+if (($resp.PSObject.Properties.Name -contains 'submitted_elections')) {
+    Assert-True "submitted_elections lists the locked election" (@($resp.submitted_elections) -contains [int]$first.id) "got: $respText"
 }
 
 # 2. Re-submitting the same election must 409 (the lock).
@@ -158,9 +218,12 @@ Assert-True "submit button exists at end" ($ballotHtml -match 'id="submitBtn"') 
 Assert-True "confirm modal: Cast My Vote + Go Back" (($ballotHtml -match 'Cast My Vote') -and ($ballotHtml -match 'Go Back')) ""
 Assert-True "answered-positions label present" ($ballotHtml -match 'ballotProgressLabel') ""
 
-$contHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$($ballotTarget.id)&continuous=1") -join "`n")
-Assert-True "continuous=1 sets data-continuous on form" ($contHtml -match 'data-continuous="1"') ""
-Assert-True "no continuous param -> no data-continuous" ($ballotHtml -notmatch 'data-continuous') ""
+# The old continuous=1 chain param is gone (combined-ballot rework).
+# A single-election request must stay single (data-election, no
+# data-combined); the combined URL flips the form to combined mode.
+$contHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&combined=1") -join "`n")
+Assert-True "combined=1 sets data-combined on form" ($contHtml -match 'data-combined="1"') ""
+Assert-True "single-election ballot is not combined" ($ballotHtml -notmatch 'data-combined') ""
 
 # ----------------------------------------------------------------
 # Section: Vote All continuous election chain (Task 7)
@@ -181,33 +244,36 @@ $chainData = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | Conve
 $chainIds = @($chainData.elections | Where-Object { $_.config.status -eq 'ongoing' -and -not $_.hasVoted -and $_.totalPositions -gt 0 } | ForEach-Object { [int]$_.id })
 Assert-True "chain fixture: at least 2 votable elections" ($chainIds.Count -ge 2) "got $($chainIds.Count)"
 
-# Vote All UI sources (home card + chain modals) — fetched BEFORE the loop
-# while the elections are still unvoted.
+# Vote All UI sources (combined-ballot redesign) — fetched BEFORE the
+# submit while the elections are still unvoted.
 $homeHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=home") -join "")
 Assert-True "home source has Vote All button id" ($homeHtml -match 'startVoteAllBtn') ""
 Assert-True "home source has Start Voting label" ($homeHtml -match 'Start Voting') ""
-Assert-True "home card links continuous=1" ($homeHtml -match 'continuous=1') ""
+Assert-True "home card links the combined ballot" ($homeHtml -match 'combined=1') ""
 Assert-True "home source opens remaining branch" ($homeHtml -match 'if \(remaining\.length > 0\)') ""
 Assert-True "featured hero selection removed" ($homeHtml -notmatch 'heroActionable') ""
 
-$chainBallotHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$($chainIds[0])&continuous=1") -join "")
-Assert-True "continuous ballot sets data-continuous" ($chainBallotHtml -match 'data-continuous="1"') ""
-Assert-True "ballot has chain (done/error) modal" ($chainBallotHtml -match 'id="ballotChainModal"') ""
-Assert-True "ballot has final modal" ($chainBallotHtml -match 'id="ballotFinalModal"') ""
-Assert-True "final modal exact copy" ($chainBallotHtml -match "You&#039;ve completed all your elections!|You've completed all your elections!") ""
+$chainBallotHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&combined=1") -join "")
+Assert-True "combined ballot sets data-combined" ($chainBallotHtml -match 'data-combined="1"') ""
+Assert-True "combined ballot posts every election id" ($chainBallotHtml -match 'name="combined_elections\[\]"') ""
+Assert-True "combined ballot titled Your Combined Ballot" ($chainBallotHtml -match 'Your Combined Ballot') ""
+Assert-True "ballot has confirm modal" ($chainBallotHtml -match 'id="ballotConfirmModal"') ""
+Assert-True "ballot has success modal" ($chainBallotHtml -match 'id="ballotSuccessModal"') ""
 
-# (b) walk the chain: each submit must report the next id in list order
-for ($i = 0; $i -lt $chainIds.Count; $i++) {
-    $linkResp = ((curl.exe -s -b $jar -X POST "$base/vote.php" -d "csrf_token=$token&election_id=$($chainIds[$i])") -join "") | ConvertFrom-Json
-    Assert-True "chain link $($i+1): submit succeeds" ($linkResp.success -eq $true) ($linkResp | ConvertTo-Json -Compress)
-    $wantNext = if ($i + 1 -lt $chainIds.Count) { $chainIds[$i + 1] } else { $null }
-    $gotNext = if ($null -ne $linkResp.next_election) { [int]$linkResp.next_election.id } else { $null }
-    Assert-True "chain link $($i+1): next_election equals next id in dashboard-data order" ($gotNext -eq $wantNext) "got $gotNext, want $wantNext"
-    $wantRemaining = $chainIds.Count - 1 - $i
-    Assert-True "chain link $($i+1): remaining equals votes left" ([int]$linkResp.remaining -eq $wantRemaining) "got $($linkResp.remaining), want $wantRemaining"
+# (b) ONE submit locks every open election: combined_elections[] carries
+# the whole votable list, submitted_elections reports them all back.
+$comboBody = "csrf_token=$token&combined=1"
+foreach ($cid in $chainIds) { $comboBody += "&combined_elections[]=$cid" }
+$linkResp = ((curl.exe -s -b $jar -X POST "$base/vote.php" -d $comboBody) -join "") | ConvertFrom-Json
+Assert-True "combined submit succeeds" ($linkResp.success -eq $true) ($linkResp | ConvertTo-Json -Compress)
+$gotStr = (@($linkResp.submitted_elections) | ForEach-Object { [int]$_ } | Sort-Object) -join ','
+$wantStr = (@($chainIds) | ForEach-Object { [int]$_ } | Sort-Object) -join ','
+Assert-True "submitted_elections lists every chained election" ($gotStr -eq $wantStr) "got [$gotStr], want [$wantStr]"
+if (@($chainIds).Count -gt 1) {
+    Assert-True "multi-election response uses combined copy" ($linkResp.message -match 'combined ballot for') "got: $($linkResp.message)"
 }
 
-# After the last link: every chained election reports hasVoted, final remaining was 0
+# After the combined submit: every chained election reports hasVoted
 $chainData2 = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
 $stillOpen = @($chainData2.elections | Where-Object { $_.id -in $chainIds -and -not $_.hasVoted })
 Assert-True "all chained elections report hasVoted" ($stillOpen.Count -eq 0) ("still unvoted: " + (($stillOpen | ForEach-Object { $_.id }) -join ','))
@@ -253,10 +319,16 @@ Assert-True "candCount<1 error highlights its field" ($adminSrc -match "wizardIn
 # note under the candidate rows.
 Assert-True "detail view flags uncontested positions" ($adminSrc -match 'status-pill normal">UNCONTESTED') ""
 Assert-True "detail view explains uncontested label" ($adminSrc -match 'only one candidate stood') ""
-# Admin reset-vote must clear the ballot_submissions lock too — votes alone
-# being gone does not let the student vote again (vote.php checks the lock).
+# Admin reset-vote was removed with the combined-ballot rework: the
+# Students panel only REPORTS voted elections now (voted_election_ids
+# from ballot_submissions) and never deletes a real lock. Pin that the
+# destructive handler stays gone — a half-reverted version (votes
+# cleared, ballot_submissions lock left behind) would lock students out
+# of elections they could no longer vote in.
 $studentsSrc = Get-Content .\admin\api\students.php -Raw
-Assert-True "admin reset-vote clears ballot_submissions lock" ($studentsSrc -match 'DELETE FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid') ""
+$adminDashSrc = Get-Content .\admin\dashboard.php -Raw
+Assert-True "admin reset-vote handler stays removed" ($studentsSrc -notmatch 'resetVotesForElection') "stale handler in students.php"
+Assert-True "admin reset-vote UI stays removed" ($adminDashSrc -notmatch 'resetVotesForElection') "stale UI in admin/dashboard.php"
 # Local MySQL (emulated PDO prepares) returns string ids from elections.php
 # while voted_election_ids are ints — a strict .includes(e.id) never matched,
 # so the student-detail Reset button could never render. The compare must
@@ -346,7 +418,12 @@ Assert-True "ballot branch head loads the brand fonts" (([regex]::Matches($dashS
 Assert-True "admin head loads the brand fonts" ($adminSrc -match 'family=Sora') "no font link in admin head"
 Assert-True "admin section titles use the display font" ($adminSrc -match '(?s)\.section-title\{[^}]*font-family:var\(--font-display\)') "admin titles still system fonts"
 Assert-True "admin stat tile labels use the mono eyebrow" ($adminSrc -match '(?s)\.stat-tile \.k\{[^}]*font-family:var\(--font-mono\)') "stat labels not mono"
-Assert-True "no informational label below .75rem in student css" (-not ($studentCss -match 'font-size:\s*0?\.6[0-9]rem|font-size:\s*0?\.7[0-4]rem')) "tiny label sizes remain"
+# Two deliberate sub-.75rem exceptions (both fixed-size UI chrome, not
+# flowing informational text): the admin candidate-tab subtitle and the
+# dashboard progress-split item. Strip them, then the no-tiny-label
+# contract applies to everything else.
+$studentCssScoped = $studentCss -replace '\.cand-tab-btn \.cand-tab-sub\{[^}]*\}', '' -replace '\.progress-split-item\{[^}]*\}', ''
+Assert-True "no informational label below .75rem in student css" (-not ($studentCssScoped -match 'font-size:\s*0?\.6[0-9]rem|font-size:\s*0?\.7[0-4]rem')) "tiny label sizes remain"
 
 # ----------------------------------------------------------------
 # Section: 9.5 batch — has_voted retirement (reads)
@@ -514,28 +591,33 @@ Assert-True "dashboard no ?page has no ballot-step markup" ($spaText -notmatch '
 #     keep only session/user/light queries.
 $dashSrc = Get-Content .\dashboard.php -Raw
 $pageDetectIdx = $dashSrc.IndexOf('$page = $_GET[')
-$heavyGateIdx = $dashSrc.IndexOf("if (`$page === 'vote' && `$selectedElectionId) {")
+$heavyGateIdx = $dashSrc.IndexOf("if (`$page === 'vote' && (`$selectedElectionId || `$isCombined)) {")
 $heavyStartIdx = $dashSrc.IndexOf('$electionData = [];')
 Assert-True "page detection precedes the heavy data block" ($pageDetectIdx -ge 0 -and $heavyStartIdx -gt $pageDetectIdx) "pageIdx=$pageDetectIdx heavyIdx=$heavyStartIdx"
 Assert-True "heavy election-data block gated behind page=vote" ($heavyGateIdx -ge 0 -and $heavyGateIdx -lt $heavyStartIdx) "gateIdx=$heavyGateIdx heavyIdx=$heavyStartIdx"
 
-# Results behavior smoke — pins that batched queries still render the
-# closed CASED election's card (its tallies are fixture-stable: no test
-# casts votes there).
+# Results behavior smoke — pins that batched queries still render a
+# visible election's card. Election 1 (SSG 2027, results_visibility
+# "always") always renders regardless of status; tallies are
+# fixture-stable because no test asserts their values here.
 $r = Invoke-Get "$base/results.php"
 Assert-True "results page loads 200" ($r.Code -eq '200') "got $($r.Code)"
-Assert-True "results renders closed election card" ($r.Text -match 'CASED Student Council Election 2026') "CASED card missing"
+Assert-True "results renders visible election card" ($r.Text -match 'SSG General Elections 2027') "SSG 2027 card missing"
 Assert-True "results renders turnout line" ($r.Text -match 'ballots cast') "turnout line missing"
 
 # ----------------------------------------------------------------
-# Section: ballot exit confirm + re-click unvote (partner follow-ups)
+# Section: ballot confirm + re-click unvote (partner follow-ups)
 # ----------------------------------------------------------------
-# Exit confirm: leaving the ballot with unsubmitted selections must ask
-# first. Re-click unvote: clicking an already-selected radio clears it
-# (the no-vote option for single-choice positions).
+# The exit-confirm guard (ballotExitLinks / "will not be saved") was
+# removed with the combined-ballot rework: there are no drafts or
+# Save & Exit anymore, so one submit ends the whole ballot and there is
+# no partial state to protect. Pin the current protection instead —
+# confirm-before-cast plus the irreversible-submit warning. Re-click
+# unvote: clicking an already-selected radio clears it (the no-vote
+# option for single-choice positions).
 $ballotSrc = Get-Content .\dashboard.php -Raw
-Assert-True "ballot exit links intercepted with confirm dialog" ($ballotSrc -match 'ballotExitLinks') "no exit interception found"
-Assert-True "exit dialog warns unsubmitted selections are lost" ($ballotSrc -match 'will not be saved') "warning text missing"
+Assert-True "ballot opens a confirm modal before casting" ($ballotSrc -match 'openBallotConfirm') "no confirm flow"
+Assert-True "submit warns selections are final" ($ballotSrc -match "can't be changed after you submit") "finality warning missing"
 Assert-True "selected radio can be unvoted by re-clicking it" ($ballotSrc -match 'prevCheckedByGroup') "no re-click unvote logic found"
 
 # ----------------------------------------------------------------
@@ -994,10 +1076,14 @@ $ccsrf = [regex]::Match($cdash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
 
 # Source fixture: a full election created through the API itself, so
 # the duplicate has a real roster (position + candidate) to copy.
-$dept = Invoke-MysqlOut "SELECT code FROM departments LIMIT 1;"
+# DSG (not SSG) because the duplicate wall allows only one SSG election
+# per school year and the demo DB already has one for the upcoming
+# year; the department must be one with no DSG election yet (the wall
+# counts archived rows too).
+$dept = Invoke-MysqlOut "SELECT code FROM departments WHERE code NOT IN (SELECT department FROM elections WHERE type='DSG' AND department IS NOT NULL) LIMIT 1;"
 Assert-True "department code fixture available" ($dept -ne '' -and $dept -notmatch 'ERROR') "got '$dept'"
 $srcBody = [System.IO.Path]::GetTempFileName()
-[System.IO.File]::WriteAllText($srcBody, '{ "csrf_token": "' + $ccsrf + '", "type": "SSG", "name": "C1 SOURCE FIXTURE", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Alice Cruz", "department": "' + $dept + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+[System.IO.File]::WriteAllText($srcBody, '{ "csrf_token": "' + $ccsrf + '", "type": "DSG", "department": "' + $dept + '", "name": "C1 SOURCE FIXTURE", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Alice Cruz", "department": "' + $dept + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
 $src1 = ((curl.exe -s -b $cjar -X POST "$base/admin/api/elections.php" --data-binary "@$srcBody") -join "")
 Assert-True "C1 source election created" ($src1 -match '"success":true') "got: $src1"
 $srcId = [regex]::Match($src1, '"id":(\d+)').Groups[1].Value
@@ -1072,9 +1158,10 @@ Assert-True "C2 admin session login (302)" ($pvc -eq "302") "got $pvc"
 $pvdash = ((curl.exe -s -b $pvjar "$base/admin/dashboard.php") -join "`n")
 $pvcsrf = [regex]::Match($pvdash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
 
-$dept2 = Invoke-MysqlOut "SELECT code FROM departments LIMIT 1;"
+# DSG + a department with no DSG election yet (duplicate wall — see C1).
+$dept2 = Invoke-MysqlOut "SELECT code FROM departments WHERE code NOT IN (SELECT department FROM elections WHERE type='DSG' AND department IS NOT NULL) LIMIT 1;"
 $pvCreate = [System.IO.Path]::GetTempFileName()
-[System.IO.File]::WriteAllText($pvCreate, '{ "csrf_token": "' + $pvcsrf + '", "type": "SSG", "name": "C2 PREVIEW FIXTURE", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Bob Santos", "department": "' + $dept2 + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+[System.IO.File]::WriteAllText($pvCreate, '{ "csrf_token": "' + $pvcsrf + '", "type": "DSG", "department": "' + $dept2 + '", "name": "C2 PREVIEW FIXTURE", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Bob Santos", "department": "' + $dept2 + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
 $pv1 = ((curl.exe -s -b $pvjar -X POST "$base/admin/api/elections.php" --data-binary "@$pvCreate") -join "")
 $prevId = [regex]::Match($pv1, '"id":(\d+)').Groups[1].Value
 Assert-True "C2 fixture election created" (($pv1 -match '"success":true') -and ($prevId -match '^[1-9]\d*$')) "got: $pv1"
@@ -1111,8 +1198,17 @@ Assert-True "no preview flag = no ballot for admin" ($pvNo -ne "200") "got $pvNo
 $pvAnon = curl.exe -s -o NUL -w "%{http_code}" "$base/dashboard.php?page=vote&election_id=$prevId&preview=1"
 Assert-True "anonymous preview refused" ($pvAnon -ne "200") "got $pvAnon"
 
-# 4. Student + preview=1 sees their NORMAL ballot (no banner).
-$pvStu = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
+# 4. Student + preview=1 sees their NORMAL ballot (no banner): the
+# preview flag only unlocks admin sessions ($isPreview needs admin_id).
+# Point at an election the fixture student can actually vote in — the
+# fixture election's faculty isn't theirs (the duplicate wall blocks
+# creating one in Information Technology), and a foreign-faculty DSG is
+# excluded from a student's ballot entirely.
+$stuDept = Invoke-MysqlOut "SELECT department FROM users WHERE student_id='987654321';"
+$stuEid = Invoke-MysqlOut "SELECT id FROM elections WHERE status='ongoing' AND type='DSG' AND department='$stuDept' AND start_date <= NOW() AND end_date >= NOW() LIMIT 1;"
+Assert-True "fixture student has an open own-faculty election" ($stuEid -match '^[1-9]\d*$') "got '$stuEid' (dept '$stuDept')"
+& $mysql -u root voting_app -e "DELETE FROM ballot_submissions WHERE user_id=(SELECT id FROM users WHERE student_id='987654321'); DELETE FROM votes WHERE user_id=(SELECT id FROM users WHERE student_id='987654321'); UPDATE users SET has_voted=0 WHERE student_id='987654321';" 2>&1 | Out-Null
+$pvStu = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$stuEid&preview=1") -join "`n")
 Assert-True "student ballot renders without the banner" (($pvStu -match 'id="voteForm"') -and ($pvStu -notmatch 'preview-banner')) "unexpected preview state"
 
 # 5. The preview admin session cannot actually vote.
@@ -1197,6 +1293,452 @@ Assert-True "D2 uptime workflow is scheduled" ($wf2Src -match 'schedule:') "miss
 Assert-True "D2 uptime workflow guards on SITE_URL" ($wf2Src -match 'vars\.SITE_URL') "missing"
 Assert-True "D2 uptime workflow probes health.php" ($wf2Src -match 'health\.php') "missing"
 Assert-True "D2 uptime workflow files an issue on failure" ($wf2Src -match 'issues\.create') "missing"
+
+# ================================================================
+# Phase 2 sections: SY1 / INT1 / API1 / WF1 / RPT1
+# ================================================================
+
+# ----------------------------------------------------------------
+# Section: SY1 - school-year mechanics (archive-all + walls)
+# ----------------------------------------------------------------
+$syjar = [System.IO.Path]::GetTempFileName()
+$syh = ((curl.exe -s -c $syjar "$base/admin/login.php") -join "`n")
+$syt = [regex]::Match($syh, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$syc = curl.exe -s -b $syjar -c $syjar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$syt&username=admin&password=admin123"
+Assert-True "SY1 admin session login (302)" ($syc -eq "302") "got $syc"
+$sydash = ((curl.exe -s -b $syjar "$base/admin/dashboard.php") -join "`n")
+$sycsrf = [regex]::Match($sydash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+Assert-True "SY1 admin csrf token found" ($sycsrf -ne "") "not in dashboard"
+& $mysql -u root voting_app -e "DELETE FROM login_attempts;" 2>&1 | Out-Null
+
+# Guards answer BEFORE any write: method, auth, csrf.
+$syGetCode = curl.exe -s -b $syjar -o NUL -w "%{http_code}" "$base/admin/api/next-school-year.php"
+Assert-True "SY1 GET refused (405)" ($syGetCode -eq "405") "got $syGetCode"
+$syStuCode = curl.exe -s -b $jar -o NUL -w "%{http_code}" -X POST "$base/admin/api/next-school-year.php" -d "{}"
+Assert-True "SY1 student session refused (401)" ($syStuCode -eq "401") "got $syStuCode"
+$syAnonCode = curl.exe -s -o NUL -w "%{http_code}" -X POST "$base/admin/api/next-school-year.php" -d "{}"
+Assert-True "SY1 anonymous refused (401)" ($syAnonCode -eq "401") "got $syAnonCode"
+$syBadFile = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($syBadFile, '{ "csrf_token": "bogus" }')
+$syBadBody = ((curl.exe -s -b $syjar -X POST "$base/admin/api/next-school-year.php" --data-binary "@$syBadFile") -join "")
+Assert-True "SY1 bogus csrf refused (403 body)" ($syBadBody -match 'session expired') "got: $syBadBody"
+
+# Snapshot everything the archive-all endpoint touches: every election's
+# status + window, the school_years table, and the user year-level /
+# account-status fields the endpoint's contract promises never to change.
+$syElec = Invoke-MysqlOut "SELECT CONCAT(id,'|',status,'|',start_date,'|',end_date) FROM elections ORDER BY id;"
+$sySy = Invoke-MysqlOut "SELECT CONCAT(id,'|',label,'|',is_active) FROM school_years ORDER BY id;"
+$syUsr = Invoke-MysqlOut "SELECT CONCAT(id,'|',IFNULL(year_level,''),'|',IFNULL(account_status,''),'|',has_voted) FROM users ORDER BY id;"
+$syArchBefore = Invoke-MysqlOut "SELECT COUNT(*) FROM elections WHERE status != 'archived';"
+$syLabel = Invoke-MysqlOut "SELECT label FROM school_years WHERE is_active = 1 LIMIT 1;"
+Assert-True "SY1 pre-call snapshot captured" (($syElec -match '^\d+\|') -and ($syArchBefore -match '^\d+$') -and ($syLabel -ne '')) "elec='$syElec' before='$syArchBefore' label='$syLabel'"
+
+# The real action, as the dashboard button sends it: csrf-only POST.
+$syBody = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($syBody, '{ "csrf_token": "' + $sycsrf + '" }')
+$syResp = ((curl.exe -s -b $syjar -X POST "$base/admin/api/next-school-year.php" --data-binary "@$syBody") -join "")
+$syObj = ConvertFrom-JsonSafe $syResp
+Assert-True "SY1 archive-all succeeds" ($null -ne $syObj -and $syObj.success -eq $true) "got: $syResp"
+if ($null -ne $syObj) {
+    Assert-True "SY1 archived_elections equals pre-call non-archived count" ([string]$syObj.archived_elections -eq [string]$syArchBefore) "got '$($syObj.archived_elections)', want '$syArchBefore'"
+    Assert-True "SY1 reports the active school year label" ($syObj.current_school_year -eq $syLabel) "got '$($syObj.current_school_year)', want '$syLabel'"
+}
+$syArchAfter = Invoke-MysqlOut "SELECT COUNT(*) FROM elections WHERE status != 'archived';"
+Assert-True "SY1 every election is archived afterwards" ($syArchAfter -eq '0') "got $syArchAfter still unarchived"
+
+# The contract: nothing but election statuses moves.
+$sySyAfter = Invoke-MysqlOut "SELECT CONCAT(id,'|',label,'|',is_active) FROM school_years ORDER BY id;"
+Assert-True "SY1 never touches school_years" ($sySyAfter -eq $sySy) "before[$sySy] after[$sySyAfter]"
+$syUsrAfter = Invoke-MysqlOut "SELECT CONCAT(id,'|',IFNULL(year_level,''),'|',IFNULL(account_status,''),'|',has_voted) FROM users ORDER BY id;"
+Assert-True "SY1 never touches student year levels / account status" ($syUsrAfter -eq $syUsr) "user rows changed"
+$syLog = Invoke-MysqlOut "SELECT COUNT(*) FROM activity_logs WHERE action LIKE 'Ran Next School Year Election: archived%';"
+Assert-True "SY1 archive is audited" (($syLog -match '^\d+$') -and ([int]$syLog -ge 1)) "got '$syLog'"
+
+# Restore: every election row back exactly as snapshotted, then drop the
+# audit line this section wrote.
+foreach ($row in ($syElec -split "`r?`n")) {
+    $row = $row.Trim()
+    if ($row -eq '') { continue }
+    $p = $row -split '\|'
+    if ($p[0] -match '^\d+$' -and $p[1] -ne '') {
+        & $mysql -u root voting_app -e "UPDATE elections SET status='$($p[1])', start_date='$($p[2])', end_date='$($p[3])' WHERE id=$($p[0]);" 2>&1 | Out-Null
+    }
+}
+& $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE 'Ran Next School Year Election: archived%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
+Remove-Item $syjar, $syBody, $syBadFile -Force -ErrorAction SilentlyContinue
+
+# ----------------------------------------------------------------
+# Section: INT1 - data-integrity invariants (read-only)
+# ----------------------------------------------------------------
+# Structural rules the whole vote/report pipeline assumes. All are
+# evaluated straight against the DB, so a schema or cascade regression
+# fails here even when every HTTP assertion still passes.
+$iOrph = Invoke-MysqlOut "SELECT COUNT(*) FROM votes v LEFT JOIN candidates c ON c.id = v.candidate_id WHERE c.id IS NULL;"
+Assert-True "INT1 no votes orphaned from candidates" ($iOrph -eq '0') "got $iOrph"
+$iPosMis = Invoke-MysqlOut "SELECT COUNT(*) FROM votes v JOIN candidates c ON c.id = v.candidate_id WHERE v.position_id <> c.position_id;"
+Assert-True "INT1 vote position matches its candidate's position" ($iPosMis -eq '0') "got $iPosMis"
+$iEp = Invoke-MysqlOut "SELECT COUNT(*) FROM election_positions ep LEFT JOIN elections e ON e.id = ep.election_id WHERE e.id IS NULL;"
+Assert-True "INT1 no election_positions orphaned from elections" ($iEp -eq '0') "got $iEp"
+$iCu = Invoke-MysqlOut "SELECT COUNT(*) FROM candidates c LEFT JOIN election_positions ep ON ep.position_id = c.position_id WHERE ep.position_id IS NULL;"
+Assert-True "INT1 every candidate is linked to an election" ($iCu -eq '0') "got $iCu"
+$iShared = Invoke-MysqlOut "SELECT COUNT(*) FROM (SELECT position_id FROM election_positions GROUP BY position_id HAVING COUNT(*) > 1) t;"
+Assert-True "INT1 no position shared across elections" ($iShared -eq '0') "got $iShared"
+$iSharedC = Invoke-MysqlOut "SELECT COUNT(*) FROM (SELECT c.id FROM candidates c JOIN election_positions ep ON ep.position_id = c.position_id GROUP BY c.id HAVING COUNT(*) > 1) t;"
+Assert-True "INT1 no candidate reachable from two elections" ($iSharedC -eq '0') "got $iSharedC"
+$iWin = Invoke-MysqlOut "SELECT COUNT(*) FROM election_positions ep WHERE ep.winner_count < 1 OR ep.winner_count > (SELECT COUNT(*) FROM candidates c WHERE c.position_id = ep.position_id);"
+Assert-True "INT1 winner_count within candidate count" ($iWin -eq '0') "got $iWin"
+$iJoin = Invoke-MysqlOut "SELECT (SELECT COUNT(*) FROM votes) - (SELECT COUNT(*) FROM votes v JOIN election_positions ep ON ep.position_id = v.position_id);"
+Assert-True "INT1 vote->election join covers every vote" ($iJoin -eq '0') "got $iJoin"
+$iLock = Invoke-MysqlOut "SELECT COUNT(*) FROM ballot_submissions bs LEFT JOIN elections e ON e.id = bs.election_id LEFT JOIN users u ON u.id = bs.user_id WHERE e.id IS NULL OR u.id IS NULL;"
+Assert-True "INT1 ballot locks reference live rows" ($iLock -eq '0') "got $iLock"
+$iDup = Invoke-MysqlOut "SELECT COUNT(*) FROM (SELECT user_id, election_id FROM ballot_submissions GROUP BY user_id, election_id HAVING COUNT(*) > 1) t;"
+Assert-True "INT1 no duplicate ballot locks" ($iDup -eq '0') "got $iDup"
+$iSy = Invoke-MysqlOut "SELECT COUNT(*) FROM school_years WHERE is_active = 1;"
+Assert-True "INT1 exactly one active school year" ($iSy -eq '1') "got $iSy"
+
+# ----------------------------------------------------------------
+# Section: API1 - admin API numbers must match the database
+# ----------------------------------------------------------------
+$apijar = [System.IO.Path]::GetTempFileName()
+$apih = ((curl.exe -s -c $apijar "$base/admin/login.php") -join "`n")
+$apit = [regex]::Match($apih, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$apic = curl.exe -s -b $apijar -c $apijar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$apit&username=admin&password=admin123"
+Assert-True "API1 admin session login (302)" ($apic -eq "302") "got $apic"
+
+# Election detail: vote_count / ballots / eligible / turnout must all be
+# reproducible from raw SQL (same rows, same rounding as PHP round()).
+foreach ($eid in @(1, 2)) {
+    $gTxt = ((curl.exe -s -b $apijar "$base/admin/api/elections.php?id=$eid") -join "")
+    $gObj = ConvertFrom-JsonSafe $gTxt
+    Assert-True "API1 election $eid detail loads" (($null -ne $gObj) -and ("$gTxt" -match '"vote_count"')) "got: $gTxt"
+    if ($null -eq $gObj) { continue }
+    $eType = Invoke-MysqlOut "SELECT type FROM elections WHERE id=$eid;"
+    $eDept = Invoke-MysqlOut "SELECT IFNULL(department,'') FROM elections WHERE id=$eid;"
+    $expVotes = Invoke-MysqlOut "SELECT COUNT(*) FROM votes v JOIN election_positions ep ON ep.position_id = v.position_id WHERE ep.election_id=$eid;"
+    $expBallots = Invoke-MysqlOut "SELECT COUNT(DISTINCT user_id) FROM ballot_submissions WHERE election_id=$eid;"
+    if ($eType -eq 'DSG' -and $eDept -ne '') {
+        $expElig = Invoke-MysqlOut "SELECT COUNT(*) FROM users WHERE registration_status = 'active' AND account_status NOT IN ('dropped','graduated') AND department = '$eDept';"
+    } else {
+        $expElig = Invoke-MysqlOut "SELECT COUNT(*) FROM users WHERE registration_status = 'active' AND account_status NOT IN ('dropped','graduated');"
+    }
+    $okSql = ($expVotes -match '^\d+$') -and ($expBallots -match '^\d+$') -and ($expElig -match '^\d+$')
+    Assert-True "API1 election $eid SQL ground truth computed" $okSql "votes=$expVotes ballots=$expBallots elig=$expElig"
+    if (-not $okSql) { continue }
+    $expPct = 0.0
+    if ([int]$expElig -gt 0) { $expPct = [math]::Round(([int]$expBallots / [int]$expElig) * 100, 1, [MidpointRounding]::AwayFromZero) }
+    Assert-True "API1 election $eid vote_count matches SQL" ([int]$gObj.vote_count -eq [int]$expVotes) "api=$($gObj.vote_count) sql=$expVotes"
+    Assert-True "API1 election $eid ballots_cast matches SQL" ([int]$gObj.ballots_cast -eq [int]$expBallots) "api=$($gObj.ballots_cast) sql=$expBallots"
+    Assert-True "API1 election $eid eligible_voters matches SQL" ([int]$gObj.eligible_voters -eq [int]$expElig) "api=$($gObj.eligible_voters) sql=$expElig"
+    Assert-True "API1 election $eid turnout_pct matches round(x,1)" ([double]$gObj.turnout_pct -eq [double]$expPct) "api=$($gObj.turnout_pct) want=$expPct"
+}
+
+# List endpoint: ids and statuses straight from the DB.
+$apiListTxt = ((curl.exe -s -b $apijar "$base/admin/api/elections.php") -join "")
+$apiList = ConvertFrom-JsonSafe $apiListTxt
+$expElec = Invoke-MysqlOut "SELECT CONCAT(id,'|',status) FROM elections ORDER BY id;"
+$expList = @(($expElec -split "`r?`n") | Where-Object { $_ -ne '' })
+$gotList = @()
+if ($null -ne $apiList) { $gotList = @($apiList | Sort-Object { [int]$_.id } | ForEach-Object { "$([int]$_.id)|$($_.status)" }) }
+Assert-True "API1 elections list count matches DB" ($gotList.Count -eq $expList.Count) "api=$($gotList.Count) db=$($expList.Count)"
+Assert-True "API1 elections list statuses match DB" (($gotList -join "`n") -eq ($expList -join "`n")) "api[$($gotList -join ' ; ')] db[$($expList -join ' ; ')]"
+
+# Students: count + the fixture student's lock map from ballot_submissions.
+$stuTxt = ((curl.exe -s -b $apijar "$base/admin/api/students.php") -join "")
+$stuObj = ConvertFrom-JsonSafe $stuTxt
+$expStuN = (Invoke-MysqlOut "SELECT COUNT(*) FROM users;") -as [int]
+Assert-True "API1 students list loads as array" (($null -ne $stuObj) -and ("$stuTxt".Trim().StartsWith('['))) "got: $stuTxt"
+Assert-True "API1 students count matches DB" (@($stuObj).Count -eq $expStuN) "api=$(@($stuObj).Count) db=$expStuN"
+$expLocks = Invoke-MysqlOut "SELECT election_id FROM ballot_submissions WHERE user_id = (SELECT id FROM users WHERE student_id = '987654321') ORDER BY election_id;"
+$expLocksStr = (@(($expLocks -split "`r?`n") | Where-Object { $_ -ne '' }) | ForEach-Object { [int]$_ }) -join ','
+$fixRow = @($stuObj) | Where-Object { $_.student_id -eq '987654321' } | Select-Object -First 1
+$gotLocksStr = (@($fixRow.voted_election_ids) | ForEach-Object { [int]$_ }) -join ','
+Assert-True "API1 fixture student voted_election_ids matches DB" ($gotLocksStr -eq $expLocksStr) "api[$gotLocksStr] db[$expLocksStr]"
+
+# Admins: count matches, no credential material leaves the endpoint.
+$admTxt = ((curl.exe -s -b $apijar "$base/admin/api/admins.php") -join "")
+$admObj = ConvertFrom-JsonSafe $admTxt
+$expAdmN = (Invoke-MysqlOut "SELECT COUNT(*) FROM admins;") -as [int]
+Assert-True "API1 admins list loads as array" (($null -ne $admObj) -and ("$admTxt".Trim().StartsWith('['))) "got: $admTxt"
+Assert-True "API1 admins count matches DB" (@($admObj).Count -eq $expAdmN) "api=$(@($admObj).Count) db=$expAdmN"
+Assert-True "API1 admins payload leaks no password field" ($admTxt -notmatch '"password"') "hash leaked"
+Assert-True "API1 admins rows carry is_me" (([regex]::Matches($admTxt, '"is_me"')).Count -eq @($admObj).Count) "is_me badge missing on some rows"
+
+# Logs: array shape, server-side cap, newest first, limit param honored.
+$logTxt = ((curl.exe -s -b $apijar "$base/admin/api/logs.php") -join "")
+$logObj = ConvertFrom-JsonSafe $logTxt
+$logArr = @($logObj)
+Assert-True "API1 logs list loads as array" (($null -ne $logObj) -and ("$logTxt".Trim().StartsWith('['))) "got: $logTxt"
+Assert-True "API1 logs capped at 200 rows" ($logArr.Count -le 200) "got $($logArr.Count)"
+Assert-True "API1 log rows expose id/user/action/time" (($logTxt -match '"admin_username"') -and ($logTxt -match '"created_at"')) "shape missing"
+if ($logArr.Count -ge 2) {
+    Assert-True "API1 logs newest first" ([string]$logArr[0].created_at -ge [string]$logArr[$logArr.Count - 1].created_at) "$($logArr[0].created_at) vs $($logArr[$logArr.Count - 1].created_at)"
+}
+if ($logArr.Count -ge 1) {
+    $logTxt5 = ((curl.exe -s -b $apijar "$base/admin/api/logs.php?limit=5") -join "")
+    $logObj5 = ConvertFrom-JsonSafe $logTxt5
+    Assert-True "API1 logs limit=5 honored" (@($logObj5).Count -le 5) "got $(@($logObj5).Count)"
+    $logTxtNeg = ((curl.exe -s -b $apijar "$base/admin/api/logs.php?limit=-5") -join "")
+    $logObjNeg = ConvertFrom-JsonSafe $logTxtNeg
+    Assert-True "API1 logs negative limit clamps to 1" (@($logObjNeg).Count -eq 1) "got $(@($logObjNeg).Count)"
+}
+
+# Settings: school years + the stored SSG logo served back verbatim.
+$setTxt = ((curl.exe -s -b $apijar "$base/admin/api/settings.php") -join "")
+$setObj = ConvertFrom-JsonSafe $setTxt
+Assert-True "API1 settings loads" (($null -ne $setObj) -and ($null -ne $setObj.departments)) "got: $setTxt"
+$expSyN = (Invoke-MysqlOut "SELECT COUNT(*) FROM school_years;") -as [int]
+Assert-True "API1 settings school_years count matches DB" (@($setObj.school_years).Count -eq $expSyN) "api=$(@($setObj.school_years).Count) db=$expSyN"
+$expLogo = Invoke-MysqlOut "SELECT IFNULL((SELECT setting_value FROM site_settings WHERE setting_key = 'ssg_logo'), '@@NULL@@');"
+$apiLogo = if ($null -eq $setObj.site_settings.ssg_logo -or [string]$setObj.site_settings.ssg_logo -eq '') { '@@NULL@@' } else { [string]$setObj.site_settings.ssg_logo }
+Assert-True "API1 settings serves the stored ssg_logo" ($apiLogo -eq $expLogo) "api[$($apiLogo.Substring(0, [Math]::Min(40, $apiLogo.Length)))] db[$($expLogo.Substring(0, [Math]::Min(40, $expLogo.Length)))]"
+
+# Auth / csrf guards on sibling endpoints.
+$apiStuCode = curl.exe -s -b $jar -o NUL -w "%{http_code}" "$base/admin/api/elections.php"
+Assert-True "API1 student session refused (401)" ($apiStuCode -eq "401") "got $apiStuCode"
+$setBadFile = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($setBadFile, '{ "csrf_token": "bogus" }')
+$setBadBody = ((curl.exe -s -b $apijar -X POST "$base/admin/api/settings.php" --data-binary "@$setBadFile") -join "")
+Assert-True "API1 settings write refuses bogus csrf (403 body)" ($setBadBody -match 'session expired') "got: $setBadBody"
+Remove-Item $setBadFile -Force -ErrorAction SilentlyContinue
+
+# ----------------------------------------------------------------
+# Section: WF1 - election write flow (create -> schedule -> activate
+# -> guard rails -> close -> archive -> reactivate -> delete)
+# ----------------------------------------------------------------
+$wfjar = [System.IO.Path]::GetTempFileName()
+$wfh = ((curl.exe -s -c $wfjar "$base/admin/login.php") -join "`n")
+$wft = [regex]::Match($wfh, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
+$wfc = curl.exe -s -b $wfjar -c $wfjar -o NUL -w "%{http_code}" -X POST "$base/admin/login.php" -d "csrf_token=$wft&username=admin&password=admin123"
+Assert-True "WF1 admin session login (302)" ($wfc -eq "302") "got $wfc"
+$wfdash = ((curl.exe -s -b $wfjar "$base/admin/dashboard.php") -join "`n")
+$wfcsrf = [regex]::Match($wfdash, 'const CSRF_TOKEN = "([^"]+)"').Groups[1].Value
+Assert-True "WF1 admin csrf token found" ($wfcsrf -ne "") "not in dashboard"
+& $mysql -u root voting_app -e "DELETE FROM login_attempts;" 2>&1 | Out-Null
+
+# Fixture department: a faculty with NO DSG election yet (the wall counts
+# archived rows, so "absent from the table entirely" is the safe pick).
+$wfDept = Invoke-MysqlOut "SELECT code FROM departments WHERE code NOT IN (SELECT department FROM elections WHERE type = 'DSG' AND department IS NOT NULL) LIMIT 1;"
+Assert-True "WF1 free department fixture available" ($wfDept -match '^[A-Za-z]') "got '$wfDept'"
+
+# The upcoming school year the server must choose on its own — mirror of
+# currentSchoolYearStartYear()+1 (June cutover, Asia/Manila).
+$mnlNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTime]::UtcNow, 'SE Asia Standard Time')
+$curStartYear = if ($mnlNow.Month -ge 6) { $mnlNow.Year } else { $mnlNow.Year - 1 }
+$wfSy = Invoke-MysqlOut "SELECT id FROM school_years WHERE start_year = $($curStartYear + 1) LIMIT 1;"
+
+# 1. Create: status and target school year are server-chosen; the client
+#    target_school_year_id=1 spoof must be ignored.
+$wfCreate = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($wfCreate, '{ "csrf_token": "' + $wfcsrf + '", "type": "DSG", "department": "' + $wfDept + '", "name": "WF1 FLOW FIXTURE", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "target_school_year_id": 1, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Cara Dela Cruz", "department": "' + $wfDept + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+$wfResp = ((curl.exe -s -b $wfjar -X POST "$base/admin/api/elections.php" --data-binary "@$wfCreate") -join "")
+Assert-True "WF1 fixture election created" ($wfResp -match '"success":true') "got: $wfResp"
+$wfId = [regex]::Match($wfResp, '"id":(\d+)').Groups[1].Value
+Assert-True "WF1 fixture id extracted" ($wfId -match '^[1-9]\d*$') "got: $wfResp"
+$wfTouched = @($wfCreate)
+
+if ($wfId -match '^[1-9]\d*$') {
+    $wfRow = Invoke-MysqlOut "SELECT CONCAT(status,'|',department,'|',target_school_year_id) FROM elections WHERE id=$wfId;"
+    $wfParts = $wfRow -split '\|'
+    Assert-True "WF1 create leaves a draft" ($wfParts[0] -eq 'draft') "got '$wfRow'"
+    Assert-True "WF1 create stores the department" ($wfParts[1] -eq $wfDept) "got '$wfRow' want '$wfDept'"
+    Assert-True "WF1 client target_school_year_id ignored (auto upcoming)" ($wfParts[2] -eq "$wfSy") "got '$($wfParts[2])' want '$wfSy' (spoof was 1)"
+
+    # 2. Duplicate wall at CREATE: one SSG per school year, one DSG per
+    #    faculty per school year — and archived elections count.
+    $wfSsg = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfSsg
+    [System.IO.File]::WriteAllText($wfSsg, '{ "csrf_token": "' + $wfcsrf + '", "type": "SSG", "name": "WF1 SSG WALL", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Wall Test", "department": "' + $wfDept + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+    $wfSsgResp = ((curl.exe -s -b $wfjar -X POST "$base/admin/api/elections.php" --data-binary "@$wfSsg") -join "")
+    Assert-True "WF1 duplicate SSG refused (400 wall)" ($wfSsgResp -match 'SSG election already exists') "got: $wfSsgResp"
+    $itDept = Invoke-MysqlOut "SELECT code FROM departments WHERE code = 'Information Technology';"
+    $wfIt = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfIt
+    [System.IO.File]::WriteAllText($wfIt, '{ "csrf_token": "' + $wfcsrf + '", "type": "DSG", "department": "' + $itDept + '", "name": "WF1 IT WALL", "start": "2026-11-01 08:00", "end": "2026-11-02 17:00", "results_visibility": "after", "parties_enabled": false, "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Wall Test Two", "department": "' + $itDept + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+    $wfItResp = ((curl.exe -s -b $wfjar -X POST "$base/admin/api/elections.php" --data-binary "@$wfIt") -join "")
+    Assert-True "WF1 duplicate DSG refused (400 wall)" ($wfItResp -match 'DSG election already exists for this faculty') "got: $wfItResp"
+
+    # 3. Status rules, in lifecycle order.
+    $wfToOngoing = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfToOngoing
+    [System.IO.File]::WriteAllText($wfToOngoing, '{ "csrf_token": "' + $wfcsrf + '", "id": ' + $wfId + ', "status": "ongoing" }')
+    $wfR1 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfToOngoing") -join "")
+    Assert-True "WF1 draft -> ongoing refused (409 save a schedule)" ($wfR1 -match 'Save a schedule') "got: $wfR1"
+
+    $wfSched = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfSched
+    [System.IO.File]::WriteAllText($wfSched, '{ "csrf_token": "' + $wfcsrf + '", "id": ' + $wfId + ', "start": "2026-10-01 08:00", "end": "2026-12-31 17:00" }')
+    $wfR2 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfSched") -join "")
+    $wfAfterSched = Invoke-MysqlOut "SELECT status FROM elections WHERE id=$wfId;"
+    Assert-True "WF1 schedule save succeeds" ($wfR2 -match '"success":true') "got: $wfR2"
+    Assert-True "WF1 schedule save promotes draft -> scheduled" ($wfAfterSched -eq 'scheduled') "got '$wfAfterSched'"
+
+    $wfR3 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfToOngoing") -join "")
+    $wfAfterStart = Invoke-MysqlOut "SELECT status FROM elections WHERE id=$wfId;"
+    Assert-True "WF1 scheduled -> ongoing succeeds (wall re-checked, passes)" (($wfR3 -match '"success":true') -and ($wfAfterStart -eq 'ongoing')) "resp=$wfR3 status=$wfAfterStart"
+
+    # Ongoing guard rails: no roster edits, no schedule edits, no archive.
+    $wfFullEdit = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfFullEdit
+    [System.IO.File]::WriteAllText($wfFullEdit, '{ "csrf_token": "' + $wfcsrf + '", "id": ' + $wfId + ', "positions": [ { "title": "President", "winner_count": 1, "year_restriction": "", "candidates": [ { "name": "Cara Dela Cruz", "department": "' + $wfDept + '", "candidate_year": "", "platform": "", "party": "", "photo": "" } ] } ] }')
+    $wfR4 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfFullEdit") -join "")
+    Assert-True "WF1 ongoing refuses position edits (409)" ($wfR4 -match 'Pause it before editing positions') "got: $wfR4"
+    $wfR5 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfSched") -join "")
+    Assert-True "WF1 ongoing refuses schedule edits (409)" ($wfR5 -match 'Pause this election before changing its schedule') "got: $wfR5"
+    $wfToArch = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfToArch
+    [System.IO.File]::WriteAllText($wfToArch, '{ "csrf_token": "' + $wfcsrf + '", "id": ' + $wfId + ', "status": "archived" }')
+    $wfR6 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfToArch") -join "")
+    Assert-True "WF1 ongoing -> archived refused (409 only ended)" ($wfR6 -match 'Only ended elections can be archived') "got: $wfR6"
+
+    # Close, then archive from closed — the only path to archived.
+    $wfToClosed = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfToClosed
+    [System.IO.File]::WriteAllText($wfToClosed, '{ "csrf_token": "' + $wfcsrf + '", "id": ' + $wfId + ', "status": "closed" }')
+    $wfR7 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfToClosed") -join "")
+    $wfAfterClose = Invoke-MysqlOut "SELECT status FROM elections WHERE id=$wfId;"
+    Assert-True "WF1 ongoing -> closed succeeds" (($wfR7 -match '"success":true') -and ($wfAfterClose -eq 'closed')) "resp=$wfR7 status=$wfAfterClose"
+    $wfR8 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfToArch") -join "")
+    $wfAfterArch = Invoke-MysqlOut "SELECT status FROM elections WHERE id=$wfId;"
+    Assert-True "WF1 closed -> archived succeeds" (($wfR8 -match '"success":true') -and ($wfAfterArch -eq 'archived')) "resp=$wfR8 status=$wfAfterArch"
+
+    # Reactivation: archived -> ongoing is legal (the wall re-runs and
+    # passes for a free faculty).
+    $wfR9 = ((curl.exe -s -b $wfjar -X PUT "$base/admin/api/elections.php" --data-binary "@$wfToOngoing") -join "")
+    $wfAfterRe = Invoke-MysqlOut "SELECT status FROM elections WHERE id=$wfId;"
+    Assert-True "WF1 archived -> ongoing reactivation succeeds" (($wfR9 -match '"success":true') -and ($wfAfterRe -eq 'ongoing')) "resp=$wfR9 status=$wfAfterRe"
+
+    # Delete: explicit confirmation, then a full cascade.
+    $wfDel = [System.IO.Path]::GetTempFileName(); $wfTouched += $wfDel
+    [System.IO.File]::WriteAllText($wfDel, '{ "csrf_token": "' + $wfcsrf + '", "id": ' + $wfId + ' }')
+    $wfR10 = ((curl.exe -s -b $wfjar -X DELETE "$base/admin/api/elections.php" --data-binary "@$wfDel") -join "")
+    Assert-True "WF1 delete without confirm refused (409)" ($wfR10 -match 'Refusing to delete: missing explicit confirmation') "got: $wfR10"
+    $wfStill = Invoke-MysqlOut "SELECT COUNT(*) FROM elections WHERE id=$wfId;"
+    Assert-True "WF1 fixture survives the refused delete" ($wfStill -eq '1') "got $wfStill"
+    [System.IO.File]::WriteAllText($wfDel, '{ "csrf_token": "' + $wfcsrf + '", "id": ' + $wfId + ', "confirm_delete": true }')
+    $wfR11 = ((curl.exe -s -b $wfjar -X DELETE "$base/admin/api/elections.php" --data-binary "@$wfDel") -join "")
+    $wfGone = Invoke-MysqlOut "SELECT COUNT(*) FROM elections WHERE id=$wfId;"
+    $wfPosGone = Invoke-MysqlOut "SELECT COUNT(*) FROM election_positions WHERE election_id=$wfId;"
+    Assert-True "WF1 delete with confirm succeeds" ($wfR11 -match '"success":true') "got: $wfR11"
+    Assert-True "WF1 delete removes the election row" ($wfGone -eq '0') "got $wfGone"
+    Assert-True "WF1 delete cascades its positions" ($wfPosGone -eq '0') "got $wfPosGone"
+}
+
+# Audit source pin for the destructive path (the fixture itself has zero
+# votes, so the delete writes no row — the contract lives in source).
+$wfApiSrc = Get-Content .\admin\api\elections.php -Raw
+Assert-True "WF1 delete with votes is audited (source)" ($wfApiSrc -match 'recorded vote\(s\) — votes destroyed with the election') "missing"
+
+# Defensive cleanup: a mid-flow assertion failure must not leave the
+# fixture or its roster behind (orphan positions would fail INT1 next run).
+if ($wfId -match '^[1-9]\d*$') {
+    $wfLeftPos = Invoke-MysqlOut "SELECT IFNULL(GROUP_CONCAT(position_id),'') FROM election_positions WHERE election_id=$wfId;"
+    if ($wfLeftPos -match '^\d+(,\d+)*$') {
+        & $mysql -u root voting_app -e "DELETE FROM positions WHERE id IN ($wfLeftPos);" 2>&1 | Out-Null
+    }
+    & $mysql -u root voting_app -e "DELETE FROM elections WHERE id=$wfId;" 2>&1 | Out-Null
+}
+& $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE action LIKE '%WF1 FLOW FIXTURE%'; DELETE FROM login_attempts;" 2>&1 | Out-Null
+foreach ($tmp in $wfTouched) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+Remove-Item $wfjar -Force -ErrorAction SilentlyContinue
+
+# ----------------------------------------------------------------
+# Section: RPT1 - report noVotes contract (zero-vote positions)
+# ----------------------------------------------------------------
+# Reports must distinguish "position exists, nobody voted" (noVotes)
+# from "position has no candidates at all": computeWinners flags it,
+# buildReportSections carries it, and all three render sites (preview,
+# print, export) branch on it.
+$rptSrc = Get-Content .\admin\dashboard.php -Raw
+Assert-True "RPT1 computeWinners flags noVotes on zero totals" ($rptSrc -match 'cutoffVotes: 0, noVotes: true') "missing"
+Assert-True "RPT1 buildReportSections carries noVotes through" ($rptSrc -match 'noVotes: !!noVotes') "missing"
+$rptRender = ([regex]::Matches($rptSrc, [regex]::Escape("p.noVotes ? 'No votes cast for this position' : 'No candidates on this position'"))).Count
+Assert-True "RPT1 all three render sites branch on noVotes" ($rptRender -eq 3) "got $rptRender render sites, want 3"
+Assert-True "RPT1 zero-vote copy is 'No votes cast for this position'" ($rptSrc -match 'No votes cast for this position') "missing"
+
+# ----------------------------------------------------------------
+# Section: SUITE EPILOGUE - restore the demo data (always the last
+# block; runs on red runs too, only not on a hard crash above)
+# ----------------------------------------------------------------
+# 1. Elections 1-2 back to their prelude status + window.
+foreach ($row in ($eSnap -split "`r?`n")) {
+    $row = $row.Trim()
+    if ($row -eq '') { continue }
+    $p = $row -split '\t'
+    if ($p[0] -match '^\d+$' -and $p[1] -ne '') {
+        & $mysql -u root voting_app -e "UPDATE elections SET status='$($p[1])', start_date='$($p[2])', end_date='$($p[3])' WHERE id=$($p[0]);" 2>&1 | Out-Null
+    }
+}
+# 2. Fixture student: votes + locks + legacy flag back as found.
+if ($uidFix -match '^[1-9]\d*$') {
+    & $mysql -u root voting_app -e "DELETE FROM votes WHERE user_id=$uidFix; DELETE FROM ballot_submissions WHERE user_id=$uidFix;" 2>&1 | Out-Null
+    foreach ($row in ($vSnap -split "`r?`n")) {
+        $row = $row.Trim()
+        if ($row -eq '') { continue }
+        $p = $row -split '\t'
+        if ($p.Count -ge 4 -and $p[0] -match '^\d+$' -and $p[1] -match '^\d+$' -and $p[2] -match '^\d+$') {
+            & $mysql -u root voting_app -e "INSERT INTO votes (user_id, candidate_id, position_id, voted_at) VALUES ($($p[0]), $($p[1]), $($p[2]), '$($p[3])');" 2>&1 | Out-Null
+        }
+    }
+    foreach ($row in ($bSnap -split "`r?`n")) {
+        $row = $row.Trim()
+        if ($row -eq '') { continue }
+        $p = $row -split '\t'
+        if ($p.Count -ge 3 -and $p[0] -match '^\d+$' -and $p[1] -match '^\d+$') {
+            & $mysql -u root voting_app -e "INSERT INTO ballot_submissions (user_id, election_id, submitted_at) VALUES ($($p[0]), $($p[1]), '$($p[2])');" 2>&1 | Out-Null
+        }
+    }
+    if ($hvSnap -match '^[01]$') {
+        & $mysql -u root voting_app -e "UPDATE users SET has_voted=$hvSnap WHERE id=$uidFix;" 2>&1 | Out-Null
+    }
+}
+# 3. Candidate photos + SSG logo (Task 3 rewrites both).
+foreach ($row in ($phSnap -split "`r?`n")) {
+    $row = $row.Trim()
+    if ($row -eq '') { continue }
+    $p = $row -split '\t', 2
+    if ($p[0] -notmatch '^\d+$') { continue }
+    if ($p[1] -eq '@@NULL@@' -or $p.Count -lt 2) {
+        & $mysql -u root voting_app -e "UPDATE candidates SET photo=NULL WHERE id=$($p[0]);" 2>&1 | Out-Null
+    } else {
+        & $mysql -u root voting_app -e "UPDATE candidates SET photo='$($p[1])' WHERE id=$($p[0]);" 2>&1 | Out-Null
+    }
+}
+if ($logoSnap -eq '') {
+    & $mysql -u root voting_app -e "DELETE FROM site_settings WHERE setting_key='ssg_logo';" 2>&1 | Out-Null
+} elseif ($logoSnap -eq '@@NULL@@') {
+    & $mysql -u root voting_app -e "UPDATE site_settings SET setting_value=NULL WHERE setting_key='ssg_logo';" 2>&1 | Out-Null
+} else {
+    & $mysql -u root voting_app -e "UPDATE site_settings SET setting_value='$logoSnap' WHERE setting_key='ssg_logo';" 2>&1 | Out-Null
+}
+# 4. Defensive sweep: no fixture election (or its audit line) may outlive
+#    the suite even if its section died mid-way. Truncate activity_logs to
+#    the prelude high-water id so every audit line the suite's own
+#    maintenance/logs/SY1/WF1 sections appended (written as the real admin,
+#    not 'fixture') is dropped too — the suite must leave the log exactly
+#    as it found it.
+& $mysql -u root voting_app -e "DELETE FROM activity_logs WHERE id > $logMaxId;" 2>&1 | Out-Null
+
+# 5. Verify the restore actually held.
+$eNow = Invoke-MysqlOut "SELECT id, status, start_date, end_date FROM elections WHERE id IN (1,2) ORDER BY id;"
+Assert-True "epilogue: elections 1-2 restored byte-identical" ($eNow -eq $eSnap) "now[$eNow] snap[$eSnap]"
+if ($uidFix -match '^[1-9]\d*$') {
+    $hvNow = Invoke-MysqlOut "SELECT has_voted FROM users WHERE id=$uidFix;"
+    Assert-True "epilogue: fixture student has_voted restored" ($hvNow -eq $hvSnap) "now '$hvNow' snap '$hvSnap'"
+    $vNow = Invoke-MysqlOut "SELECT user_id, candidate_id, position_id, voted_at FROM votes WHERE user_id=$uidFix ORDER BY id;"
+    $bNow = Invoke-MysqlOut "SELECT user_id, election_id, submitted_at FROM ballot_submissions WHERE user_id=$uidFix ORDER BY user_id, election_id;"
+    Assert-True "epilogue: fixture student votes restored" ($vNow -eq $vSnap) "row count or content drifted"
+    Assert-True "epilogue: fixture student ballot locks restored" ($bNow -eq $bSnap) "row count or content drifted"
+}
+if ($logoSnap -eq '') {
+    $logoCnt = Invoke-MysqlOut "SELECT COUNT(*) FROM site_settings WHERE setting_key='ssg_logo';"
+    Assert-True "epilogue: ssg_logo row removed as found" ($logoCnt -eq '0') "got $logoCnt rows"
+} else {
+    $logoNow = Invoke-MysqlOut "SELECT IFNULL((SELECT setting_value FROM site_settings WHERE setting_key='ssg_logo'), '@@NULL@@');"
+    Assert-True "epilogue: ssg_logo restored" ($logoNow -eq $logoSnap) "logo drifted"
+    # Explicit column list overrides the ON UPDATE CURRENT_TIMESTAMP auto-bump.
+    if ($logoMeta -match '^(\d+)\|') {
+        $lmId = [int]$Matches[1]
+        $lmTs = ($logoMeta -split '\|', 2)[1]
+        if ($lmTs -eq '@@NULL@@') {
+            & $mysql -u root voting_app -e "UPDATE site_settings SET updated_at=NULL WHERE id=$lmId;" 2>&1 | Out-Null
+        } elseif ($lmTs -ne '') {
+            & $mysql -u root voting_app -e "UPDATE site_settings SET updated_at='$lmTs' WHERE id=$lmId;" 2>&1 | Out-Null
+        }
+    }
+}
 
 if ($failures -gt 0) { Write-Output "`n$failures assertion(s) failed"; exit 1 }
 Write-Output "`nAll assertions passed"

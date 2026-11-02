@@ -1,0 +1,1121 @@
+<?php
+/**
+ * Curated system reference: architecture, database, endpoints, security,
+ * and request flows.
+ *
+ * Every `ref` is a file + anchor pair resolved live by guide/lib/source.php.
+ * Text keeps the same honesty rule as the annotations: describe what the code
+ * actually does, including the places where the implementation is simpler
+ * than the README spec.
+ */
+
+declare(strict_types=1);
+
+return [
+    'overview' => [
+        'title' => 'How voting-app3 works',
+        'summary' => 'voting-app3 is a PHP 8 + MariaDB/MySQL web application for student council elections. Public visitors read results, students register and vote, and admins run elections from a single management panel. The server renders every page; JavaScript enhances the dashboards and the ballot but never becomes the authority.',
+        'pitch' => 'One deployable PHP application with three surfaces: a public site, a student portal, and an admin panel. The database is the source of truth, every write is server-validated, and one ballot is locked by a database primary key rather than by a browser flag.',
+        'facts' => [
+            ['label' => 'Server', 'value' => 'PHP 8.3'],
+            ['label' => 'Database', 'value' => 'MariaDB / PostgreSQL'],
+            ['label' => 'Tables', 'value' => '16'],
+            ['label' => 'Admin API files', 'value' => '6'],
+            ['label' => 'Audience', 'value' => 'Public · Student · Admin'],
+        ],
+        'stack' => [
+            ['name' => 'PHP 8.3', 'role' => 'Server-rendered pages plus JSON endpoints. No framework and no build step.'],
+            ['name' => 'PDO', 'role' => 'One connection factory for MariaDB locally and PostgreSQL in the container. Prepared statements everywhere.'],
+            ['name' => 'MariaDB / MySQL', 'role' => 'Local XAMPP database; schema.mysql.sql is the fresh-install source.'],
+            ['name' => 'PostgreSQL', 'role' => 'Production database for the Docker/Render runtime; schema.sql is the fresh-install source.'],
+            ['name' => 'Vanilla JavaScript', 'role' => 'Dashboard panels, ballot picker, polling, and the admin wizard. Loaded as inline scripts; no bundler.'],
+            ['name' => 'Chart.js + SheetJS', 'role' => 'CDN scripts for admin charts and spreadsheet export, pinned with SRI.'],
+            ['name' => 'Apache / XAMPP', 'role' => 'Local runtime. .htaccess mirrors the security headers that router.php sets in the container.'],
+        ],
+        'repo' => [
+            ['path' => 'index.php', 'purpose' => 'Default document: sends a logged-in session to the dashboard and everyone else to the landing page.'],
+            ['path' => 'landingpage.php · results.php', 'purpose' => 'Public surface: marketing page and read-only results with server-side visibility checks.'],
+            ['path' => 'login.php · student/register.php', 'purpose' => 'Student authentication and self-registration.'],
+            ['path' => 'dashboard.php · dashboard-data.php · vote.php', 'purpose' => 'Student portal shell, its JSON feed, and the ballot transaction.'],
+            ['path' => 'admin/dashboard.php · admin/api/', 'purpose' => 'Admin panel shell and the six JSON endpoints behind it.'],
+            ['path' => 'includes/functions.php', 'purpose' => 'Shared session, CSRF, throttling, password, year-level, status, and image helpers.'],
+            ['path' => 'config/db.php', 'purpose' => 'PDO factory: driver detection, DATABASE_URL parsing, and connection options.'],
+            ['path' => 'schema.sql · schema.mysql.sql', 'purpose' => 'Fresh-install schemas for PostgreSQL and MariaDB; CI keeps them in parity.'],
+        ],
+        'run' => [
+            'Copy the folder into XAMPP htdocs so the URL is http://localhost/voting-app3/.',
+            'Create a database and import schema.mysql.sql with phpMyAdmin or the MySQL client.',
+            'Leave the defaults in config/db.php (localhost, voting_app, root, empty password) or set DB_HOST/DB_NAME/DB_USER/DB_PASS.',
+            'Open http://localhost/voting-app3/health.php. A 200 with {"ok":true,"db":"up"} means PHP and the database are both reachable.',
+            'Open http://localhost/voting-app3/ for the public site, or /admin/login.php for the management panel.',
+        ],
+        'privacy' => 'No live database is bundled with this guide. Screens and counts come from the running local installation; the guide never inserts, updates, or deletes rows.',
+    ],
+
+    'architecture' => [
+        'intro' => 'Four layers, one request path. A browser asks Apache for a PHP file; the file loads shared helpers and a PDO connection; the handler reads or writes the database and returns HTML or JSON. Click any node for its real source.',
+        'layers' => [
+            [
+                'title' => '1 · Browser',
+                'nodes' => [
+                    [
+                        'id' => 'public-pages',
+                        'title' => 'Public pages',
+                        'tech' => 'landingpage.php · results.php',
+                        'summary' => 'Server-rendered HTML with small inline scripts. Results are filtered on the server before HTML is produced, so hiding a row in the browser is never the control.',
+                        'ref' => ['file' => 'landingpage.php', 'anchor' => "require_once __DIR__ . '/includes/functions.php';"],
+                    ],
+                    [
+                        'id' => 'student-portal',
+                        'title' => 'Student portal',
+                        'tech' => 'dashboard.php',
+                        'summary' => 'A single shell with panels for home, vote, candidates, and results. Each panel is filled from dashboard-data.php and re-rendered locally.',
+                        'ref' => ['file' => 'dashboard.php', 'anchor' => "require_once __DIR__ . '/includes/functions.php';"],
+                    ],
+                    [
+                        'id' => 'admin-panel',
+                        'title' => 'Admin panel',
+                        'tech' => 'admin/dashboard.php',
+                        'summary' => 'One SPA-style page. Sidebar links call showPanel() instead of navigating, then each panel fetches its own admin/api endpoint.',
+                        'ref' => ['file' => 'admin/dashboard.php', 'anchor' => "require_once __DIR__ . '/../includes/functions.php';"],
+                    ],
+                ],
+            ],
+            [
+                'title' => '2 · HTTP edge',
+                'nodes' => [
+                    [
+                        'id' => 'router',
+                        'title' => 'router.php',
+                        'tech' => 'php -S front controller',
+                        'summary' => 'Used by the container runtime. It sets the security headers, serves real files, and returns the branded 404 for everything else.',
+                        'ref' => ['file' => 'router.php', 'anchor' => 'Content-Security-Policy'],
+                    ],
+                    [
+                        'id' => 'apache',
+                        'title' => 'Apache + .htaccess',
+                        'tech' => 'XAMPP',
+                        'summary' => 'The local runtime. .htaccess carries the same header policy as router.php; the CI smoke suite pins both copies.',
+                        'ref' => ['file' => 'router.php', 'anchor' => 'X-Frame-Options'],
+                    ],
+                ],
+            ],
+            [
+                'title' => '3 · Application',
+                'nodes' => [
+                    [
+                        'id' => 'functions',
+                        'title' => 'includes/functions.php',
+                        'tech' => 'sessions · CSRF · throttles · year levels',
+                        'summary' => 'The shared contract: start a secure session, mint and verify CSRF tokens, key rate limits, hash passwords, compute year levels, and sync election statuses.',
+                        'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function startSecureSession()'],
+                    ],
+                    [
+                        'id' => 'db',
+                        'title' => 'config/db.php',
+                        'tech' => 'PDO factory',
+                        'summary' => 'Chooses pgsql or mysql, parses DATABASE_URL, and enforces exceptions and associative fetches. Every query in the app goes through this connection.',
+                        'ref' => ['file' => 'config/db.php', 'anchor' => 'function getDbConnection(): PDO'],
+                    ],
+                    [
+                        'id' => 'student-api',
+                        'title' => 'dashboard-data.php',
+                        'tech' => 'GET JSON',
+                        'summary' => 'Builds the student dashboard payload: elections the student may see, their allowed positions, candidates, counts, and whether a submission exists.',
+                        'ref' => ['file' => 'dashboard-data.php', 'anchor' => 'requireLogin();'],
+                    ],
+                    [
+                        'id' => 'vote',
+                        'title' => 'vote.php',
+                        'tech' => 'POST transaction',
+                        'summary' => 'The only ballot writer. It re-reads eligibility, checks the submission lock, validates candidate choices, and commits votes and the lock together.',
+                        'ref' => ['file' => 'vote.php', 'anchor' => '$pdo->beginTransaction();'],
+                    ],
+                    [
+                        'id' => 'admin-api',
+                        'title' => 'admin/api/*.php',
+                        'tech' => '6 JSON endpoints',
+                        'summary' => 'Elections, students, settings, admins, logs, and the next-school-year archive. Each starts with requireAdminLogin(); each write adds CSRF and a per-admin throttle.',
+                        'ref' => ['file' => 'admin/api/elections.php', 'anchor' => 'requireAdminLogin();'],
+                    ],
+                    [
+                        'id' => 'public-results',
+                        'title' => 'results.php',
+                        'tech' => 'HTML + ?partial=1',
+                        'summary' => 'Applies each election results_visibility rule before rendering. The ?partial=1 response is the same markup, used for polling without a full reload.',
+                        'ref' => ['file' => 'results.php', 'anchor' => "return \$e['results_visibility'] === 'always'"],
+                    ],
+                ],
+            ],
+            [
+                'title' => '4 · Data',
+                'nodes' => [
+                    [
+                        'id' => 'database',
+                        'title' => 'Database',
+                        'tech' => '16 tables',
+                        'summary' => 'Users, elections, candidates, ballot submissions, votes, legacy vote drafts, audit logs, settings, and the reference lists. Foreign keys cascade only where history can safely follow.',
+                        'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE users ('],
+                    ],
+                    [
+                        'id' => 'images',
+                        'title' => 'Image reads',
+                        'tech' => 'photo.php · icon.php',
+                        'summary' => 'Candidate photos and election logos are streamed by id with a one-day cache. Invalid or missing ids get a bare 404, never a stack trace.',
+                        'ref' => ['file' => 'photo.php', 'anchor' => "header('Content-Type: image/'"],
+                    ],
+                ],
+            ],
+        ],
+        'edges' => [
+            ['from' => 'Public pages', 'to' => 'router.php', 'label' => 'HTTP request for a PHP page or asset'],
+            ['from' => 'Student portal', 'to' => 'dashboard-data.php', 'label' => 'fetch JSON after the shell renders'],
+            ['from' => 'Student portal', 'to' => 'vote.php', 'label' => 'POST the ballot with a CSRF token'],
+            ['from' => 'Admin panel', 'to' => 'admin/api/*.php', 'label' => 'GET lists, POST writes with CSRF'],
+            ['from' => 'dashboard-data.php', 'to' => 'Database', 'label' => 'prepared SELECTs scoped to the session user'],
+            ['from' => 'vote.php', 'to' => 'Database', 'label' => 'one transaction: votes + ballot_submissions'],
+            ['from' => 'admin/api/*.php', 'to' => 'Database', 'label' => 'validated writes + activity_logs'],
+            ['from' => 'results.php', 'to' => 'Database', 'label' => 'visibility, submissions, and vote counts'],
+            ['from' => 'Browser', 'to' => 'Image reads', 'label' => 'photo.php?c=<id> · icon.php?e=<id>'],
+        ],
+    ],
+
+    'flows' => [
+        [
+            'id' => 'login-gate',
+            'title' => 'Login and the year-level gate',
+            'summary' => 'A student login does more than compare a password. It throttles the attempt, verifies the hash, applies the school-year lifecycle rule, and only then issues a new session id.',
+            'steps' => [
+                ['title' => 'Reject a request without a CSRF token', 'detail' => 'The POST body must carry the token minted for this session. A mismatch returns the form with an error and writes nothing.', 'ref' => ['file' => 'login.php', 'anchor' => "if (!verifyCsrfToken(\$_POST['csrf_token'] ?? null)) {"]],
+                ['title' => 'Throttle by identifier and client IP', 'detail' => 'The key combines the submitted identifier with the client address, so one student id cannot be sprayed from many addresses without the window filling up.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function isRateLimitedKey']],
+                ['title' => 'Verify the stored hash', 'detail' => 'password_verify compares the submitted password with users.password. Failed attempts are recorded and counted against the same window.', 'ref' => ['file' => 'login.php', 'anchor' => 'password_verify']],
+                ['title' => 'Apply the lifecycle gate', 'detail' => 'The student year level is derived from the school year they started. Normal students proceed; an over-window student without a declaration is sent to update-account.php; dropped or graduated accounts are refused.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
+                ['title' => 'Regenerate the session and redirect', 'detail' => 'A successful login rotates the session id before storing user_id, which closes session fixation. The response is a 302 to the dashboard or the declaration screen.', 'ref' => ['file' => 'login.php', 'anchor' => 'session_regenerate_id(true);']],
+            ],
+            'defense' => 'Three independent checks decide a login: the CSRF token, the password hash, and the school-year lifecycle. None of them is enforced by JavaScript.',
+        ],
+        [
+            'id' => 'vote-transaction',
+            'title' => 'Submitting one ballot',
+            'summary' => 'vote.php is the only place a vote is written. It trusts nothing from the browser except the session id, the CSRF token, and candidate ids, which it re-validates against the election configuration.',
+            'steps' => [
+                ['title' => 'Method and CSRF gate', 'detail' => 'Only POST is accepted, and the token must match the session. GET requests cannot create votes.', 'ref' => ['file' => 'vote.php', 'anchor' => "if (\$_SERVER['REQUEST_METHOD'] !== 'POST') {"]],
+                ['title' => 'Per-student submission throttle', 'detail' => 'The bucket is vote_submit:user:<id>, allowing 10 submissions per 60 seconds. It is a backstop against a scripted client, not the duplicate-vote defence.', 'ref' => ['file' => 'vote.php', 'anchor' => 'isRateLimitedKey']],
+                ['title' => 'Open a transaction and lock the voter row', 'detail' => 'SELECT ... FOR UPDATE serializes two concurrent submissions from the same account. Everything that follows commits or rolls back together.', 'ref' => ['file' => 'vote.php', 'anchor' => 'FOR UPDATE']],
+                ['title' => 'Refuse a forced-reset account', 'detail' => 'A student whose password was reset by an admin cannot vote until change-password.php clears the flag.', 'ref' => ['file' => 'vote.php', 'anchor' => 'password_reset_pending']],
+                ['title' => 'Check the authoritative submission lock', 'detail' => 'One row in ballot_submissions means this student already submitted in this election, even if the earlier ballot was empty. The handler answers 409 instead of writing again.', 'ref' => ['file' => 'vote.php', 'anchor' => 'SELECT 1 FROM ballot_submissions']],
+                ['title' => 'Validate choices and insert', 'detail' => 'Candidate ids are filtered to positions the student may see, the winner_count cap is enforced per position, and year restrictions are rechecked. Accepted picks become votes rows.', 'refs' => [['file' => 'vote.php', 'anchor' => 'INSERT INTO votes'], ['file' => 'vote.php', 'anchor' => 'INSERT INTO ballot_submissions']]],
+                ['title' => 'Commit or roll back', 'detail' => 'The votes and the submission lock commit together. Any failure rolls back both, so a partial ballot can never become the recorded result.', 'ref' => ['file' => 'vote.php', 'anchor' => '$pdo->commit();']],
+            ],
+            'defense' => 'Double submission is prevented by PRIMARY KEY (user_id, election_id) in ballot_submissions, not by disabling the button. The button is feedback; the primary key is the rule.',
+        ],
+        [
+            'id' => 'status-sync',
+            'title' => 'Election status sync',
+            'summary' => 'Election dates drive scheduled, ongoing, and closed statuses. Manual states such as draft, paused, and archived are never overwritten by the time-based sync.',
+            'steps' => [
+                ['title' => 'Called before the list is served', 'detail' => 'The admin list endpoint invokes syncElectionStatuses($pdo) first, so a page load reflects the current clock without a cron job.', 'ref' => ['file' => 'admin/api/elections.php', 'anchor' => 'syncElectionStatuses($pdo);']],
+                ['title' => 'Time transitions are computed in SQL-friendly PHP', 'detail' => 'Elections whose window has opened become ongoing; elections whose end has passed become closed. Draft, paused, and archived rows keep their manual state.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function syncElectionStatuses']],
+                ['title' => 'The browser is not the clock', 'detail' => 'Countdowns and badges are presentation. vote.php and results.php re-evaluate the status when they run, so a stale tab cannot vote after the close time.', 'ref' => ['file' => 'vote.php', 'anchor' => '$election']],
+            ],
+            'defense' => 'Status changes are computed on the server at request time. The countdown on screen is a convenience and carries no authority.',
+        ],
+        [
+            'id' => 'year-lifecycle',
+            'title' => 'Year levels and declarations',
+            'summary' => 'Students do not pick a year level. It is derived from the school year they started plus the active school year, with account_status as the admin override.',
+            'steps' => [
+                ['title' => 'Store the start year, not the current label', 'detail' => 'users.school_year_id points at a school_years row. The start_year value is the durable fact; the displayed label is recomputed.', 'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE school_years']],
+                ['title' => 'Difference plus one', 'detail' => 'computeYearLevel returns an index from the start year and the active start year, then picks the label at that position in year_levels. Index 1 is 1st Year, index 4 is 4th Year.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
+                ['title' => 'Over-window students declare their status', 'detail' => 'resolveYearDeclaration validates a claimed label or status for a student past the four-year window and returns the value the server will store.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function resolveYearDeclaration']],
+                ['title' => 'One declaration per school year', 'detail' => 'update-account.php reads activity_logs for a student:<id> record in the current school year. A second attempt inside the same year is refused.', 'ref' => ['file' => 'update-account.php', 'anchor' => 'FROM activity_logs']],
+                ['title' => 'The admin flag is the override', 'detail' => 'account_status repeating, undergrad_repeating, and suspended_repeating let a student keep a self-managed year level. dropped and graduated block login.', 'ref' => ['file' => 'update-account.php', 'anchor' => 'UPDATE users SET']],
+            ],
+            'defense' => 'Year level is derived and audited. The student never types a number that the server blindly trusts, and every declaration leaves an activity_logs row.',
+        ],
+        [
+            'id' => 'rollover',
+            'title' => 'Next School Year archive',
+            'summary' => 'The admin action labelled Next School Year Election is a bulk archive. In the current code it archives every non-archived election and writes one audit line; it deliberately does not change student year levels.',
+            'steps' => [
+                ['title' => 'POST only, CSRF, admin throttle', 'detail' => 'The endpoint rejects every other method, verifies the session token, and applies the same 120-per-60-seconds admin write bucket as the other admin APIs.', 'ref' => ['file' => 'admin/api/next-school-year.php', 'anchor' => "if (!verifyCsrfToken(\$input['csrf_token'] ?? null)) {"]],
+                ['title' => 'Archive inside a transaction', 'detail' => 'One UPDATE moves every election that is not already archived to archived. Candidates and votes are untouched, so history stays readable.', 'ref' => ['file' => 'admin/api/next-school-year.php', 'anchor' => "UPDATE elections SET status = 'archived'"]],
+                ['title' => 'Log what happened, including what did not', 'detail' => 'The audit summary names the archived count and the current school year, and states that student year levels were not changed. That sentence is generated by the endpoint itself.', 'ref' => ['file' => 'admin/api/next-school-year.php', 'anchor' => 'INSERT INTO activity_logs']],
+                ['title' => 'Commit or report a clean failure', 'detail' => 'A thrown error rolls the transaction back and returns a 500 with no partial archive.', 'ref' => ['file' => 'admin/api/next-school-year.php', 'anchor' => '$pdo->commit();']],
+            ],
+            'defense' => 'Be precise at defense: this endpoint archives elections. Year levels are derived per student and changed through the per-student update flow, not by this button.',
+        ],
+        [
+            'id' => 'school-year-cycle',
+            'title' => 'The school-year cycle',
+            'summary' => 'A school year runs June to May and is derived from today\'s date on every request. Elections are created for the following year and keep it forever; normal-status students move up automatically on their next login.',
+            'steps' => [
+                ['title' => 'Derive today\'s school year', 'detail' => 'currentSchoolYearStartYear reads the clock in Asia/Manila: on or after June 1 the school year is the current calendar year; before June it is the previous one. May 31 at 11:59 PM is still 2026-2027; midnight is 2027-2028. Nothing stores the answer.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function currentSchoolYearStartYear']],
+                ['title' => 'Auto-create the row, flag it for display', 'detail' => 'getOrCreateSchoolYear inserts a "YYYY-YYYY+1" row the first time a year is needed, so registration and login never wait on an admin. getActiveSchoolYear keeps exactly one is_active row purely so the Settings list has a "Current" label — nothing computes against the flag.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function getActiveSchoolYear']],
+                ['title' => 'New elections target the following year', 'detail' => 'newElectionTargetSchoolYearId resolves nextSchoolYearStartYear server-side on every create; the wizard badge mirrors the same computation, and no client-sent target is accepted.', 'ref' => ['file' => 'admin/api/elections.php', 'anchor' => 'function newElectionTargetSchoolYearId']],
+                ['title' => 'Existing elections never move', 'detail' => 'target_school_year_id is written once at insert and is not editable on update, so an election created in 2026 to serve 2027-2028 still reads "SY 2027-2028" when viewed in 2028.', 'ref' => ['file' => 'admin/api/elections.php', 'anchor' => 'target_school_year_id is intentionally NOT editable']],
+                ['title' => 'One election per year, archived included', 'detail' => 'assertNotDuplicateElection matches type, department, and target year with no status filter, so archiving never frees a slot for a second election in the same year.', 'ref' => ['file' => 'admin/api/elections.php', 'anchor' => 'function assertNotDuplicateElection']],
+                ['title' => 'June 1 is the only rollover', 'detail' => 'Next School Year Election archives rows and writes one audit line. It does not advance the calendar, does not change any target year, and does not touch student year levels.', 'ref' => ['file' => 'admin/api/next-school-year.php', 'anchor' => "UPDATE elections SET status = 'archived'"]],
+                ['title' => 'Normal students promote at their next login', 'detail' => 'login.php recomputes year_level from the start year against the active year and stores it for normal-status accounts — so the update lands on the first login after June 1 with no bulk job.', 'ref' => ['file' => 'login.php', 'anchor' => 'UPDATE users SET year_level']],
+                ['title' => 'The fifth year is never assumed', 'detail' => 'computeYearLevel returns blocked at index 5 or higher; login then asks for a declaration instead of guessing repeating, dropped, or graduated.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
+            ],
+            'defense' => 'Nothing stores "the current school year": it is recomputed from the date in Asia/Manila on every request, so there is no rollover job to miss. The only decision a human must make is what happened to a student who passes four years.',
+        ],
+        [
+            'id' => 'results-visibility',
+            'title' => 'Results visibility',
+            'summary' => 'Each election stores results_visibility: always, after, or never. The public page and the student dashboard both apply that rule before producing output.',
+            'steps' => [
+                ['title' => 'The rule lives on the election row', 'detail' => 'results_visibility is a VARCHAR(20) with a CHECK constraint limiting it to always, after, or never.', 'ref' => ['file' => 'schema.sql', 'anchor' => 'results_visibility']],
+                ['title' => 'Public rule: always, or after close', 'detail' => 'results.php exposes an election when visibility is always, or when it is after and the status is closed or archived. never is filtered out entirely.', 'ref' => ['file' => 'results.php', 'anchor' => "return \$e['results_visibility'] === 'always'"]],
+                ['title' => 'The dashboard mirrors the same rule', 'detail' => 'dashboard-data.php includes results_visibility in its JSON, and the student results panel applies the same always/after/never logic before rendering rows.', 'ref' => ['file' => 'dashboard-data.php', 'anchor' => 'results_visibility']],
+                ['title' => 'Turnout uses submissions, tallies use votes', 'detail' => 'Ballot counts come from ballot_submissions so an empty ballot still counts as a voter. Candidate counts come from votes joined by candidate id.', 'ref' => ['file' => 'results.php', 'anchor' => 'FROM ballot_submissions']],
+            ],
+            'defense' => 'Hiding results is a server-side filter, not a CSS class. A student who guesses the election id still receives no rows when the visibility rule says no.',
+        ],
+    ],
+
+    'tables' => [
+        [
+            'name' => 'activity_logs',
+            'purpose' => 'Append-only audit trail for privileged writes, plus the once-per-school-year record of a student year-level declaration.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'admin_username', 'type' => 'VARCHAR(50)', 'note' => 'Admin username, or student:<id> for a self-declared year update.'],
+                ['name' => 'action', 'type' => 'TEXT', 'note' => 'Human-readable summary written by the handler.'],
+                ['name' => 'created_at', 'type' => 'TIMESTAMP', 'note' => 'Defaults to CURRENT_TIMESTAMP; indexed for the Logs panel.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'INDEX created_at'],
+            'relationships' => ['No foreign keys by design: the history survives admin or student deletion.', 'Read by admin/api/logs.php and scanned by update-account.php for the yearly declaration cooldown.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE activity_logs ('],
+            'defense' => 'Every privileged mutation writes one line here. That is the answer to "how do you know who changed what?"',
+        ],
+        [
+            'name' => 'admins',
+            'purpose' => 'Management-panel accounts, kept separate from student users.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'username', 'type' => 'VARCHAR(50)', 'note' => 'Unique login name.'],
+                ['name' => 'password_hash', 'type' => 'VARCHAR(255)', 'note' => 'password_hash output; never a plain password.'],
+                ['name' => 'email', 'type' => 'VARCHAR(100)', 'note' => 'Optional contact address.'],
+                ['name' => 'role', 'type' => 'VARCHAR(20)', 'note' => 'Defaults to admin; the current UI does not branch on it.'],
+                ['name' => 'created_at', 'type' => 'TIMESTAMP', 'note' => 'Account creation time.'],
+                ['name' => 'last_login', 'type' => 'TIMESTAMP', 'note' => 'Updated after a successful admin login.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (username)'],
+            'relationships' => ['activity_logs.admin_username is a soft reference by username, not a foreign key.', 'Managed by admin/api/admins.php, which refuses self-deletion and deleting the last admin.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE admins ('],
+            'defense' => 'Student identity and admin identity are separate tables and separate session keys, so a student session cannot become an admin session by changing a role field.',
+        ],
+        [
+            'name' => 'departments',
+            'purpose' => 'Faculty list used by students, candidates, and DSG elections. The UI says Faculty; the table keeps the original name to avoid a wide rename.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'code', 'type' => 'VARCHAR(150)', 'note' => 'Unique reference used by candidates.department. Intentionally equal to name.'],
+                ['name' => 'name', 'type' => 'VARCHAR(150)', 'note' => 'Display name. The settings API writes the same value into code.'],
+                ['name' => 'sort_order', 'type' => 'INTEGER', 'note' => 'Display order in pickers and reports.'],
+                ['name' => 'logo', 'type' => 'TEXT', 'note' => 'DSG election logo, stored as an image data URL.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (code)'],
+            'relationships' => ['candidates.department references departments.code with ON UPDATE CASCADE and ON DELETE RESTRICT.', 'users.department and elections.department store the same code as a soft reference.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE departments'],
+            'defense' => 'Renaming a faculty updates one row and cascades to candidates. Deleting it is refused while students, elections, or candidates still point at it.',
+        ],
+        [
+            'name' => 'school_years',
+            'purpose' => 'The school-year list. Students point at the year they started; elections point at the year they are for.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'label', 'type' => 'VARCHAR(20)', 'note' => 'Display label such as 2025-2026.'],
+                ['name' => 'start_year', 'type' => 'INTEGER', 'note' => 'Calendar year the school year starts; used in the year-level calculation.'],
+                ['name' => 'is_active', 'type' => 'BOOLEAN', 'note' => 'Exactly one row should be true.'],
+                ['name' => 'sort_order', 'type' => 'INTEGER', 'note' => 'Display and report order.'],
+                ['name' => 'created_at', 'type' => 'TIMESTAMP', 'note' => 'Creation time.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (label)', 'UNIQUE (start_year)', 'PARTIAL UNIQUE school_years_one_active ON (is_active) WHERE is_active = TRUE'],
+            'relationships' => ['users.school_year_id references school_years(id).', 'elections.target_school_year_id references school_years(id) as metadata only.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE school_years'],
+            'defense' => 'The partial unique index is the database-level guarantee that only one school year is active. A plain unique on a boolean would allow only two rows total.',
+        ],
+        [
+            'name' => 'users',
+            'purpose' => 'Student accounts: identity, faculty, derived year level, voting state, and the admin-set lifecycle status.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key and the session user id.'],
+                ['name' => 'student_id', 'type' => 'VARCHAR(20)', 'note' => 'Unique school id used to log in.'],
+                ['name' => 'name', 'type' => 'VARCHAR(100)', 'note' => 'Display name.'],
+                ['name' => 'password', 'type' => 'VARCHAR(255)', 'note' => 'password_hash output; NULL until registration is completed.'],
+                ['name' => 'department', 'type' => 'VARCHAR(150)', 'note' => 'Faculty code (soft reference to departments.code).'],
+                ['name' => 'year_level', 'type' => 'VARCHAR(20)', 'note' => 'Derived label; repeating statuses may be self-managed.'],
+                ['name' => 'has_voted', 'type' => 'INTEGER', 'note' => 'Legacy convenience flag. Per-election truth is ballot_submissions.'],
+                ['name' => 'registration_status', 'type' => 'VARCHAR(20)', 'note' => 'unregistered, pending, or active.'],
+                ['name' => 'academic_year', 'type' => 'VARCHAR(10)', 'note' => 'Legacy display field.'],
+                ['name' => 'email', 'type' => 'VARCHAR(100)', 'note' => 'Optional contact address.'],
+                ['name' => 'school_year_id', 'type' => 'INTEGER', 'note' => 'The school year the student started; drives year-level derivation.'],
+                ['name' => 'account_status', 'type' => 'VARCHAR(30)', 'note' => 'normal, repeating, undergrad_repeating, suspended_repeating, dropped, or graduated.'],
+                ['name' => 'password_reset_pending', 'type' => 'BOOLEAN', 'note' => 'Forces change-password.php and blocks voting until cleared.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (student_id)', 'INDEX (school_year_id)', 'CHECK account_status IN (six values)'],
+            'relationships' => ['school_year_id references school_years(id).', 'votes, ballot_submissions, and vote_drafts reference users(id) with ON DELETE CASCADE.', 'activity_logs uses student:<id> as a soft link for declarations.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE users ('],
+            'defense' => 'Year level is derived from school_year_id, not hand-picked. account_status is the admin override, and dropped or graduated accounts cannot log in.',
+        ],
+        [
+            'name' => 'positions',
+            'purpose' => 'Election positions. The admin wizard creates a fresh set of position rows for each election, so a position id already identifies its election.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'title', 'type' => 'VARCHAR(50)', 'note' => 'Position title such as President.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)'],
+            'relationships' => ['candidates.position_id references positions(id) ON DELETE CASCADE.', 'election_positions.position_id references positions(id) ON DELETE CASCADE.', 'votes.position_id references positions(id) ON DELETE CASCADE.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE positions ('],
+            'defense' => 'Positions are copied per election. That is why votes.position_id can be scoped to one election even though the votes table has no election_id column.',
+        ],
+        [
+            'name' => 'year_levels',
+            'purpose' => 'Ordered source of year-level labels. The position of a row in ORDER BY sort_order, name is what decides 1st, 2nd, 3rd, and 4th.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'name', 'type' => 'VARCHAR(20)', 'note' => 'Label such as 1st Year.'],
+                ['name' => 'sort_order', 'type' => 'INTEGER', 'note' => 'Ordering hint; the row position after sorting is authoritative.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (name)'],
+            'relationships' => ['No foreign keys. Labels are copied into users.year_level and compared with election_positions.year_restriction.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE year_levels ('],
+            'defense' => 'The labels are editable settings rather than hard-coded strings, but the ordering contract is the sorted position, not the literal sort_order value.',
+        ],
+        [
+            'name' => 'elections',
+            'purpose' => 'One row per election: type, schedule, status, visibility, parties, and the school year it is for.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'name', 'type' => 'VARCHAR(100)', 'note' => 'Election title.'],
+                ['name' => 'type', 'type' => 'VARCHAR(10)', 'note' => 'SSG or DSG, enforced by CHECK.'],
+                ['name' => 'department', 'type' => 'VARCHAR(150)', 'note' => 'Faculty code for DSG; NULL or empty for SSG.'],
+                ['name' => 'status', 'type' => 'VARCHAR(20)', 'note' => 'draft, scheduled, ongoing, paused, closed, or archived.'],
+                ['name' => 'start_date', 'type' => 'TIMESTAMP', 'note' => 'Voting opens.'],
+                ['name' => 'end_date', 'type' => 'TIMESTAMP', 'note' => 'Voting closes.'],
+                ['name' => 'results_visibility', 'type' => 'VARCHAR(20)', 'note' => 'always, after, or never.'],
+                ['name' => 'parties_enabled', 'type' => 'BOOLEAN', 'note' => 'Shows party fields in the wizard and on the ballot.'],
+                ['name' => 'created_at', 'type' => 'TIMESTAMP', 'note' => 'Creation time.'],
+                ['name' => 'parties', 'type' => 'JSONB', 'note' => 'Array of party names and colours.'],
+                ['name' => 'target_school_year_id', 'type' => 'INTEGER', 'note' => 'Labels the school year the election is for; does not project year levels.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'CHECK results_visibility IN (always, after, never)', 'CHECK status IN (six values)', 'CHECK type IN (SSG, DSG)', 'INDEX status', 'INDEX target_school_year_id'],
+            'relationships' => ['target_school_year_id references school_years(id).', 'election_positions.election_id references elections(id) ON DELETE CASCADE.', 'vote_drafts and ballot_submissions reference elections(id) ON DELETE CASCADE.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE elections ('],
+            'defense' => 'Status and visibility are constrained in the database, so a malformed API call cannot store an invented state.',
+        ],
+        [
+            'name' => 'candidates',
+            'purpose' => 'Candidates for an election position, including their faculty, party, platform, and optional photo.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'position_id', 'type' => 'INTEGER', 'note' => 'Election-scoped position.'],
+                ['name' => 'photo', 'type' => 'TEXT', 'note' => 'Image data URL or empty; photo.php streams the stored bytes.'],
+                ['name' => 'course', 'type' => 'VARCHAR(100)', 'note' => 'Retained for historical rows; no longer shown or edited.'],
+                ['name' => 'candidate_year', 'type' => 'VARCHAR(20)', 'note' => 'Year level shown on the candidate card.'],
+                ['name' => 'platform', 'type' => 'TEXT', 'note' => 'Free-text platform.'],
+                ['name' => 'party', 'type' => 'VARCHAR(100)', 'note' => 'Party name when parties are enabled.'],
+                ['name' => 'name', 'type' => 'VARCHAR(100)', 'note' => 'Candidate display name.'],
+                ['name' => 'department', 'type' => 'VARCHAR(150)', 'note' => 'Faculty code, enforced by a foreign key.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'FOREIGN KEY position_id ON DELETE CASCADE', 'FOREIGN KEY department ON UPDATE CASCADE ON DELETE RESTRICT', 'INDEX position_id'],
+            'relationships' => ['votes.candidate_id references candidates(id) ON DELETE CASCADE.', 'position_id references positions(id); department references departments(code).'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE candidates ('],
+            'defense' => 'The department foreign key prevents a candidate from pointing at a deleted faculty; the cascade from position is what lets the wizard replace an election draft safely.',
+        ],
+        [
+            'name' => 'election_positions',
+            'purpose' => 'The bridge between an election and its positions: seats, filing cap, and year restriction.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'election_id', 'type' => 'INTEGER', 'note' => 'Owning election.'],
+                ['name' => 'position_id', 'type' => 'INTEGER', 'note' => 'Election-scoped position.'],
+                ['name' => 'winner_count', 'type' => 'INTEGER', 'note' => 'Seats to fill; also the maximum selections per voter for this position.'],
+                ['name' => 'candidate_limit', 'type' => 'INTEGER', 'note' => 'Optional cap on filed candidates.'],
+                ['name' => 'year_restriction', 'type' => 'VARCHAR(20)', 'note' => 'Optional year-level restriction for voters or candidates.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (election_id, position_id)', 'FOREIGN KEY election_id ON DELETE CASCADE', 'FOREIGN KEY position_id ON DELETE CASCADE', 'INDEX position_id'],
+            'relationships' => ['votes.position_id joins here to scope votes to an election.', 'dashboard-data.php and results.php both read winner_count and year_restriction from this table.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE election_positions ('],
+            'defense' => 'winner_count is the server-side selection cap enforced by vote.php. candidate_limit is a filing cap for the wizard, not a voter rule.',
+        ],
+        [
+            'name' => 'login_attempts',
+            'purpose' => 'Sliding-window attempt records for login, vote submission, account updates, and admin writes.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'identifier', 'type' => 'VARCHAR(150)', 'note' => 'Bucket key such as login:<id>|<ip> or vote_submit:user:<id>.'],
+                ['name' => 'attempted_at', 'type' => 'TIMESTAMP', 'note' => 'Defaults to CURRENT_TIMESTAMP.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'INDEX (identifier, attempted_at)'],
+            'relationships' => ['No foreign keys: the key is a string bucket, so it can cover logins that did not resolve to a user.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE login_attempts ('],
+            'defense' => 'Rate limiting is database-backed rather than in-memory, so it survives a PHP process restart and works across requests.',
+        ],
+        [
+            'name' => 'majors',
+            'purpose' => 'Retired reference list. Kept empty so applying the schema stays non-destructive.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'department_code', 'type' => 'VARCHAR(20)', 'note' => 'Legacy faculty code.'],
+                ['name' => 'name', 'type' => 'VARCHAR(100)', 'note' => 'Legacy major name.'],
+                ['name' => 'sort_order', 'type' => 'INTEGER', 'note' => 'Legacy ordering.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)'],
+            'relationships' => ['None. No application code reads or writes this table.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE majors ('],
+            'defense' => 'If asked about the unused table: it is a deliberate non-destructive retirement, not a table in the request path.',
+        ],
+        [
+            'name' => 'site_settings',
+            'purpose' => 'Generic key/value settings. Currently holds the site-wide SSG logo.',
+            'columns' => [
+                ['name' => 'setting_key', 'type' => 'VARCHAR(100)', 'note' => 'Primary key, for example ssg_logo.'],
+                ['name' => 'setting_value', 'type' => 'TEXT', 'note' => 'Image data URL or short configuration value.'],
+                ['name' => 'updated_at', 'type' => 'TIMESTAMP', 'note' => 'Last write time.'],
+            ],
+            'keys' => ['PRIMARY KEY (setting_key)'],
+            'relationships' => ['None. Read by icon.php for SSG election logos and by the admin settings panel.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE site_settings ('],
+            'defense' => 'A key/value table keeps small settings out of code without inventing a column for every future toggle.',
+        ],
+        [
+            'name' => 'vote_drafts',
+            'purpose' => 'Legacy save-for-later ballot selections. No page reads this table back — the ballot is submitted atomically to vote.php, which clears the student\'s draft rows on submit.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'user_id', 'type' => 'INTEGER', 'note' => 'Owner.'],
+                ['name' => 'election_id', 'type' => 'INTEGER', 'note' => 'Election the draft belongs to.'],
+                ['name' => 'selections', 'type' => 'JSONB', 'note' => 'Position-to-candidate selections.'],
+                ['name' => 'updated_at', 'type' => 'TIMESTAMP', 'note' => 'Last save time.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (user_id, election_id)', 'FOREIGN KEY user_id ON DELETE CASCADE', 'FOREIGN KEY election_id ON DELETE CASCADE'],
+            'relationships' => ['One draft per student per election.', 'Pruned by the settings maintenance action without touching votes or submissions.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE vote_drafts ('],
+            'defense' => 'Drafts are separate from votes by design: the voting path never reads them, so deleting a draft cannot change a tally. The table is kept only so old rows can be pruned cleanly.',
+        ],
+        [
+            'name' => 'votes',
+            'purpose' => 'One row per voter and candidate. This is the tally source.',
+            'columns' => [
+                ['name' => 'id', 'type' => 'SERIAL', 'note' => 'Primary key.'],
+                ['name' => 'user_id', 'type' => 'INTEGER', 'note' => 'Voting student.'],
+                ['name' => 'candidate_id', 'type' => 'INTEGER', 'note' => 'Chosen candidate.'],
+                ['name' => 'position_id', 'type' => 'INTEGER', 'note' => 'Position, which is election-scoped.'],
+                ['name' => 'voted_at', 'type' => 'TIMESTAMP', 'note' => 'Defaults to CURRENT_TIMESTAMP.'],
+            ],
+            'keys' => ['PRIMARY KEY (id)', 'UNIQUE (user_id, candidate_id)', 'FOREIGN KEY user_id ON DELETE CASCADE', 'FOREIGN KEY candidate_id ON DELETE CASCADE', 'FOREIGN KEY position_id ON DELETE CASCADE', 'INDEX candidate_id', 'INDEX position_id'],
+            'relationships' => ['Joins to election_positions through position_id to scope counts to one election.', 'Joins to candidates through candidate_id for names and photos.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE votes ('],
+            'defense' => 'The unique key stops the same candidate being counted twice for one voter. The one-candidate-per-position-with-winner_count rule lives in vote.php because the database cannot express it without an election-scoped constraint.',
+        ],
+        [
+            'name' => 'ballot_submissions',
+            'purpose' => 'One row per student per election that was submitted, including empty abstention ballots. The authoritative already-voted lock.',
+            'columns' => [
+                ['name' => 'user_id', 'type' => 'INTEGER', 'note' => 'Composite primary key part.'],
+                ['name' => 'election_id', 'type' => 'INTEGER', 'note' => 'Composite primary key part.'],
+                ['name' => 'submitted_at', 'type' => 'TIMESTAMP', 'note' => 'Submission time.'],
+            ],
+            'keys' => ['PRIMARY KEY (user_id, election_id)', 'FOREIGN KEY user_id ON DELETE CASCADE', 'FOREIGN KEY election_id ON DELETE CASCADE'],
+            'relationships' => ['Read by vote.php before writing, by results.php for turnout, and by dashboard-data.php for hasVoted.'],
+            'ref' => ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE ballot_submissions ('],
+            'defense' => 'Votes alone cannot answer "did this student vote?" because every position is skippable and an empty ballot inserts no votes. This table is the proof, and its primary key is the duplicate-vote rule.',
+        ],
+    ],
+
+    'endpoints' => [
+        [
+            'group' => 'Authentication',
+            'method' => 'POST',
+            'path' => 'login.php',
+            'purpose' => 'Verify student credentials, apply the throttle and lifecycle gate, rotate the session, and redirect.',
+            'auth' => 'Public, rate-limited',
+            'ref' => ['file' => 'login.php', 'anchor' => "if (!verifyCsrfToken(\$_POST['csrf_token'] ?? null)) {"],
+        ],
+        [
+            'group' => 'Authentication',
+            'method' => 'POST',
+            'path' => 'student/register.php',
+            'purpose' => 'Create a student account with a chosen password and starting school year. The year level is derived.',
+            'auth' => 'Public, rate-limited',
+            'ref' => ['file' => 'student/register.php', 'anchor' => "if (!verifyCsrfToken(\$_POST['csrf_token'] ?? null)) {"],
+        ],
+        [
+            'group' => 'Authentication',
+            'method' => 'POST',
+            'path' => 'update-account.php',
+            'purpose' => 'Student self-service year-level declaration after the four-year window. One declaration per school year.',
+            'auth' => 'Student session',
+            'ref' => ['file' => 'update-account.php', 'anchor' => 'requireLogin();'],
+        ],
+        [
+            'group' => 'Authentication',
+            'method' => 'POST',
+            'path' => 'change-password.php',
+            'purpose' => 'Force a password change after an admin reset; clears password_reset_pending so voting can resume.',
+            'auth' => 'Student session',
+            'ref' => ['file' => 'change-password.php', 'anchor' => 'requireLogin();'],
+        ],
+        [
+            'group' => 'Student',
+            'method' => 'GET',
+            'path' => 'dashboard-data.php',
+            'purpose' => 'Return the student dashboard JSON: visible elections, allowed positions, candidates, counts, and hasVoted flags.',
+            'auth' => 'Student session',
+            'ref' => ['file' => 'dashboard-data.php', 'anchor' => 'requireLogin();'],
+        ],
+        [
+            'group' => 'Student',
+            'method' => 'POST',
+            'path' => 'vote.php',
+            'purpose' => 'Validate and commit one ballot inside a transaction, writing votes and the ballot_submissions lock together.',
+            'auth' => 'Student session, CSRF, 10 per 60s',
+            'ref' => ['file' => 'vote.php', 'anchor' => '$pdo->beginTransaction();'],
+        ],
+        [
+            'group' => 'Public',
+            'method' => 'GET',
+            'path' => 'results.php?partial=1',
+            'purpose' => 'Return the results fragment for polling. Visibility is decided on the server before any markup is produced.',
+            'auth' => 'Public, per-election visibility',
+            'ref' => ['file' => 'results.php', 'anchor' => "return \$e['results_visibility'] === 'always'"],
+        ],
+        [
+            'group' => 'Public',
+            'method' => 'GET',
+            'path' => 'photo.php?c=<candidate_id>',
+            'purpose' => 'Stream a candidate photo by id with a one-day cache. Invalid ids get a bare 404.',
+            'auth' => 'Public, read-only',
+            'ref' => ['file' => 'photo.php', 'anchor' => "header('Content-Type: image/'"],
+        ],
+        [
+            'group' => 'Public',
+            'method' => 'GET',
+            'path' => 'icon.php?e=<election_id>',
+            'purpose' => 'Stream an election logo: the site-wide SSG logo or the faculty DSG logo.',
+            'auth' => 'Public, read-only',
+            'ref' => ['file' => 'icon.php', 'anchor' => "header('Content-Type: image/'"],
+        ],
+        [
+            'group' => 'Admin',
+            'method' => 'GET / POST',
+            'path' => 'admin/api/elections.php',
+            'purpose' => 'List elections, load one with positions and candidates, save drafts, publish, archive, duplicate, and delete.',
+            'auth' => 'Admin session, CSRF on writes',
+            'ref' => ['file' => 'admin/api/elections.php', 'anchor' => 'requireAdminLogin();'],
+        ],
+        [
+            'group' => 'Admin',
+            'method' => 'GET / POST',
+            'path' => 'admin/api/students.php',
+            'purpose' => 'List and filter students, create or update one record at a time, reset passwords, and delete. Bulk CSV import was removed — students self-register now.',
+            'auth' => 'Admin session, CSRF on writes',
+            'ref' => ['file' => 'admin/api/students.php', 'anchor' => 'requireAdminLogin();'],
+        ],
+        [
+            'group' => 'Admin',
+            'method' => 'GET / POST',
+            'path' => 'admin/api/settings.php',
+            'purpose' => 'Manage school years, faculties, year levels, the SSG logo, admins, and maintenance pruning.',
+            'auth' => 'Admin session, CSRF on writes',
+            'ref' => ['file' => 'admin/api/settings.php', 'anchor' => 'requireAdminLogin();'],
+        ],
+        [
+            'group' => 'Admin',
+            'method' => 'GET / POST',
+            'path' => 'admin/api/admins.php',
+            'purpose' => 'List admin accounts, create, update, and delete with self-deletion and last-admin guards.',
+            'auth' => 'Admin session, CSRF on writes',
+            'ref' => ['file' => 'admin/api/admins.php', 'anchor' => 'requireAdminLogin();'],
+        ],
+        [
+            'group' => 'Admin',
+            'method' => 'GET / POST',
+            'path' => 'admin/api/logs.php',
+            'purpose' => 'Read activity logs and login throttles, and unblock an identifier by deleting its attempts.',
+            'auth' => 'Admin session, CSRF on writes',
+            'ref' => ['file' => 'admin/api/logs.php', 'anchor' => 'requireAdminLogin();'],
+        ],
+        [
+            'group' => 'Admin',
+            'method' => 'POST',
+            'path' => 'admin/api/next-school-year.php',
+            'purpose' => 'Bulk-archive every non-archived election and write one audit summary. It does not change student year levels.',
+            'auth' => 'Admin session, CSRF, 120 per 60s',
+            'ref' => ['file' => 'admin/api/next-school-year.php', 'anchor' => "if (!verifyCsrfToken(\$input['csrf_token'] ?? null)) {"],
+        ],
+        [
+            'group' => 'Infrastructure',
+            'method' => 'GET',
+            'path' => 'health.php',
+            'purpose' => 'Return 200 with ok:true and db:up when the database answers; 503 otherwise. No session and no diagnostic detail.',
+            'auth' => 'Public',
+            'ref' => ['file' => 'health.php', 'anchor' => 'http_response_code(503);'],
+        ],
+    ],
+
+    'security' => [
+        [
+            'id' => 'csrf',
+            'title' => 'CSRF tokens on every write',
+            'summary' => 'Each session gets a 32-byte random token. Forms and JSON writes submit it, and the server compares it with hash_equals before touching data.',
+            'checks' => [
+                'Token minted with random_bytes(32) and stored in the session.',
+                'Comparison uses hash_equals, so timing does not leak a prefix.',
+                'Missing or stale token returns 403 or the form with an error; no write occurs.',
+            ],
+            'refs' => [
+                ['file' => 'includes/functions.php', 'anchor' => 'function csrfToken(): string'],
+                ['file' => 'includes/functions.php', 'anchor' => 'function verifyCsrfToken'],
+            ],
+            'defense' => 'CSRF is enforced on the server for every state-changing request. The hidden input is only how the browser carries the token.',
+        ],
+        [
+            'id' => 'sessions',
+            'title' => 'Session policy',
+            'summary' => 'Cookies are HttpOnly and SameSite=Lax, and become Secure under HTTPS. A successful login rotates the session id before storing the user.',
+            'checks' => [
+                'startSecureSession sets cookie params before session_start.',
+                'session_regenerate_id(true) runs on login, closing session fixation.',
+                'Student and admin identities use separate session keys.',
+            ],
+            'refs' => [
+                ['file' => 'includes/functions.php', 'anchor' => 'function startSecureSession(): void'],
+                ['file' => 'login.php', 'anchor' => 'session_regenerate_id(true);'],
+            ],
+            'defense' => 'The session cookie is not readable by JavaScript, and the id changes at the moment privileges are granted.',
+        ],
+        [
+            'id' => 'rate-limits',
+            'title' => 'Database-backed rate limits',
+            'summary' => 'Attempts are counted in login_attempts by a string bucket. Login allows 8 per 300 seconds; ballot submission 10 per 60; account updates 10 per 600; admin writes 120 per 60.',
+            'checks' => [
+                'Buckets include the user or client address, so limits follow the actor.',
+                'Rows older than one hour are pruned by housekeeping on the next check.',
+                'The admin Logs panel can clear a bucket after a legitimate lockout.',
+            ],
+            'refs' => [
+                ['file' => 'includes/functions.php', 'anchor' => 'function isRateLimitedKey'],
+                ['file' => 'vote.php', 'anchor' => "isRateLimitedKey(\$pdo, 'vote_submit:user:'"],
+            ],
+            'defense' => 'The limiter is a table, not a process-local counter, so it survives restarts and applies across concurrent requests.',
+        ],
+        [
+            'id' => 'sql',
+            'title' => 'Prepared statements',
+            'summary' => 'Queries are prepared with placeholders and executed with bound values. PDO runs in exception mode and returns associative rows.',
+            'checks' => [
+                'Input is bound, never concatenated into SQL.',
+                'ERRMODE_EXCEPTION surfaces failures instead of silently returning false.',
+                'The same code path works on MariaDB and PostgreSQL.',
+            ],
+            'refs' => [
+                ['file' => 'config/db.php', 'anchor' => 'PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,'],
+            ],
+            'defense' => 'SQL injection is addressed at the data-access layer: every value the user controls is a bound parameter.',
+        ],
+        [
+            'id' => 'passwords',
+            'title' => 'Password hashing and policy',
+            'summary' => 'Passwords are stored with password_hash(PASSWORD_DEFAULT) and checked with password_verify. New passwords need at least 8 characters plus a letter and a digit.',
+            'checks' => [
+                'No plaintext password column is read back to the browser.',
+                'The policy helper returns the exact failure message used by registration and password change.',
+                'Admin-created students receive a temporary password with password_reset_pending set.',
+            ],
+            'refs' => [
+                ['file' => 'includes/functions.php', 'anchor' => 'function passwordPolicyError'],
+                ['file' => 'login.php', 'anchor' => 'password_verify'],
+            ],
+            'defense' => 'The database stores hashes, never passwords. Verification is a deliberate slow comparison, not a string equality check.',
+        ],
+        [
+            'id' => 'headers',
+            'title' => 'Security headers and CSP',
+            'summary' => 'The router sends nosniff, SAMEORIGIN framing, a strict referrer policy, and a Content-Security-Policy that allows only self, inline code, and the pinned CDN.',
+            'checks' => [
+                "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+                "img-src 'self' data: blob:",
+                "frame-ancestors 'self' and form-action 'self'",
+                'HSTS is added only when the request is HTTPS.',
+            ],
+            'refs' => [
+                ['file' => 'router.php', 'anchor' => 'Content-Security-Policy'],
+            ],
+            'defense' => 'The CSP blocks eval and third-party origins that were not explicitly allowed. Inline code is a deliberate tradeoff because the dashboards are not bundled.',
+        ],
+        [
+            'id' => 'uploads',
+            'title' => 'Upload validation',
+            'summary' => 'Candidate photos and election logos are accepted only as image data URLs. The helper checks the MIME type and the encoded payload before the bytes are stored.',
+            'checks' => [
+                'isValidImageDataUrl accepts only the image types the UI produces.',
+                'saveCandidatePhoto re-validates before writing the candidates.photo value.',
+                'photo.php and icon.php stream stored data by id and return a bare 404 on failure.',
+            ],
+            'refs' => [
+                ['file' => 'includes/functions.php', 'anchor' => 'function isValidImageDataUrl'],
+                ['file' => 'admin/api/elections.php', 'anchor' => 'function saveCandidatePhoto(?string $base64): ?string'],
+            ],
+            'defense' => 'Uploads are validated as images before storage and served back by a read-only endpoint, so an uploaded file cannot become a PHP script.',
+        ],
+        [
+            'id' => 'audit',
+            'title' => 'Audit logging',
+            'summary' => 'Every privileged mutation writes an activity_logs row with the admin username and a human-readable action. Student declarations use the same table with a student:<id> actor.',
+            'checks' => [
+                'Admin API handlers write the line inside the same request as the change.',
+                'The Logs panel reads the table newest-first with a limit.',
+                'Year-level declarations are found by scanning the same table for the current school year.',
+            ],
+            'refs' => [
+                ['file' => 'admin/api/logs.php', 'anchor' => 'INSERT INTO activity_logs'],
+                ['file' => 'update-account.php', 'anchor' => 'INSERT INTO activity_logs'],
+            ],
+            'defense' => 'Auditability is a table, not a console log. A change and its explanation are written together.',
+        ],
+        [
+            'id' => 'forced-reset',
+            'title' => 'Forced password reset',
+            'summary' => 'When an admin resets a password, users.password_reset_pending is set. The student is routed to change-password.php and vote.php refuses a ballot until the flag clears.',
+            'checks' => [
+                'The admin reset branch sets password_reset_pending = 1.',
+                'change-password.php refuses to render unless the flag is set.',
+                'vote.php reads the flag inside the locked transaction and rejects the submission.',
+            ],
+            'refs' => [
+                ['file' => 'admin/api/students.php', 'anchor' => 'password_reset_pending = 1'],
+                ['file' => 'vote.php', 'anchor' => 'password_reset_pending'],
+            ],
+            'defense' => 'A temporary password is not enough to vote. The reset flag is checked again at the ballot transaction, not only at the UI.',
+        ],
+    ],
+
+    'testing' => [
+        'intro' => 'The project tests what a static check can prove and what only a real request can prove. CI covers syntax and schema parity; the local smoke suite covers the HTTP flows against XAMPP and MariaDB.',
+        'commands' => [
+            ['label' => 'Lint every PHP file', 'command' => 'find . -type f -name "*.php" -not -path "./node_modules/*" -print0 | xargs -0 -n1 php -l', 'note' => 'Runs on every push.'],
+            ['label' => 'Schema parity', 'command' => 'php tests/schema_parity.php', 'note' => 'schema.sql and schema.mysql.sql must describe the same tables and columns.', 'ref' => ['file' => 'tests/schema_parity.php', 'anchor' => '<?php']],
+            ['label' => 'Inline JS parse check', 'command' => 'php tests/extract_admin_js.php admin/dashboard.php && node --check <extracted.js>', 'note' => 'A syntax error in the inline dashboard script would kill every function silently.', 'ref' => ['file' => 'tests/extract_admin_js.php', 'anchor' => '<?php']],
+            ['label' => 'HTTP smoke suite', 'command' => 'powershell -File tests/http_smoke.ps1', 'note' => 'Local only: needs XAMPP + MariaDB and exercises login, voting, and the admin APIs.'],
+            ['label' => 'Guide QA', 'command' => 'node guide/tools/qa.mjs', 'note' => 'Headless Chrome walks every chapter, drawer, code block, and system view.', 'ref' => ['file' => 'guide/tools/qa.mjs', 'anchor' => 'Guide end-to-end QA']],
+        ],
+        'checks' => [
+            'Every PHP file parses.',
+            'Both schema files agree on the table shape.',
+            'Both dashboards inline JavaScript parses with node --check.',
+            'Login, voting, and admin writes work against the real database.',
+            'Every annotation anchor still resolves and every guide step opens its drawer.',
+        ],
+        'coverage' => [
+            ['name' => 'Static checks', 'detail' => 'PHP lint, schema parity, and inline JS parsing run in GitHub Actions on push and pull request.'],
+            ['name' => 'Local HTTP checks', 'detail' => 'The PowerShell smoke suite is intentionally local because it needs XAMPP, MariaDB, and seeded demo data.'],
+            ['name' => 'Guide checks', 'detail' => 'The QA script drives the tour in headless Chrome at desktop and mobile widths and fails on console errors.'],
+        ],
+    ],
+
+    'deployment' => [
+        'intro' => 'The same codebase runs two ways: XAMPP with MariaDB on a student machine, and a small PHP container with PostgreSQL on Render. config/db.php picks the driver automatically.',
+        'targets' => [
+            [
+                'name' => 'XAMPP (local)',
+                'summary' => 'Apache serves htdocs, MariaDB holds voting_app, and .htaccess supplies the security headers.',
+                'notes' => ['Import schema.mysql.sql once.', 'Default credentials are local-only and should never ship to a public host.', 'health.php is the fastest way to confirm the database connection.'],
+                'ref' => ['file' => 'config/db.php', 'anchor' => "\$host = getenv('DB_HOST')"],
+            ],
+            [
+                'name' => 'Docker + Render',
+                'summary' => 'php:8.3-cli with pdo_pgsql, the built-in server on port 10000, and router.php acting as the front controller.',
+                'notes' => ['DATABASE_URL supplies the PostgreSQL connection string.', 'router.php sets the headers because php -S does not read .htaccess.', 'HSTS is emitted only when the request arrives over HTTPS.'],
+                'ref' => ['file' => 'config/db.php', 'anchor' => "\$databaseUrl = getenv('DATABASE_URL');"],
+            ],
+            [
+                'name' => 'Schema parity',
+                'summary' => 'PostgreSQL and MariaDB are both first-class fresh-install targets, and CI fails if the two schema files diverge.',
+                'notes' => ['schema.sql is the PostgreSQL source.', 'schema.mysql.sql is the MariaDB source.', 'Partial indexes are emulated on MariaDB rather than dropped.'],
+                'ref' => ['file' => 'schema.mysql.sql', 'anchor' => 'CREATE TABLE'],
+            ],
+        ],
+        'steps' => [
+            'Create the database and load the matching schema file.',
+            'Set DB_HOST, DB_NAME, DB_USER, and DB_PASS, or provide DATABASE_URL in the container.',
+            'Point the web root at the project directory so index.php is the default document.',
+            'Open /health.php and confirm HTTP 200 with db:up.',
+            'Run the smoke suite locally and the static checks in CI before a demo.',
+        ],
+        'guards' => [
+            'Never commit .env or database dumps; the guide source API refuses dot segments for the same reason.',
+            'The guide itself is loopback-only. Do not expose guide/ publicly with demo credentials.',
+            'Production traffic must be HTTPS so the Secure cookie flag and HSTS take effect.',
+            'Keep the guide and README statements about Next School Year aligned with the code: it archives elections, it does not promote students.',
+        ],
+    ],
+
+    'defense_kit' => [
+        'intro' => 'Answers you can say out loud, in the order a panel usually asks them. Every answer links back to the code that enforces it.',
+        'pitch' => [
+            'title' => 'The 60-second pitch',
+            'paragraphs' => [
+                'voting-app3 is a school election system built with vanilla PHP 8.3 and PDO, with no framework in the request path. It runs on MariaDB in XAMPP and on PostgreSQL in production; a parity test keeps the two fresh-install schemas identical.',
+                'A student signs in with a student ID and password. The server derives the year level from the school year the student started, so eligibility is computed rather than trusted from the browser. One ballot submission per student per election is enforced by a primary key and a row lock inside a transaction.',
+                'Administrators create elections, file candidates, watch turnout, and publish results under a per-election visibility rule. Every write is CSRF-checked, rate-limited where it matters, and written to an audit log.',
+            ],
+            'beats' => [
+                'Identity is server-derived',
+                'One ballot per election, locked in a transaction',
+                'Results follow an explicit visibility rule',
+                'Every write is audited',
+            ],
+        ],
+        'demo' => [
+            'title' => 'Click-by-click demo',
+            'steps' => [
+                ['title' => 'Open the public site', 'detail' => 'Landing page, live election banner, and the two safe entry points.', 'chapter' => 'public-site', 'step' => 0],
+                ['title' => 'Sign in as a student', 'detail' => 'Show the throttle, the CSRF token, and the session that follows.', 'chapter' => 'student-login', 'step' => 0],
+                ['title' => 'Walk the dashboard', 'detail' => 'Home, vote, candidates, and results switch panels without a page reload.', 'chapter' => 'student-dashboard', 'step' => 0],
+                ['title' => 'Cast a ballot', 'detail' => 'Markers show the client guard and the server transaction behind it.', 'chapter' => 'student-ballot', 'step' => 0],
+                ['title' => 'Read live results', 'detail' => 'Explain the visibility rule and the tally query.', 'chapter' => 'student-results', 'step' => 0],
+                ['title' => 'Switch to the admin side', 'detail' => 'Open the election panel with the demo admin session.', 'chapter' => 'admin-elections', 'step' => 0],
+                ['title' => 'Create an election', 'detail' => 'Wizard, automatic target school year, and the duplicate guard.', 'chapter' => 'admin-elections', 'step' => 4],
+                ['title' => 'Manage students', 'detail' => 'Roster filters, registration, and temporary passwords.', 'chapter' => 'admin-students', 'step' => 0],
+                ['title' => 'Publish results', 'detail' => 'Reports, exports, and the visibility switch.', 'chapter' => 'admin-results', 'step' => 0],
+                ['title' => 'Close the loop', 'detail' => 'System reference: table explorer, the ballot_submissions lock, and the audit trail.', 'view' => 'database', 'focus' => 'table:ballot_submissions'],
+            ],
+        ],
+        'qa' => [
+            [
+                'q' => 'Why PHP and a plain database instead of a framework?',
+                'a' => [
+                    'The deployment target is a free PHP host, with MariaDB locally and PostgreSQL in production. The app only needs request handling, sessions, and SQL, so vanilla PHP keeps the moving parts visible: every endpoint is one file and every query is a prepared statement.',
+                    'PDO abstracts the two databases. schema.sql is the PostgreSQL install and schema.mysql.sql is the MariaDB one, and a parity test keeps them aligned.',
+                ],
+                'refs' => [
+                    ['file' => 'config/db.php', 'anchor' => 'DATABASE_URL'],
+                    ['file' => 'tests/schema_parity.php', 'anchor' => 'Schema parity test'],
+                ],
+            ],
+            [
+                'q' => 'How do you stop one student from voting twice?',
+                'a' => [
+                    'ballot_submissions has a primary key on (user_id, election_id). The vote endpoint opens a transaction, locks the student row with SELECT ... FOR UPDATE, checks that no submission exists, writes the votes, then inserts the submission row.',
+                    'The votes table also has a unique (user_id, candidate_id) constraint, but that alone cannot enforce one choice per position, so the submission row is the authoritative lock.',
+                ],
+                'refs' => [
+                    ['file' => 'vote.php', 'anchor' => 'FOR UPDATE'],
+                    ['file' => 'schema.sql', 'anchor' => 'CREATE TABLE ballot_submissions ('],
+                ],
+            ],
+            [
+                'q' => 'What stops two rapid submissions from racing each other?',
+                'a' => [
+                    'The row lock inside the transaction serialises the requests. Whichever arrives second waits, then re-reads the lock state and fails the submission check instead of writing a second ballot.',
+                ],
+                'refs' => [
+                    ['file' => 'vote.php', 'anchor' => 'FOR UPDATE'],
+                ],
+            ],
+            [
+                'q' => 'How does CSRF protection work here?',
+                'a' => [
+                    'Every state-changing form and JSON call carries a per-session token. verifyCsrfToken compares it with hash_equals before the handler touches data, and the session cookie is HttpOnly and SameSite=Lax.',
+                ],
+                'refs' => [
+                    ['file' => 'includes/functions.php', 'anchor' => 'function verifyCsrfToken'],
+                    ['file' => 'includes/functions.php', 'anchor' => 'function startSecureSession'],
+                ],
+            ],
+            [
+                'q' => 'How are passwords stored?',
+                'a' => [
+                    'Passwords are hashed with password_hash and checked with password_verify; plaintext never reaches the database or a log. An admin can issue a temporary password, and the account is forced to replace it before normal use.',
+                ],
+                'refs' => [
+                    ['file' => 'login.php', 'anchor' => 'password_verify'],
+                    ['file' => 'change-password.php', 'anchor' => 'password_hash'],
+                ],
+            ],
+            [
+                'q' => 'How is a student year level decided?',
+                'a' => [
+                    'computeYearLevel adds one to the difference between the active school year and the start year on the student record, then maps the result onto the year_levels table by sort order.',
+                    'The label stored on the user is a cache for display. The computed value is what gates login and ballot eligibility, so editing the stored label in the browser changes nothing.',
+                ],
+                'refs' => [
+                    ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel'],
+                ],
+            ],
+            [
+                'q' => 'What happens when a student is past the four-year window?',
+                'a' => [
+                    'Login computes the level first. A repeating, undergrad-repeating, or suspended-repeating account must complete the Update Account declaration before continuing. A dropped or graduated account is refused, and an unflagged account past four years is refused with a contact-the-administrator message.',
+                ],
+                'refs' => [
+                    ['file' => 'login.php', 'anchor' => 'needs_account_update'],
+                    ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel'],
+                ],
+            ],
+            [
+                'q' => 'How are student and admin roles separated?',
+                'a' => [
+                    'Student pages start a secure session and require a user_id. Admin pages require the admin session keys through requireAdminLogin, and each admin API file repeats that guard itself, so a student session cannot call one by guessing the URL.',
+                ],
+                'refs' => [
+                    ['file' => 'includes/functions.php', 'anchor' => 'function requireAdminLogin'],
+                    ['file' => 'admin/api/elections.php', 'anchor' => 'requireAdminLogin'],
+                ],
+            ],
+            [
+                'q' => 'How are results computed?',
+                'a' => [
+                    'Results tally vote rows per candidate for one election. Winners are the top winner_count counts per position, and ties are surfaced rather than silently broken by an arbitrary pick.',
+                ],
+                'refs' => [
+                    ['file' => 'results.php', 'anchor' => 'results_visibility'],
+                ],
+            ],
+            [
+                'q' => 'How does the results visibility rule work?',
+                'a' => [
+                    'Each election stores results_visibility as always, after, or never. The helper returns true for always, and for after only once the election is closed or archived. The server omits the rows entirely when the rule fails; the browser is not trusted to hide them.',
+                ],
+                'refs' => [
+                    ['file' => 'results.php', 'anchor' => "=== 'always'"],
+                ],
+            ],
+            [
+                'q' => 'Who moves an election from scheduled to ongoing and closed?',
+                'a' => [
+                    'syncElectionStatuses derives the time-based states on read: a scheduled election becomes ongoing when the start time passes and closed when the end time passes. Drafts, pauses, and archives stay explicit admin actions.',
+                ],
+                'refs' => [
+                    ['file' => 'includes/functions.php', 'anchor' => 'function syncElectionStatuses'],
+                ],
+            ],
+            [
+                'q' => 'Why archive an election instead of deleting it?',
+                'a' => [
+                    'Archiving is a reversible soft hide: candidates, votes, and audit history stay intact while the election leaves the active lists. Delete is a separate, explicitly confirmed action for records that should not exist.',
+                ],
+                'refs' => [
+                    ['file' => 'admin/api/elections.php', 'anchor' => 'Only ended elections can be archived.'],
+                ],
+            ],
+            [
+                'q' => 'How do you prevent two SSG elections for the same school year?',
+                'a' => [
+                    'assertNotDuplicateElection runs on create, full edit, scheduling, and activation. SSG is one per school year; DSG is one per faculty per school year, counting archived rows. Because activation re-runs the check, duplicating a draft cannot be used to bypass it.',
+                ],
+                'refs' => [
+                    ['file' => 'admin/api/elections.php', 'anchor' => 'function assertNotDuplicateElection(PDO $pdo'],
+                ],
+            ],
+            [
+                'q' => 'Why is the target school year automatic?',
+                'a' => [
+                    'Officers serve the upcoming school year, so a new election always targets it. The client never sends target_school_year_id; newElectionTargetSchoolYearId resolves it on the server, and an existing election keeps the year it was created with.',
+                ],
+                'refs' => [
+                    ['file' => 'admin/api/elections.php', 'anchor' => 'function newElectionTargetSchoolYearId(PDO $pdo): int'],
+                ],
+            ],
+            [
+                'q' => 'How do you keep the MariaDB and PostgreSQL schemas aligned?',
+                'a' => [
+                    'schema.sql is the PostgreSQL fresh install and schema.mysql.sql is the MariaDB one. The parity test compares tables, key columns, and the two performance indexes, and CI runs it on every push.',
+                ],
+                'refs' => [
+                    ['file' => 'tests/schema_parity.php', 'anchor' => 'Schema parity test'],
+                ],
+            ],
+            [
+                'q' => 'How do you know an edit did not break the dashboards?',
+                'a' => [
+                    'CI lints every PHP file, extracts the inline script from both dashboards, and runs node --check on it. A syntax error in one dashboard script would otherwise silently kill every function on that page. The guide QA then walks every chapter and opens every system view in a real browser.',
+                ],
+                'refs' => [
+                    ['file' => 'tests/extract_admin_js.php', 'anchor' => 'extract'],
+                    ['file' => 'guide/tools/qa.mjs', 'anchor' => 'Guide end-to-end QA'],
+                ],
+            ],
+            [
+                'q' => 'What is the biggest security limitation?',
+                'a' => [
+                    'Rate limiting is database-backed per IP or identifier, not a distributed edge control, so a botnet with many addresses is harder to stop. Candidate photos are data URLs inside the database, capped per image, which is simple but not object storage. The duplicate-election rule is application code inside a transaction rather than a unique index.',
+                ],
+                'refs' => [
+                    ['file' => 'includes/functions.php', 'anchor' => 'function isRateLimitedKey'],
+                    ['file' => 'admin/api/elections.php', 'anchor' => 'data:image'],
+                ],
+            ],
+            [
+                'q' => 'How does it scale?',
+                'a' => [
+                    'The app is stateless apart from the PHP session, so it can run behind several web workers that share the database. Reads are paginated and indexed, and election status plus vote position have dedicated indexes.',
+                ],
+                'refs' => [
+                    ['file' => 'schema.sql', 'anchor' => 'CREATE INDEX'],
+                ],
+            ],
+            [
+                'q' => 'Why store candidate photos as data URLs?',
+                'a' => [
+                    'Free hosts wipe local disk on redeploy, which would blank every candidate photo. Storing the same data URL the browser uploads keeps the image with its row. Only data:image URLs and legacy assets paths are accepted, and the size is capped.',
+                ],
+                'refs' => [
+                    ['file' => 'admin/api/elections.php', 'anchor' => 'data:image'],
+                ],
+            ],
+            [
+                'q' => 'How can you demo the system without touching real data?',
+                'a' => [
+                    'The guide opens a demo session through a local-only bridge that sets the same session keys without writing login_attempts or users. The guide itself refuses non-loopback visitors unless GUIDE_ALLOW_REMOTE=1, and it never writes to the database.',
+                ],
+                'refs' => [],
+            ],
+        ],
+        'limits' => [
+            'No email delivery: password recovery is a temporary password issued by an administrator.',
+            'One school at a time; the active school year is global.',
+            'Rate limits live in the database, not at the edge.',
+            'Duplicate elections are blocked in application code, not by a database unique index.',
+            'The HTTP smoke suite needs XAMPP and MariaDB, so CI carries the static checks only.',
+            'The guide is local-only and reads source from disk; it is not a public site.',
+        ],
+        'future' => [
+            'Add a unique index on election type, faculty, and school year as a second line of defence.',
+            'Move candidate photos to object storage with signed URLs.',
+            'Add email-based recovery and verification.',
+            'Queue large report exports instead of building them in the request.',
+            'Add per-faculty dashboards and a preview step for CSV imports.',
+        ],
+    ],
+
+    'glossary' => [
+        ['term' => 'SSG', 'definition' => 'Supreme Student Government. A school-wide election; results are not scoped to one faculty.'],
+        ['term' => 'DSG', 'definition' => 'Department Student Government. An election scoped to one faculty; the wizard asks for that faculty.'],
+        ['term' => 'Faculty', 'definition' => 'The UI label for a departments row. The code and database still say department.'],
+        ['term' => 'School year', 'definition' => 'A row in school_years with a label and a start year. One row is active at a time.'],
+        ['term' => 'Year level', 'definition' => 'A label derived from the student start year and the active school year, not a value the student picks freely.'],
+        ['term' => 'Account status', 'definition' => 'Admin-set lifecycle state: normal, repeating, undergrad_repeating, suspended_repeating, dropped, or graduated.'],
+        ['term' => 'Election status', 'definition' => 'draft, scheduled, ongoing, paused, closed, or archived. Scheduled, ongoing, and closed can be time-derived; the others are manual.'],
+        ['term' => 'results_visibility', 'definition' => 'Per-election rule: always shows results, after waits for closed or archived, never hides them.'],
+        ['term' => 'Ballot submission', 'definition' => 'The row in ballot_submissions that proves a student submitted in an election, even if the ballot was empty.'],
+        ['term' => 'Vote draft', 'definition' => 'A legacy row in vote_drafts. Nothing reads drafts back; vote.php clears them on submit and the maintenance action prunes leftovers.'],
+        ['term' => 'Winner count', 'definition' => 'Seats to fill for a position and the maximum selections one voter may make for it.'],
+        ['term' => 'Candidate limit', 'definition' => 'Optional cap on how many candidates may be filed for a position.'],
+        ['term' => 'Year restriction', 'definition' => 'Optional year-level rule stored on election_positions and checked when the ballot is built.'],
+        ['term' => 'CSRF token', 'definition' => 'A per-session random value that proves a write request came from a page the server issued.'],
+        ['term' => 'Rate limit bucket', 'definition' => 'A string key in login_attempts such as vote_submit:user:12, used to count attempts in a time window.'],
+        ['term' => 'Prepared statement', 'definition' => 'A query with placeholders whose values are bound separately, which prevents SQL injection.'],
+        ['term' => 'Data URL', 'definition' => 'An inline image encoding such as data:image/png;base64,... used for stored logos and photos.'],
+        ['term' => 'CSP', 'definition' => 'Content-Security-Policy. The response header that limits which scripts, styles, and frames a page may load.'],
+        ['term' => 'PDO', 'definition' => 'PHP Data Objects. The database abstraction used for both MariaDB and PostgreSQL.'],
+        ['term' => 'Panel', 'definition' => 'A section of the admin or student dashboard. Panels are switched by JavaScript, not by a new URL.'],
+        ['term' => 'Anchor', 'definition' => 'A short, stable line of source code used by this guide to locate a snippet at request time instead of hard-coding line numbers.'],
+    ],
+];

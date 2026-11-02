@@ -130,14 +130,14 @@ if ($method === 'GET') {
     $rows = $stmt->fetchAll();
 
     // Which (user, election) pairs has each student actually voted in?
-    // Computed fresh from votes/election_positions rather than trusting the
-    // single legacy has_voted flag, so this stays accurate even when a
-    // student is eligible for more than one election at once.
+    // Computed fresh from ballot_submissions rather than votes: a submitted
+    // ballot can be empty (abstention), so votes alone would miss it. This
+    // is the same lock vote.php enforces and the same source the student
+    // dashboard and results page use.
     $voteMap = []; // user_id => [election_id, election_id, ...]
     $voteStmt = $pdo->query('
-        SELECT DISTINCT v.user_id, ep.election_id
-        FROM votes v
-        JOIN election_positions ep ON ep.position_id = v.position_id
+        SELECT DISTINCT user_id, election_id
+        FROM ballot_submissions
     ');
     foreach ($voteStmt->fetchAll() as $row) {
         $voteMap[(int) $row['user_id']][] = (int) $row['election_id'];
@@ -294,51 +294,6 @@ if ($method === 'PUT') {
             'a' => 'Reset password for student ' . $current['student_id'],
         ]);
         respond(['success' => true, 'temp_password' => $tmp]);
-    }
-
-    // Special action: actually deletes the student's cast votes for ONE
-    // specific election (not just flipping a display flag), so the
-    // Students panel's real per-election status reflects it immediately
-    // and the student can genuinely vote again in that election. This is
-    // what the admin dashboard's "Reset" button on a student's voting
-    // status now calls — previously it only toggled the legacy has_voted
-    // column below, which doesn't affect what's actually shown per
-    // election or what vote.php checks, so the button did nothing real.
-    if (!empty($body['resetVotesForElection'])) {
-        $eid = (int) $body['resetVotesForElection'];
-        // One transaction: an interrupted reset must not leave the
-        // legacy has_voted flag disagreeing with the votes table.
-        $pdo->beginTransaction();
-        try {
-            $pdo->prepare('
-                DELETE FROM votes
-                WHERE user_id = :uid
-                  AND position_id IN (SELECT position_id FROM election_positions WHERE election_id = :eid)
-            ')->execute(['uid' => $id, 'eid' => $eid]);
-
-            // Drop the submission lock too — without this the student would
-            // stay locked out of the election even though their votes are gone
-            // (the lock, not the votes, is what vote.php checks).
-            $pdo->prepare(
-                'DELETE FROM ballot_submissions WHERE user_id = :uid AND election_id = :eid'
-            )->execute(['uid' => $id, 'eid' => $eid]);
-
-            // Keep the legacy "voted somewhere, ever" flag consistent: only
-            // true if the student still has at least one vote left in any
-            // election after this reset.
-            $remainStmt = $pdo->prepare('SELECT COUNT(*) FROM votes WHERE user_id = :uid');
-            $remainStmt->execute(['uid' => $id]);
-            $remaining = (int) $remainStmt->fetchColumn();
-            $pdo->prepare('UPDATE users SET has_voted = :hv WHERE id = :id')
-                ->execute(['hv' => $remaining > 0 ? 1 : 0, 'id' => $id]);
-            $pdo->commit();
-        } catch (Throwable $e) {
-            $pdo->rollBack();
-            error_log('Vote reset failed: ' . $e->getMessage());
-            respond(['error' => 'Could not reset votes. Please try again.'], 500);
-        }
-
-        respond(['success' => true]);
     }
 
     $fields = [];

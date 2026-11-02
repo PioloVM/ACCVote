@@ -94,27 +94,36 @@ function validDepartmentCodes(PDO $pdo): array
 }
 
 // Elections are run FOR the upcoming school year (see
-// nextSchoolYearStartYear() in includes/functions.php). Defaults to that
-// automatically; the admin can override to any existing school year by
-// sending target_school_year_id explicitly (e.g. a rare mid-cycle
-// special election actually meant for the CURRENT year).
-function resolveTargetSchoolYearId(PDO $pdo, array $input, ?int $existingId = null): int
+// nextSchoolYearStartYear() in includes/functions.php). The target is NOT
+// admin-editable: a new election always targets the upcoming school year,
+// and an existing election keeps the year it was created with — nothing
+// ever re-points it, because that year is who its officers serve. Any
+// target_school_year_id the client sends is ignored.
+function newElectionTargetSchoolYearId(PDO $pdo): int
 {
-    if (!empty($input['target_school_year_id'])) {
-        $id = (int) $input['target_school_year_id'];
-        $check = $pdo->prepare('SELECT id, start_year FROM school_years WHERE id = :id');
-        $check->execute(['id' => $id]);
-        $row = $check->fetch();
-        if ($row) {
-            // An existing election may keep its current (past) year on edit;
-            // anything else must be the current school year or later.
-            if ((int) $row['start_year'] < currentSchoolYearStartYear() && $id !== $existingId) {
-                respond(['error' => 'The target school year can\'t be earlier than the current school year.'], 400);
-            }
-            return $id;
+    return (int) getOrCreateSchoolYear($pdo, nextSchoolYearStartYear())['id'];
+}
+
+// One SSG election per school year; one DSG election per faculty per school
+// year — including archived elections. Shared by create, full edit, AND
+// status activation: without the activation check a duplicated draft could
+// bypass the detector by just being started (create/edit used to be the
+// only paths that checked).
+function assertNotDuplicateElection(PDO $pdo, string $type, ?string $department, int $targetSchoolYearId, int $excludeId): void
+{
+    if ($type === 'SSG') {
+        $dupCheck = $pdo->prepare('SELECT id FROM elections WHERE type = :type AND target_school_year_id = :tsy AND id != :id');
+        $dupCheck->execute(['type' => 'SSG', 'tsy' => $targetSchoolYearId, 'id' => $excludeId]);
+        if ($dupCheck->fetch()) {
+            respond(['error' => 'An SSG election already exists for this school year. Only one SSG election is allowed per school year.'], 400);
+        }
+    } elseif ($type === 'DSG') {
+        $dupCheck = $pdo->prepare('SELECT id FROM elections WHERE type = :type AND department = :dept AND target_school_year_id = :tsy AND id != :id');
+        $dupCheck->execute(['type' => 'DSG', 'dept' => $department, 'tsy' => $targetSchoolYearId, 'id' => $excludeId]);
+        if ($dupCheck->fetch()) {
+            respond(['error' => 'A DSG election already exists for this faculty in this school year. Only one DSG election per faculty per school year is allowed.'], 400);
         }
     }
-    return (int) getOrCreateSchoolYear($pdo, nextSchoolYearStartYear())['id'];
 }
 
 function validatePayload(array $input, bool $requirePositions, array $validDepartmentCodes = []): array
@@ -238,9 +247,8 @@ function electionVoteCount(PDO $pdo, int $electionId): int
 function electionTurnout(PDO $pdo, int $electionId, string $type, ?string $department): array
 {
     $ballotsStmt = $pdo->prepare('
-        SELECT COUNT(DISTINCT v.user_id) FROM votes v
-        JOIN election_positions ep ON ep.position_id = v.position_id
-        WHERE ep.election_id = :eid
+        SELECT COUNT(DISTINCT user_id) FROM ballot_submissions
+        WHERE election_id = :eid
     ');
     $ballotsStmt->execute(['eid' => $electionId]);
     $ballotsCast = (int) $ballotsStmt->fetchColumn();
@@ -377,12 +385,10 @@ if ($method === 'GET') {
         $election['parties_enabled'] = (bool) $election['parties_enabled'];
         $election['vote_count'] = electionVoteCount($pdo, (int) $election['id']);
 
-        // Turnout figures for the admin charts. Deliberately NOT exposed on
-        // the public results page's own numbers without saying so: this
-        // "eligible" definition is stricter than results.php's, which counts
-        // every non-'unregistered' row including dropped/graduated students
-        // who can no longer log in. The two are both defensible; mixing them
-        // in one report is not.
+        // Turnout figures for the admin charts. The "eligible" definition
+        // here is the SAME one results.php uses (active registration,
+        // excluding dropped/graduated students), so admin and public
+        // turnout percentages always agree.
         $election = array_merge(
             $election,
             electionTurnout($pdo, (int) $election['id'], (string) $election['type'], $election['department'])
@@ -515,7 +521,11 @@ if ($method === 'POST') {
                 // flow above).
                 'parties_enabled' => !empty($src['parties_enabled']) ? 1 : 0,
                 'parties' => (string) ($src['parties'] ?? '[]'),
-                'target_sy' => $src['target_school_year_id'],
+                // Retarget to the automatic upcoming school year rather than
+                // inheriting the source's: duplicating is how you template
+                // last cycle's election for the new cycle, and the target is
+                // never admin-editable anywhere else either.
+                'target_sy' => newElectionTargetSchoolYearId($pdo),
             ]);
             $electionId = isMysql() ? (int) $pdo->lastInsertId() : (int) $stmt->fetchColumn();
 
@@ -541,8 +551,14 @@ if ($method === 'POST') {
 
     [$type, $department] = splitElectionType($input);
 
+    // Automatic target: new elections always run for the upcoming school
+    // year (the wizard no longer offers a choice — see
+    // newElectionTargetSchoolYearId above). Duplicate detector runs against
+    // that resolved year, including archived elections.
+    $targetSchoolYearId = newElectionTargetSchoolYearId($pdo);
+    assertNotDuplicateElection($pdo, $type, $department, $targetSchoolYearId, 0);
+
     try {
-        $targetSchoolYearId = resolveTargetSchoolYearId($pdo, $input);
 
         $pdo->beginTransaction();
 
@@ -630,6 +646,13 @@ if ($method === 'PUT') {
                 if ($input['status'] === 'ongoing' && $current['status'] === 'draft') {
                     respond(['error' => 'Save a schedule for this election before starting it.'], 409);
                 }
+                // Activation must respect the one-per-school-year rule too:
+                // a duplicated draft could otherwise be started straight past
+                // the duplicate detector (create/full-edit were the only
+                // paths that checked). Pausing/closing/archiving stays free.
+                if (in_array($input['status'], ['scheduled', 'ongoing'], true)) {
+                    assertNotDuplicateElection($pdo, $current['type'], $current['department'], (int) $current['target_school_year_id'], $id);
+                }
                 $fields[] = 'status = :status';
                 $values['status'] = $input['status'];
             }
@@ -650,7 +673,10 @@ if ($method === 'PUT') {
                 // "Not Started" to "Upcoming" — and it's automatic from here
                 // on out (see syncElectionStatuses()), unless it's already
                 // further along in its lifecycle (ongoing/paused/closed/archived).
+                // Same duplicate wall as the status buttons above: scheduling
+                // is activation too.
                 if ($current['status'] === 'draft') {
+                    assertNotDuplicateElection($pdo, $current['type'], $current['department'], (int) $current['target_school_year_id'], $id);
                     $fields[] = "status = 'scheduled'";
                 }
             }
@@ -661,11 +687,8 @@ if ($method === 'PUT') {
                 $fields[] = 'results_visibility = :vis';
                 $values['vis'] = $input['results_visibility'];
             }
-            if (array_key_exists('target_school_year_id', $input)) {
-                $targetSchoolYearId = resolveTargetSchoolYearId($pdo, $input, (int) $current['target_school_year_id']);
-                $fields[] = 'target_school_year_id = :target_sy';
-                $values['target_sy'] = $targetSchoolYearId;
-            }
+            // target_school_year_id is intentionally NOT editable here (or
+            // anywhere): it's fixed at creation to the upcoming school year.
 
             if (!$fields) respond(['error' => 'Nothing to update.'], 400);
 
@@ -698,12 +721,10 @@ if ($method === 'PUT') {
         if ($errors) respond(['error' => implode(' ', $errors)], 400);
 
         [$type, $department] = splitElectionType($input);
-        // On a full edit, only change the target school year if the admin
-        // actually sent one — otherwise keep whatever was already set
-        // rather than silently resetting it back to "next year" on every save.
-        $targetSchoolYearId = array_key_exists('target_school_year_id', $input)
-            ? resolveTargetSchoolYearId($pdo, $input, (int) $current['target_school_year_id'])
-            : (int) $current['target_school_year_id'];
+        // Target school year is fixed at creation (automatic upcoming year)
+        // — a full edit never re-points it, no matter what the client sends.
+        $targetSchoolYearId = (int) $current['target_school_year_id'];
+        assertNotDuplicateElection($pdo, $type, $department, $targetSchoolYearId, $id);
 
         $pdo->beginTransaction();
 

@@ -15,6 +15,53 @@
 // ever outside the Philippines.
 date_default_timezone_set('Asia/Manila');
 
+// ------------------------------------------------------------------
+// Global error handling. display_errors stays OFF so an unexpected
+// exception or parse-level problem can never print a stack trace, file
+// paths, or query context to a visitor; the real error still lands in
+// the server log via log_errors. The exception handler below renders a
+// generic message — JSON for API endpoints (they set their Content-Type
+// before doing work), a plain HTML page for everything else.
+// ------------------------------------------------------------------
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+set_exception_handler(function (Throwable $e): void {
+    error_log('Uncaught exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+
+    $isJson = false;
+    if (function_exists('headers_list')) {
+        foreach (headers_list() as $header) {
+            if (stripos($header, 'Content-Type: application/json') === 0) {
+                $isJson = true;
+                break;
+            }
+        }
+    }
+
+    if (!headers_sent()) {
+        http_response_code(500);
+    }
+
+    if ($isJson) {
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+        }
+        echo json_encode(['success' => false, 'error' => 'A server error occurred. Please try again later.']);
+    } else {
+        echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+            . '<title>Something went wrong</title></head>'
+            . '<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;'
+            . 'font-family:system-ui,sans-serif;background:#f7f5ef;color:#0f172a;text-align:center;padding:1.5rem;">'
+            . '<div><h1 style="font-size:1.4rem;margin:0 0 .5rem;">Something went wrong</h1>'
+            . '<p style="color:#5c6b81;margin:0 0 1.25rem;">An unexpected error occurred. Please try again later.</p>'
+            . '<a href="index.php" style="color:#65a30d;font-weight:600;">&larr; Back to home</a></div>'
+            . '</body></html>';
+    }
+    exit;
+});
+
 /**
  * Starts a session with sane, hardened cookie settings.
  * Safe to call multiple times.
@@ -61,6 +108,21 @@ function h(?string $value): string
 }
 
 /**
+ * Returns an asset path with a ?v= cache-buster derived from the file's
+ * last-modified time, e.g. "assets/dashboard-app.css?v=1756108800".
+ * Whenever the file changes, the URL changes, so browsers fetch the new
+ * copy immediately instead of serving a stale cached stylesheet/script
+ * (which is how dark-mode CSS fixes once failed to appear for users).
+ * Falls back to a plain version-less path if the file doesn't exist.
+ */
+function assetV(string $path): string
+{
+    $full = __DIR__ . '/../' . ltrim($path, '/');
+    $mtime = @filemtime($full);
+    return $mtime ? $path . '?v=' . $mtime : $path;
+}
+
+/**
  * Generates (or reuses) a CSRF token stored in the session.
  */
 function csrfToken(): string
@@ -95,13 +157,92 @@ function jsonResponse(array $payload, int $statusCode = 200): void
 
 /**
  * Require admin login. Redirect to admin login page if not authenticated.
+ *
+ * JSON API endpoints (admin/api/*.php) get a 401 JSON body instead of a
+ * redirect: a relative "Location: login.php" sent from /admin/api/ resolves
+ * to /admin/api/login.php, which doesn't exist — the client would follow it
+ * into a confusing 404/405 instead of a clear "not logged in".
  */
 function requireAdminLogin(): void
 {
-    if (empty($_SESSION['admin_id'])) {
-        header('Location: login.php');   // Relative – works from /admin/
+    if (!empty($_SESSION['admin_id'])) {
+        return;
+    }
+
+    if (strpos($_SERVER['SCRIPT_NAME'] ?? '', '/api/') !== false) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Not logged in.']);
         exit;
     }
+
+    header('Location: login.php');   // Relative – works from /admin/
+    exit;
+}
+
+/**
+ * Best-effort real client IP for rate limiting.
+ *
+ * Behind Render (or any reverse proxy), REMOTE_ADDR is the proxy's IP, so
+ * every visitor would share one rate-limit bucket. When a validated
+ * X-Forwarded-For chain is present, the first public address wins.
+ *
+ * Caveat: X-Forwarded-For is client-suppliable when there is no proxy, so
+ * only values that parse as PUBLIC IPs are accepted (private/reserved
+ * ranges are skipped). A determined attacker can still rotate spoofed
+ * IPs — this raises the bar for bulk abuse, it is not an identity system.
+ */
+function clientIp(): string
+{
+    $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+    if ($xff !== '') {
+        foreach (explode(',', $xff) as $candidate) {
+            $candidate = trim($candidate);
+            if ($candidate !== '' && filter_var($candidate, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $candidate;
+            }
+        }
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+}
+
+/**
+ * Core rate-limit check keyed by an arbitrary identifier string.
+ * Login/registration endpoints call the isRateLimited() wrapper (IP-keyed);
+ * per-user endpoints (voting, drafts, admin writes) call this directly with
+ * a "<bucket>:user:<id>" identifier so one busy IP can't lock everyone out
+ * and one user can't hammer their own bucket past the cap.
+ */
+function isRateLimitedKey(PDO $pdo, string $identifier, int $maxAttempts = 8, int $windowSeconds = 300): bool
+{
+    // Housekeeping: drop attempts old enough that they can never matter
+    // again, so this table doesn't grow forever.
+    if (isMysql()) {
+        $pdo->prepare('DELETE FROM login_attempts WHERE identifier = :id AND attempted_at < NOW() - INTERVAL 1 HOUR')
+            ->execute(['id' => $identifier]);
+    } else {
+        $pdo->prepare("DELETE FROM login_attempts WHERE identifier = :id AND attempted_at < NOW() - INTERVAL '1 hour'")
+            ->execute(['id' => $identifier]);
+    }
+
+    $windowSql = isMysql()
+        ? 'NOW() - INTERVAL :window SECOND'
+        : "NOW() - (:window * INTERVAL '1 second')";
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM login_attempts
+        WHERE identifier = :id AND attempted_at > {$windowSql}
+    ");
+    $stmt->execute(['id' => $identifier, 'window' => $windowSeconds]);
+
+    return (int) $stmt->fetchColumn() >= $maxAttempts;
+}
+
+/**
+ * Records one attempt against an arbitrary identifier (see isRateLimitedKey()).
+ */
+function recordAttemptKey(PDO $pdo, string $identifier): void
+{
+    $pdo->prepare('INSERT INTO login_attempts (identifier) VALUES (:id)')->execute(['id' => $identifier]);
 }
 
 /**
@@ -116,20 +257,7 @@ function requireAdminLogin(): void
  */
 function isRateLimited(PDO $pdo, string $bucket, int $maxAttempts = 8, int $windowSeconds = 300): bool
 {
-    $identifier = $bucket . ':' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
-
-    // Housekeeping: drop attempts old enough that they can never matter
-    // again, so this table doesn't grow forever.
-    $pdo->prepare("DELETE FROM login_attempts WHERE identifier = :id AND attempted_at < NOW() - INTERVAL '1 hour'")
-        ->execute(['id' => $identifier]);
-
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) FROM login_attempts
-        WHERE identifier = :id AND attempted_at > NOW() - (:window * INTERVAL '1 second')
-    ");
-    $stmt->execute(['id' => $identifier, 'window' => $windowSeconds]);
-
-    return (int) $stmt->fetchColumn() >= $maxAttempts;
+    return isRateLimitedKey($pdo, $bucket . ':' . clientIp(), $maxAttempts, $windowSeconds);
 }
 
 /**
@@ -139,8 +267,7 @@ function isRateLimited(PDO $pdo, string $bucket, int $maxAttempts = 8, int $wind
  */
 function recordAttempt(PDO $pdo, string $bucket): void
 {
-    $identifier = $bucket . ':' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
-    $pdo->prepare('INSERT INTO login_attempts (identifier) VALUES (:id)')->execute(['id' => $identifier]);
+    recordAttemptKey($pdo, $bucket . ':' . clientIp());
 }
 
 /**
@@ -184,16 +311,23 @@ function recordAttempt(PDO $pdo, string $bucket): void
  */
 function syncElectionStatuses(PDO $pdo): void
 {
+    // "Now" as Manila wall-clock, in each driver's own dialect. Postgres:
+    // NOW() is UTC on the server, so convert the instant to Asia/Manila.
+    // MySQL: UTC_TIMESTAMP() + CONVERT_TZ with a fixed offset needs no tz
+    // tables and always works (MariaDB/MySQL both accept '+00:00' offsets).
+    $nowSql = isMysql()
+        ? "CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+08:00')"
+        : "(NOW() AT TIME ZONE 'Asia/Manila')";
     $pdo->exec("
         UPDATE elections SET status = 'ongoing'
         WHERE status = 'scheduled'
-          AND start_date <= (NOW() AT TIME ZONE 'Asia/Manila')
-          AND end_date > (NOW() AT TIME ZONE 'Asia/Manila')
+          AND start_date <= {$nowSql}
+          AND end_date > {$nowSql}
     ");
     $pdo->exec("
         UPDATE elections SET status = 'closed'
         WHERE status IN ('scheduled', 'ongoing')
-          AND end_date <= (NOW() AT TIME ZONE 'Asia/Manila')
+          AND end_date <= {$nowSql}
     ");
 }
 
@@ -263,4 +397,249 @@ function electionLogoHtml(string $type, ?string $departmentCode, ?string $ssgLog
         return '<img src="' . h($logo) . '" alt="" class="elogo-img">';
     }
     return defaultElectionLogoSvg();
+}
+
+/**
+ * ================================================================
+ * UPLOAD VALIDATION (candidate photos + election/department logos)
+ * ================================================================
+ * Both arrive as base64 data: URLs from the browser. The old check only
+ * trusted the "data:image/..." string prefix, so a crafted payload with
+ * a PNG prefix but arbitrary bytes (SVG/script/HTML) would have been
+ * stored unchecked. This validates the DECODED BYTES: the payload must
+ * actually parse as a raster image (JPEG/PNG/GIF/WebP) via
+ * getimagesize(), with sane dimensions. SVG is deliberately rejected —
+ * it can carry embedded script.
+ */
+function isValidImageDataUrl(string $dataUrl): bool
+{
+    $comma = strpos($dataUrl, ',');
+    if ($comma === false) {
+        return false;
+    }
+    $decoded = base64_decode(substr($dataUrl, $comma + 1), true);
+    if ($decoded === false || strlen($decoded) < 8) {
+        return false;
+    }
+    $info = @getimagesizefromstring($decoded);
+    if (!is_array($info) || empty($info['mime'])) {
+        return false;
+    }
+    if (!in_array($info['mime'], ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)) {
+        return false;
+    }
+    $width = (int) ($info[0] ?? 0);
+    $height = (int) ($info[1] ?? 0);
+    if ($width < 1 || $height < 1 || $width > 5000 || $height > 5000) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Server-side password policy shared by student self-registration and the
+ * admin panel's student forms. Returns an error message, or null if the
+ * password passes: 8+ characters with at least one letter and one number.
+ */
+function passwordPolicyError(string $password): ?string
+{
+    if (strlen($password) < 8) {
+        return 'Password must be at least 8 characters long.';
+    }
+    if (!preg_match('/[A-Za-z]/', $password) || !preg_match('/\d/', $password)) {
+        return 'Password must contain both letters and numbers.';
+    }
+    return null;
+}
+
+/**
+ * ================================================================
+ * SCHOOL YEAR / YEAR LEVEL COMPUTATION
+ * ================================================================
+ * A student's year level is no longer hand-picked — it's derived from
+ * which school year they STARTED in (users.school_year_id) compared to
+ * whichever school year is currently active. See
+ * SCHOOL_YEAR_OVERHAUL_PLAN.md for the full spec.
+ */
+
+/**
+ * The start_year of whichever school year "today" falls in. School years
+ * run roughly June -> the following May (the school's actual term start
+ * varies year to year, but June is the latest reasonable cutover point):
+ * from June 1 onward we're in the school year that started THIS calendar
+ * year; before June we're still in the one that started LAST calendar
+ * year. E.g. Sept 3, 2026 -> 2026 (school year "2026-2027"); Feb 2027 ->
+ * still 2026 (school year "2026-2027"); May 2027 -> still 2026.
+ */
+function currentSchoolYearStartYear(?DateTimeInterface $now = null): int
+{
+    $now = $now ?? new DateTime('now', new DateTimeZone('Asia/Manila'));
+    $year = (int) $now->format('Y');
+    $month = (int) $now->format('n');
+    return $month >= 6 ? $year : $year - 1;
+}
+
+/**
+ * Elections are run FOR the upcoming school year, not the one currently
+ * in progress (SSG/DSG officers elected now take office once the next
+ * school year starts) — see elections.target_school_year_id. This is
+ * just currentSchoolYearStartYear() + 1, named for clarity at call sites.
+ */
+function nextSchoolYearStartYear(?DateTimeInterface $now = null): int
+{
+    return currentSchoolYearStartYear($now) + 1;
+}
+
+/**
+ * Finds the school_years row for a given start_year, creating it
+ * on the fly (label "YYYY-YYYY+1") if it doesn't exist yet. This is what
+ * lets registration and login work without an admin ever having to
+ * manually pre-create or activate a school year first.
+ */
+function getOrCreateSchoolYear(PDO $pdo, int $startYear): array
+{
+    $stmt = $pdo->prepare('SELECT id, label, start_year, is_active FROM school_years WHERE start_year = :sy');
+    $stmt->execute(['sy' => $startYear]);
+    $row = $stmt->fetch();
+    if ($row) {
+        return $row;
+    }
+
+    $label = $startYear . '-' . ($startYear + 1);
+    $pdo->prepare('INSERT INTO school_years (label, start_year, sort_order) VALUES (:label, :sy, :sy)')
+        ->execute(['label' => $label, 'sy' => $startYear]);
+
+    $stmt->execute(['sy' => $startYear]);
+    return $stmt->fetch();
+}
+
+/**
+ * The "current" school year, fully calendar-derived — see
+ * currentSchoolYearStartYear(). Auto-creates the row if needed and keeps
+ * exactly that one row flagged is_active=true (clearing any other),
+ * purely so the Settings list has something to visibly label as
+ * "current" — nothing computes against the is_active flag itself
+ * anymore. Always returns a row; never null.
+ */
+function getActiveSchoolYear(PDO $pdo): array
+{
+    $row = getOrCreateSchoolYear($pdo, currentSchoolYearStartYear());
+    if (empty($row['is_active'])) {
+        $pdo->exec('UPDATE school_years SET is_active = false');
+        $pdo->prepare('UPDATE school_years SET is_active = true WHERE id = :id')->execute(['id' => $row['id']]);
+        $row['is_active'] = true;
+    }
+    return $row;
+}
+
+/**
+ * $yearLevelNames: year_levels.name values ordered by sort_order, e.g.
+ * ['1st Year', '2nd Year', '3rd Year', '4th Year'] — position in this
+ * array (1-based) is what the computed index maps to.
+ *
+ * Returns:
+ *   'index'   -> 1-based year number since the student started (1 = the
+ *                school year they started in)
+ *   'label'   -> the matching year_levels name, or null if the index runs
+ *                past the configured list (index >= 5 with the standard
+ *                4-entry list) or a list entry is missing
+ *   'blocked' -> true once index >= 5 (see SCHOOL_YEAR_OVERHAUL_PLAN.md:
+ *                "more than 4 years" = the 5th school year onward)
+ */
+function computeYearLevel(int $studentStartYear, int $activeStartYear, array $yearLevelNames): array
+{
+    $index = ($activeStartYear - $studentStartYear) + 1;
+    if ($index < 1) {
+        $index = 1; // guards against bad/future-dated data rather than erroring
+    }
+    $label = $yearLevelNames[$index - 1] ?? null;
+    return ['index' => $index, 'label' => $label, 'blocked' => $index >= 5];
+}
+
+/**
+ * Student-side declaration check (registration + update-account).
+ * Returns ['ok'=>bool, 'error'=>?string, 'account_status'=>string, 'year_level'=>?string]
+ *  - claim empty or equals computed (and not blocked) -> normal + computed label
+ *  - claim index > computed index (when not blocked)  -> error "can't be higher"
+ *  - claim differs, or computed index >= 5            -> $claimedStatus must be one of
+ *    the 3 repeater statuses, else error
+ * Admins are NOT bound by this helper (they may use all six statuses).
+ */
+function resolveYearDeclaration(int $startYear, ?string $claimedLabel, ?string $claimedStatus, array $yearLevelNames, ?int $activeStartYear = null): array
+{
+    $activeStartYear = $activeStartYear ?? currentSchoolYearStartYear();
+    $computed = computeYearLevel($startYear, $activeStartYear, $yearLevelNames);
+    $claimedLabel = trim((string) $claimedLabel);
+    $claimedStatus = trim((string) $claimedStatus);
+    $repeaterStatuses = ['repeating', 'undergrad_repeating', 'suspended_repeating'];
+
+    $fail = function (string $msg): array {
+        return ['ok' => false, 'error' => $msg, 'account_status' => 'normal', 'year_level' => null];
+    };
+
+    if (!$computed['blocked'] && ($claimedLabel === '' || $claimedLabel === $computed['label'])) {
+        // A repeater can legitimately sit at the level their start year
+        // computes to — someone repeating 2nd year IS a 2nd year, and
+        // that is precisely the case the voluntary "Update Year Level"
+        // flow exists to record (a student correcting their status long
+        // before they ever cross the 4-year threshold).
+        //
+        // Without this, an explicitly claimed repeater status is silently
+        // normalised away here and update-account.php reports "nothing
+        // changed", leaving the student permanently unable to declare it.
+        // Only an explicit, valid level selection can carry a status —
+        // a blank level still means "no declaration made".
+        if ($claimedLabel !== '' && in_array($claimedStatus, $repeaterStatuses, true)) {
+            return ['ok' => true, 'error' => null, 'account_status' => $claimedStatus, 'year_level' => $claimedLabel];
+        }
+        return ['ok' => true, 'error' => null, 'account_status' => 'normal', 'year_level' => $computed['label']];
+    }
+
+    $claimedPos = array_search($claimedLabel, $yearLevelNames, true);
+    if ($claimedLabel === '' || $claimedPos === false) {
+        return $fail('Please select your current year level.');
+    }
+    $claimedIndex = $claimedPos + 1;
+
+    if (!$computed['blocked'] && $claimedIndex > $computed['index']) {
+        return $fail("Your year level can't be higher than your start year allows. Pick the same level or lower.");
+    }
+
+    if (!in_array($claimedStatus, $repeaterStatuses, true)) {
+        return $fail('Please tell us your current enrollment status.');
+    }
+
+    return ['ok' => true, 'error' => null, 'account_status' => $claimedStatus, 'year_level' => $claimedLabel];
+}
+
+/**
+ * Format check for student IDs: the school's real IDs are always exactly
+ * 9 digits. Shared by admin/api/students.php (admin create/edit/import)
+ * and student/register.php (self-registration), so the one real rule
+ * lives in one place.
+ */
+function validateStudentIdFormat(string $studentId): bool
+{
+    return (bool) preg_match('/^\d{9}$/', $studentId);
+}
+
+/**
+ * Ongoing elections right now, for the "voting is open" banner shown on
+ * the public landing page, login, and registration pages. School voting
+ * only happens once a school year and the window is usually just 1-3
+ * days, so calling this out prominently on the pages a student sees
+ * BEFORE reaching their dashboard actually matters — easy to miss
+ * otherwise. Caller must run syncElectionStatuses($pdo) first so status
+ * is current.
+ */
+function getOngoingElectionsBanner(PDO $pdo): array
+{
+    return $pdo->query("
+        SELECT e.name, e.type, e.department, e.end_date,
+               sy.label AS target_school_year_label
+        FROM elections e
+        LEFT JOIN school_years sy ON sy.id = e.target_school_year_id
+        WHERE e.status = 'ongoing'
+        ORDER BY e.end_date ASC
+    ")->fetchAll();
 }

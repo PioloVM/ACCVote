@@ -53,8 +53,9 @@
     }
 
     // Which individual positions has this student already voted on, across
-    // any election? (votes has UNIQUE(user_id, position_id), so one row per
-    // position is all there ever is.) Used by the dashboard home to show a
+    // any election? (votes has UNIQUE(user_id, candidate_id), so a voter
+    // gets at most one row per picked candidate — capped at the position's
+    // winner_count by vote.php.) Used by the dashboard home to show a
     // real per-position checklist instead of just one all-or-nothing badge.
 
     /**
@@ -175,8 +176,9 @@
     // must not pay for it on every load.
     $page = $_GET['page'] ?? 'home';
     $selectedElectionId = isset($_GET['election_id']) ? (int)$_GET['election_id'] : null;
+    $isCombined = $page === 'vote' && !empty($_GET['combined']) && !$isPreview;
 
-    if ($page === 'vote' && $selectedElectionId) {
+    if ($page === 'vote' && ($selectedElectionId || $isCombined)) {
     $electionData = [];
     $ssgLogo = getSiteSetting($pdo, 'ssg_logo');
     $departmentLogos = getDepartmentLogos($pdo);
@@ -277,7 +279,7 @@
     // between THOSE no longer does a full page reload — this branch
     // intentionally still does.
     // ====================================================================
-    if ($page === 'vote' && $selectedElectionId):
+    if ($page === 'vote' && ($selectedElectionId || $isCombined)):
     ?>
     <!DOCTYPE html>
     <html lang="en">
@@ -306,6 +308,12 @@
             <h2>School Elections</h2>
             <span class="logo-tagline">Student Portal</span>
         </div>
+        <div class="student-profile-top">
+            <div class="user-info">
+                <div class="name"><?= h($user['name']) ?></div>
+                <div class="role"><?= h($user['department'] ?: 'Student') ?><?= $user['year_level'] ? ' · ' . h($user['year_level']) : '' ?></div>
+            </div>
+        </div>
         <nav>
             <a href="dashboard.php?page=home"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5Z"/></svg></span><span>Dashboard</span></a>
             <a href="dashboard.php?page=vote" class="active"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7.5 12l3 3 6-6.5"/></svg></span><span>Vote Now</span></a>
@@ -317,13 +325,6 @@
             <button type="button" class="theme-toggle" id="themeToggleBtn" role="switch" aria-checked="false" aria-label="Toggle dark mode"></button>
         </div>
         <div class="sidebar-bottom">
-            <div class="profile-section">
-                <div class="avatar"><?= strtoupper(substr($user['name'], 0, 1)) ?></div>
-                <div class="user-info">
-                    <div class="name"><?= h($user['name']) ?></div>
-                    <div class="role"><?= h($user['department'] ?: 'Student') ?><?= $user['year_level'] ? ' · ' . h($user['year_level']) : '' ?></div>
-                </div>
-            </div>
             <div class="update-year-link">
                 <a href="update-account.php"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span>Update Year Level</span></a>
             </div>
@@ -348,35 +349,72 @@
 
         <?php
             $now = new DateTime();
-            if (!isset($electionData[$selectedElectionId])) {
-                echo '<div class="alert alert-error">Invalid election.</div>';
-            } else {
-                $data = $electionData[$selectedElectionId];
-                $config = $data['config'];
-                $positions = $data['positions'];
-                $candidatesByPosition = $data['candidatesByPosition'];
-                [$isOpen] = electionUiStatus($config, $now);
+            $ballotGroups = [];
+            $ballotError = '';
+            $singleData = (!$isCombined && $selectedElectionId && isset($electionData[$selectedElectionId]))
+                ? $electionData[$selectedElectionId]
+                : null;
 
-                if ($data['hasVoted']) {
-                    echo '<div class="alert alert-info">You have already voted in this election.</div>';
-                } elseif (!$isOpen && !$isPreview) {
-                    echo '<div class="alert alert-error">This election is not currently open.</div>';
-                } elseif (empty($positions)) {
-                    echo '<div class="alert alert-info">No positions are available to you in this election yet.</div>';
+            if ($isCombined) {
+                // One continuous ballot: every open election this student
+                // can still vote in, SSG first then their DSG. Closed,
+                // paused, draft, archived, and already-voted elections are
+                // excluded, as are elections with no visible positions.
+                foreach ($electionData as $data) {
+                    [$isOpen] = electionUiStatus($data['config'], $now);
+                    if (!$data['hasVoted'] && $isOpen && !empty($data['positions'])) {
+                        $ballotGroups[] = $data;
+                    }
+                }
+                usort($ballotGroups, function ($a, $b) {
+                    $rank = ['SSG' => 0, 'DSG' => 1];
+                    $ra = $rank[$a['config']['type']] ?? 2;
+                    $rb = $rank[$b['config']['type']] ?? 2;
+                    return $ra === $rb
+                        ? strcmp((string) $a['config']['start_date'], (string) $b['config']['start_date'])
+                        : $ra <=> $rb;
+                });
+                if (!$ballotGroups) {
+                    $ballotError = 'You have no open elections left to vote in.';
+                }
+            } elseif (!$singleData) {
+                $ballotError = 'Invalid election.';
+            } elseif ($singleData['hasVoted']) {
+                $ballotError = 'You have already voted in this election.';
+            } else {
+                [$isOpen] = electionUiStatus($singleData['config'], $now);
+                if (!$isOpen && !$isPreview) {
+                    $ballotError = 'This election is not currently open.';
+                } elseif (empty($singleData['positions'])) {
+                    $ballotError = 'No positions are available to you in this election yet.';
                 } else {
+                    $ballotGroups[] = $singleData;
+                }
+            }
+
+            if ($ballotError !== '') {
+                echo '<div class="alert alert-error">' . h($ballotError) . '</div>';
+            } else {
+                $totalPositions = 0;
+                foreach ($ballotGroups as $group) {
+                    $totalPositions += count($group['positions']);
+                }
+                $groupCount = count($ballotGroups);
+                $singleConfig = $ballotGroups[0]['config'];
+                $pageTitle = $isCombined ? 'Your Combined Ballot' : $singleConfig['name'];
         ?>
-                    <?php $totalPositions = count($positions); ?>
                     <div class="ballot-header">
                         <div class="ballot-shell">
                             <div class="ballot-header-top">
                                 <div>
-                                    <h2 class="ballot-title"><?= h($config['name']) ?></h2>
-                                    <?php if (!empty($config['target_school_year_label'])): ?>
-                                        <p class="position-note" style="margin:.2rem 0 0;">🎓 Election for school year <?= h($config['target_school_year_label']) ?></p>
+                                    <h2 class="ballot-title"><?= h($pageTitle) ?></h2>
+                                    <?php if ($isCombined): ?>
+                                        <p class="position-note" style="margin:.2rem 0 0;"><?= $groupCount ?> election<?= $groupCount === 1 ? '' : 's' ?> · one continuous ballot · one submission</p>
+                                    <?php elseif (!empty($singleConfig['target_school_year_label'])): ?>
+                                        <p class="position-note" style="margin:.2rem 0 0;">🎓 Election for school year <?= h($singleConfig['target_school_year_label']) ?></p>
                                     <?php endif; ?>
                                 </div>
                                 <div class="ballot-header-actions">
-                                    <a href="dashboard.php?page=vote" class="ballot-exit">Exit</a>
                                 </div>
                             </div>
                             <div class="ballot-progress-track">
@@ -389,75 +427,116 @@
                         <div class="ballot-shell">
                         <div id="statusMessage" class="alert" style="display:none;"></div>
 
-                        <form id="voteForm" data-election="<?= $selectedElectionId ?>" data-total-positions="<?= $totalPositions ?>"<?= !empty($_GET['continuous']) ? ' data-continuous="1"' : '' ?>>
+                        <form id="voteForm" data-total-positions="<?= $totalPositions ?>"<?= $isCombined ? ' data-combined="1"' : ' data-election="' . (int) $selectedElectionId . '"' ?>>
                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
-                            <input type="hidden" name="election_id" value="<?= $selectedElectionId ?>">
+                            <?php if ($isCombined): ?>
+                                <input type="hidden" name="combined" value="1">
+                                <?php foreach ($ballotGroups as $group): ?>
+                                    <input type="hidden" name="combined_elections[]" value="<?= (int) $group['config']['id'] ?>">
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <input type="hidden" name="election_id" value="<?= (int) $selectedElectionId ?>">
+                            <?php endif; ?>
 
-                            <?php foreach ($positions as $index => $position): ?>
-                                <?php
-                                    $candidates = $candidatesByPosition[$position['position_id']] ?? [];
-                                    $winnerCount = max(1, (int) ($position['winner_count'] ?? 1));
-                                    $isMulti = $winnerCount > 1;
-                                    $inputType = $isMulti ? 'checkbox' : 'radio';
-                                    $inputName = 'position_' . (int) $position['position_id'] . ($isMulti ? '[]' : '');
-                                ?>
-                                <div class="ballot-step" data-step="<?= $index ?>" data-kind="position" data-position-title="<?= h($position['title']) ?>" data-max-select="<?= $winnerCount ?>">
-                                    <div class="ballot-step-heading">
-                                        <span class="ballot-step-eyebrow">Position <?= $index + 1 ?> of <?= $totalPositions ?></span>
-                                        <h3 class="ballot-position-title"><?= h($position['title']) ?></h3>
-                                        <?php if (!empty($position['year_restriction'])): ?>
-                                            <p class="position-note">Only visible to <?= h($position['year_restriction']) ?> students.</p>
-                                        <?php endif; ?>
-                                        <p class="ballot-instruction">
-                                            <?php if ($isMulti): ?>
-                                                Select up to <?= $winnerCount ?> candidates, then continue.
-                                                <span class="ballot-select-count" data-count-for="<?= $index ?>">0 of <?= $winnerCount ?> selected</span>
-                                            <?php else: ?>
-                                                Select one candidate, then continue.
-                                            <?php endif; ?>
-                                        </p>
+                            <?php
+                                $positionNumber = 0;
+                                foreach ($ballotGroups as $groupId => $group):
+                                    $groupConfig = $group['config'];
+                                    $groupEid = (int) $groupConfig['id'];
+                                    $groupTotal = count($group['positions']);
+                            ?>
+                            <section class="ballot-election-block" data-election-id="<?= $groupEid ?>" data-election-type="<?= h($groupConfig['type']) ?>" data-election-name="<?= h($groupConfig['name']) ?>" data-group-total="<?= $groupTotal ?>">
+                                <?php if ($isCombined): ?>
+                                <div class="ballot-election-heading">
+                                    <div class="ballot-election-icon"><?= $groupConfig['icon'] ?></div>
+                                    <div class="ballot-election-info">
+                                        <h3><?= h($groupConfig['name']) ?></h3>
+                                        <p><?= h($groupConfig['subtitle']) ?><?= !empty($groupConfig['target_school_year_label']) ? ' · SY ' . h($groupConfig['target_school_year_label']) : '' ?></p>
                                     </div>
-
-                                    <?php if (empty($candidates)): ?>
-                                        <p class="muted">No candidates registered for this position.</p>
-                                    <?php else: ?>
-                                        <fieldset class="ballot-candidates" data-max-select="<?= $winnerCount ?>">
-                                            <?php foreach ($candidates as $candidate):
-                                                $partyLabel = (!empty($candidate['party']) && $candidate['party'] !== 'No Party / Independent') ? $candidate['party'] : 'Independent';
-                                            ?>
-                                                <label class="ballot-candidate">
-                                                    <input type="<?= $inputType ?>" class="ballot-radio-input" name="<?= $inputName ?>" value="<?= (int) $candidate['id'] ?>" data-candidate-name="<?= h($candidate['name']) ?>">
-                                                    <span class="ballot-bubble<?= $isMulti ? ' multi' : '' ?>" aria-hidden="true"><span class="ballot-bubble-fill"></span></span>
-                                                    <span class="ballot-candidate-body">
-                                                        <span class="ballot-candidate-name"><?= h($candidate['name']) ?></span>
-                                                        <span class="ballot-candidate-party"><?= h($partyLabel) ?></span>
-                                                        <span class="ballot-candidate-meta">
-                                                            <?php if (!empty($candidate['department'])): ?><span><?= h($candidate['department']) ?></span><?php endif; ?>
-                                                            <?php if (!empty($candidate['course'])): ?><span><?= h($candidate['course']) ?></span><?php endif; ?>
-                                                            <?php if (!empty($candidate['year_level'])): ?><span><?= h($candidate['year_level']) ?></span><?php endif; ?>
-                                                        </span>
-                                                        <?php if (!empty($candidate['platform'])): ?>
-                                                            <span class="ballot-candidate-platform"><strong>Platform:</strong> <?= h($candidate['platform']) ?></span>
-                                                        <?php endif; ?>
-                                                    </span>
-                                                    <img class="candidate-avatar" loading="lazy" src="<?= !empty($candidate['photo']) ? h('photo.php?c=' . (int) $candidate['id']) : 'assets/default-avatar.svg' ?>" alt="">
-                                                </label>
-                                            <?php endforeach; ?>
-                                        </fieldset>
-                                    <?php endif; ?>
+                                    <div class="ballot-group-progress" aria-hidden="true">
+                                        <div class="ballot-group-track"><div class="ballot-group-fill" data-group-fill="<?= $groupEid ?>"></div></div>
+                                        <span data-group-count="<?= $groupEid ?>">0/<?= $groupTotal ?></span>
+                                    </div>
                                 </div>
+                                <?php endif; ?>
+
+                                <?php foreach ($group['positions'] as $position): $positionNumber++; ?>
+                                    <?php
+                                        $candidates = $group['candidatesByPosition'][$position['position_id']] ?? [];
+                                        $winnerCount = max(1, (int) ($position['winner_count'] ?? 1));
+                                        $isMulti = $winnerCount > 1;
+                                        $inputType = $isMulti ? 'checkbox' : 'radio';
+                                        $inputName = $isCombined
+                                            ? 'e_' . $groupEid . '_p_' . (int) $position['position_id'] . ($isMulti ? '[]' : '')
+                                            : 'position_' . (int) $position['position_id'] . ($isMulti ? '[]' : '');
+                                    ?>
+                                    <div class="ballot-step" data-step="<?= $positionNumber - 1 ?>" data-kind="position" data-election-id="<?= $groupEid ?>" data-position-title="<?= h($position['title']) ?>" data-max-select="<?= $winnerCount ?>">
+                                        <div class="ballot-step-heading">
+                                            <span class="ballot-step-eyebrow">
+                                                <?php if ($isCombined): ?><?= h($groupConfig['type']) ?> · <?php endif; ?>Position <?= $positionNumber ?> of <?= $totalPositions ?>
+                                            </span>
+                                            <h3 class="ballot-position-title"><?= h($position['title']) ?></h3>
+                                            <?php if (!empty($position['year_restriction'])): ?>
+                                                <p class="position-note">Only visible to <?= h($position['year_restriction']) ?> students.</p>
+                                            <?php endif; ?>
+                                            <p class="ballot-instruction">
+                                                <?php if ($isMulti): ?>
+                                                    Select up to <?= $winnerCount ?> candidates, then continue.
+                                                    <span class="ballot-select-count" data-count-for="<?= $positionNumber - 1 ?>">0 of <?= $winnerCount ?> selected</span>
+                                                <?php else: ?>
+                                                    Select one candidate, then continue.
+                                                <?php endif; ?>
+                                            </p>
+                                        </div>
+
+                                        <?php if (empty($candidates)): ?>
+                                            <p class="muted">No candidates registered for this position.</p>
+                                        <?php else: ?>
+                                            <fieldset class="ballot-candidates" data-max-select="<?= $winnerCount ?>">
+                                                <?php foreach ($candidates as $candidate):
+                                                    $partyLabel = (!empty($candidate['party']) && $candidate['party'] !== 'No Party / Independent') ? $candidate['party'] : 'Independent';
+                                                ?>
+                                                    <label class="ballot-candidate">
+                                                        <input type="<?= $inputType ?>" class="ballot-radio-input" name="<?= $inputName ?>" value="<?= (int) $candidate['id'] ?>" data-candidate-name="<?= h($candidate['name']) ?>">
+                                                        <span class="ballot-bubble<?= $isMulti ? ' multi' : '' ?>" aria-hidden="true"><span class="ballot-bubble-fill"></span></span>
+                                                        <span class="ballot-candidate-body">
+                                                            <span class="ballot-candidate-name"><?= h($candidate['name']) ?></span>
+                                                            <span class="ballot-candidate-party"><?= h($partyLabel) ?></span>
+                                                            <span class="ballot-candidate-meta">
+                                                                <?php if (!empty($candidate['department'])): ?><span><?= h($candidate['department']) ?></span><?php endif; ?>
+                                                                <?php if (!empty($candidate['course'])): ?><span><?= h($candidate['course']) ?></span><?php endif; ?>
+                                                                <?php if (!empty($candidate['year_level'])): ?><span><?= h($candidate['year_level']) ?></span><?php endif; ?>
+                                                            </span>
+                                                            <?php if (!empty($candidate['platform'])): ?>
+                                                                <span class="ballot-candidate-platform"><strong>Platform:</strong> <?= h($candidate['platform']) ?></span>
+                                                            <?php endif; ?>
+                                                        </span>
+                                                        <img class="candidate-avatar" loading="lazy" src="<?= !empty($candidate['photo']) ? h('photo.php?c=' . (int) $candidate['id']) : 'assets/default-avatar.svg' ?>" alt="">
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </fieldset>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </section>
                             <?php endforeach; ?>
 
                             <div class="ballot-submit-block">
-                                <p class="ballot-instruction">Skipping any position is allowed — leave it blank if you'd rather not choose. Your selections can't be changed after you submit.</p>
-                                <button type="submit" class="btn btn-primary" id="submitBtn"<?= $isPreview ? ' disabled' : '' ?>>Submit My Vote</button>
+                                <p class="ballot-instruction">
+                                    <?php if ($isCombined): ?>
+                                        You're voting in <?= $groupCount ?> election<?= $groupCount === 1 ? '' : 's' ?> at once. Skipping a position is allowed; your whole ballot is submitted together and can't be changed afterward.
+                                    <?php else: ?>
+                                        Skipping any position is allowed — leave it blank if you'd rather not choose. Your selections can't be changed after you submit.
+                                    <?php endif; ?>
+                                </p>
+                                <button type="submit" class="btn btn-primary" id="submitBtn"<?= $isPreview ? ' disabled' : '' ?>><?= $isCombined ? 'Submit My Ballot' : 'Submit My Vote' ?></button>
                             </div>
                         </form>
                     </div>
 
                     <div class="ballot-modal-overlay" id="ballotConfirmModal">
                         <div class="ballot-modal-card">
-                            <h2>Submit your vote?</h2>
+                            <h2>Submit your ballot?</h2>
                             <p>Your selections cannot be changed after submission.</p>
                             <div class="modal-actions">
                                 <button type="button" class="btn btn-secondary" onclick="closeBallotConfirm()">Go Back</button>
@@ -472,41 +551,12 @@
                             <h2>Vote Submitted!</h2>
                             <p id="ballotModalMessage">Thank you for participating in the election. Your voice has been counted.</p>
                             <div class="modal-actions">
-                                <button type="button" class="btn btn-secondary" onclick="window.location.href='dashboard.php?page=results';">View Results</button>
+                                <button type="button" class="btn btn-secondary" onclick="window.location.href='dashboard.php?page=results';">View Live Results</button>
                                 <button type="button" class="btn btn-primary" onclick="closeBallotModal()">Return to Dashboard</button>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Continuous mode only: names the next election (or a
-                         chain error) between ballots of the Vote All chain -->
-                    <div class="ballot-modal-overlay" id="ballotChainModal">
-                        <div class="ballot-modal-card">
-                            <div class="ballot-modal-check" id="chainModalCheck">✔</div>
-                            <h2 id="chainModalTitle">Vote Submitted!</h2>
-                            <p id="chainModalMessage"></p>
-                            <div class="modal-actions">
-                                <button type="button" class="btn btn-secondary" id="chainSecondaryBtn">Exit</button>
-                                <button type="button" class="btn btn-primary" id="chainPrimaryBtn">Continue Voting</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Continuous mode only: shown after the LAST election
-                         in the chain is submitted -->
-                    <div class="ballot-modal-overlay" id="ballotFinalModal">
-                        <div class="ballot-modal-card">
-                            <div class="ballot-modal-check">✔</div>
-                            <h2>You've completed all your elections!</h2>
-                            <p id="ballotFinalMessage">Thank you for participating in every election. Your voice has been counted.</p>
-                            <div class="modal-actions">
-                                <button type="button" class="btn btn-secondary" onclick="window.location.href='dashboard.php?page=home';">Dashboard</button>
-                                <button type="button" class="btn btn-primary" onclick="window.location.href='dashboard.php?page=results';">View Results</button>
-                            </div>
-                        </div>
-                    </div>
         <?php
-                }
             }
         ?>
     </div>
@@ -701,7 +751,10 @@
 
         // Progress = answered positions / total. A position counts as
         // answered once any candidate inside it is picked; an empty
-        // position is a legitimate skip, never a blocker.
+        // position is a legitimate skip, never a blocker. In combined mode
+        // the label follows the section in view (SSG → DSG) and each
+        // election heading gets its own mini completion bar.
+        let activeElectionBlock = voteForm.querySelector('.ballot-election-block');
         function updateProgress() {
             let answered = 0;
             positionSteps.forEach(step => {
@@ -709,7 +762,24 @@
             });
             const total = positionSteps.length;
             if (progressFill) progressFill.style.width = (total ? (answered / total) * 100 : 0) + '%';
-            if (progressLabel) progressLabel.textContent = answered + ' of ' + total + ' positions answered';
+
+            voteForm.querySelectorAll('.ballot-election-block').forEach(block => {
+                const blockSteps = Array.from(block.querySelectorAll('.ballot-step'));
+                const blockAnswered = blockSteps.filter(step => step.querySelector('.ballot-radio-input:checked')).length;
+                const blockTotal = blockSteps.length;
+                const blockPct = blockTotal ? (blockAnswered / blockTotal) * 100 : 0;
+                block.querySelectorAll('[data-group-fill]').forEach(fill => { fill.style.width = blockPct + '%'; });
+                block.querySelectorAll('[data-group-count]').forEach(el => { el.textContent = blockAnswered + '/' + blockTotal; });
+            });
+
+            if (!progressLabel) return;
+            if (voteForm.dataset.combined === '1' && activeElectionBlock) {
+                const blockSteps = Array.from(activeElectionBlock.querySelectorAll('.ballot-step'));
+                const blockAnswered = blockSteps.filter(step => step.querySelector('.ballot-radio-input:checked')).length;
+                progressLabel.textContent = `${activeElectionBlock.dataset.electionType} · ${blockAnswered} of ${blockSteps.length} answered · ${answered} of ${total} overall`;
+            } else {
+                progressLabel.textContent = answered + ' of ' + total + ' positions answered';
+            }
         }
         updateProgress();
 
@@ -726,125 +796,67 @@
         syncBallotStickyTop();
         window.addEventListener('resize', syncBallotStickyTop);
 
+        // Combined ballot: the sticky label follows whichever election
+        // section the student is currently reading (SSG → DSG), so the
+        // "x of y" always refers to the part of the ballot on screen.
+        if (voteForm.dataset.combined === '1') {
+            const combinedBlocks = Array.from(voteForm.querySelectorAll('.ballot-election-block'));
+            window.addEventListener('scroll', () => {
+                const headerBottom = (ballotHeaderEl ? ballotHeaderEl.getBoundingClientRect().bottom : 0) + 12;
+                // Scrollspy: the active section is the LAST one whose top
+                // has passed the header line — i.e. the block containing
+                // that line. ("Closest top" was wrong: it flipped the label
+                // to the next section as soon as its top edge peeked into
+                // view from below, while the current section still filled
+                // the whole screen.)
+                let best = combinedBlocks[0];
+                combinedBlocks.forEach(block => {
+                    if (block.getBoundingClientRect().top <= headerBottom) best = block;
+                });
+                if (best && best !== activeElectionBlock) {
+                    activeElectionBlock = best;
+                    updateProgress();
+                }
+            }, { passive: true });
+        }
+
         window.closeBallotModal = function () { window.location.href = 'dashboard.php?page=home'; };
 
         const confirmModal = document.getElementById('ballotConfirmModal');
         window.openBallotConfirm = function () { if (confirmModal) confirmModal.classList.add('active'); };
         window.closeBallotConfirm = function () { if (confirmModal) confirmModal.classList.remove('active'); };
 
-        // Exit guard for in-page controls (the Exit link + sidebar links):
-        // leaving the ballot with unsubmitted selections asks first, since
-        // unsubmitted selections are simply lost on navigation. The browser
-        // back button / refresh can't be covered without the native
-        // beforeunload dialog, which is deliberately not used here.
-        const ballotExitLinks = document.querySelectorAll('a[href^="dashboard.php?page="]');
-        ballotExitLinks.forEach(link => {
-            link.addEventListener('click', e => {
-                const successOpen = document.getElementById('ballotSuccessModal')
-                    && document.getElementById('ballotSuccessModal').classList.contains('active');
-                const anySelected = voteForm.querySelectorAll('.ballot-radio-input:checked').length > 0;
-                if (!anySelected || successOpen) return; // nothing unsaved — navigate normally
-                e.preventDefault();
-                showConfirmModal({
-                    title: 'Exit this ballot?',
-                    message: 'Any selections you have not submitted will not be saved.',
-                    confirmLabel: 'Exit',
-                    cancelLabel: 'Keep Voting',
-                    danger: true,
-                }).then(ok => { if (ok) window.location.href = link.href; });
-            });
-        });
-
-        // ---- Vote All chain helpers (continuous mode only) -------------
-        function showChainModal(nextElection) {
-            const check = document.getElementById('chainModalCheck');
-            const title = document.getElementById('chainModalTitle');
-            const message = document.getElementById('chainModalMessage');
-            const primary = document.getElementById('chainPrimaryBtn');
-            const secondary = document.getElementById('chainSecondaryBtn');
-            const titleEl = document.querySelector('.ballot-title');
-            const currentName = titleEl ? titleEl.textContent.trim() : 'this election';
-            if (check) check.style.display = '';
-            if (title) title.textContent = 'Vote Submitted!';
-            if (message) message.textContent = "✅ You're done with the " + currentName + ". Next up: " + nextElection.name + ".";
-            if (secondary) {
-                secondary.style.display = '';
-                secondary.textContent = 'Exit';
-                secondary.onclick = function () { window.location.href = 'dashboard.php?page=home'; };
-            }
-            if (primary) {
-                primary.style.display = '';
-                primary.textContent = 'Continue Voting';
-                primary.onclick = function () { window.location.href = 'dashboard.php?page=vote&election_id=' + nextElection.id + '&continuous=1'; };
-            }
-            const chainModal = document.getElementById('ballotChainModal');
-            if (chainModal) chainModal.classList.add('active');
-        }
-
-        function showChainError(message) {
-            const check = document.getElementById('chainModalCheck');
-            const title = document.getElementById('chainModalTitle');
-            const messageEl = document.getElementById('chainModalMessage');
-            const primary = document.getElementById('chainPrimaryBtn');
-            const secondary = document.getElementById('chainSecondaryBtn');
-            if (check) check.style.display = 'none';
-            if (title) title.textContent = 'Vote not submitted';
-            if (messageEl) messageEl.textContent = message;
-            if (primary) { primary.style.display = 'none'; primary.onclick = null; }
-            if (secondary) {
-                secondary.style.display = '';
-                secondary.textContent = 'Return to Dashboard';
-                secondary.onclick = function () { window.location.href = 'dashboard.php?page=home'; };
-            }
-            const chainModal = document.getElementById('ballotChainModal');
-            if (chainModal) chainModal.classList.add('active');
-        }
-
         async function performBallotSubmit() {
             if (!submitBtn) return;
+            const isCombined = voteForm.dataset.combined === '1';
+            const submitLabel = isCombined ? 'Submit My Ballot' : 'Submit My Vote';
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="btn-spinner"></span> Submitting...';
             const confirmBtn = document.getElementById('confirmSubmitBtn');
             if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.innerHTML = '<span class="btn-spinner"></span> Submitting...'; }
             if (statusMessage) statusMessage.style.display = 'none';
             const formData = new FormData(voteForm);
-            const isContinuous = voteForm.dataset.continuous === '1';
             try {
                 const response = await fetch('vote.php', { method: 'POST', body: formData });
                 const data = await response.json();
                 if (data.success) {
                     voteForm.querySelectorAll('input, button').forEach(el => el.disabled = true);
                     if (confirmModal) confirmModal.classList.remove('active');
-                    if (isContinuous) {
-                        if (data.next_election) {
-                            showChainModal(data.next_election);
-                        } else {
-                            const finalMsg = document.getElementById('ballotFinalMessage');
-                            if (finalMsg && data.message) finalMsg.textContent = data.message;
-                            const finalModal = document.getElementById('ballotFinalModal');
-                            if (finalModal) finalModal.classList.add('active');
-                        }
-                    } else if (modal) {
+                    if (modal) {
                         const msgEl = document.getElementById('ballotModalMessage');
                         if (msgEl && data.message) msgEl.textContent = data.message;
                         modal.classList.add('active');
                     }
                 } else {
                     if (confirmModal) confirmModal.classList.remove('active');
-                    if (isContinuous) {
-                        // Stale link / closed election mid-chain: give the
-                        // student a way out instead of a stranded ballot.
-                        showChainError(data.message || 'Something went wrong. Please try again.');
-                    } else {
-                        showToast(data.message || 'Something went wrong. Please try again.', 'error');
-                        submitBtn.disabled = false; submitBtn.textContent = 'Submit My Vote';
-                        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Cast My Vote'; }
-                    }
+                    showToast(data.message || 'Something went wrong. Please try again.', 'error');
+                    submitBtn.disabled = false; submitBtn.textContent = submitLabel;
+                    if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Cast My Vote'; }
                 }
             } catch (err) {
                 if (confirmModal) confirmModal.classList.remove('active');
                 showToast('Network error. Please try again.', 'error');
-                submitBtn.disabled = false; submitBtn.textContent = 'Submit My Vote';
+                submitBtn.disabled = false; submitBtn.textContent = submitLabel;
                 if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Cast My Vote'; }
             }
         }
@@ -902,6 +914,12 @@
             <h2>School Elections</h2>
             <span class="logo-tagline">Student Portal</span>
         </div>
+        <div class="student-profile-top">
+            <div class="user-info">
+                <div class="name"><?= h($user['name']) ?></div>
+                <div class="role"><?= h($user['department'] ?: 'Student') ?><?= $user['year_level'] ? ' · ' . h($user['year_level']) : '' ?></div>
+            </div>
+        </div>
         <nav>
             <a data-panel="home" class="nav-link active" onclick="showPanel('home')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5Z"/></svg></span><span>Dashboard</span></a>
             <a data-panel="vote" class="nav-link" onclick="showPanel('vote')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7.5 12l3 3 6-6.5"/></svg></span><span>Vote Now</span></a>
@@ -913,13 +931,6 @@
             <button type="button" class="theme-toggle" id="themeToggleBtn" role="switch" aria-checked="false" aria-label="Toggle dark mode"></button>
         </div>
         <div class="sidebar-bottom">
-            <div class="profile-section">
-                <div class="avatar"><?= strtoupper(substr($user['name'], 0, 1)) ?></div>
-                <div class="user-info">
-                    <div class="name"><?= h($user['name']) ?></div>
-                    <div class="role"><?= h($user['department'] ?: 'Student') ?><?= $user['year_level'] ? ' · ' . h($user['year_level']) : '' ?></div>
-                </div>
-            </div>
             <div class="update-year-link">
                 <a href="update-account.php"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span><span>Update Year Level</span></a>
             </div>
@@ -1250,8 +1261,6 @@
         if (canVote) {
             primaryLabel = '🗳 Vote Now';
             primaryHref = `dashboard.php?page=vote&election_id=${election.id}`;
-        } else if (election.totalPositions > 0 && hasOpened) {
-            primaryLabel = '📊 View Results';
         }
 
         return `
@@ -1267,11 +1276,8 @@
             <div class="ec-meta">${metaHtml}</div>
             <div class="ec-divider"></div>
             ${bodyHtml}
-            <div class="card-actions${primaryLabel ? '' : ' single'}">
-                <button type="button" class="btn btn-secondary" onclick="showCandidatesFor(${election.id})">View Candidates</button>
-                ${primaryLabel ? (primaryHref
-                    ? `<a href="${primaryHref}" class="btn btn-primary">${primaryLabel}</a>`
-                    : `<button type="button" class="btn btn-primary" onclick="showResultsFor(${election.id})">${primaryLabel}</button>`) : ''}
+            <div class="card-actions">
+                ${primaryLabel && primaryHref ? `<a href="${primaryHref}" class="btn btn-primary">${primaryLabel}</a>` : ''}
             </div>
         </div>`;
     }
@@ -1372,24 +1378,53 @@
         const now = new Date();
         const elections = data.elections;
 
-        // Vote All Elections card — counts every election this student can
-        // still vote in (same predicate as renderElectionCard's canVote) and
-        // chains them via ?continuous=1 through vote.php's next_election.
-        const remaining = elections.filter(election => {
-            const { isOpen } = electionUiStatus(election.config, now);
-            return isOpen && !election.hasVoted && election.totalPositions > 0;
+        // Progress at the top of the dashboard — overall plus one bar each
+        // for SSG and DSG so a student can see which half still needs them.
+        const totalEligible = elections.length;
+        const votedCount = elections.filter(e => e.hasVoted).length;
+        const pct = totalEligible ? Math.round((votedCount / totalEligible) * 100) : 0;
+        function typeProgress(type){
+            const list = elections.filter(e => e.config.type === type);
+            return { total: list.length, voted: list.filter(e => e.hasVoted).length };
+        }
+        const ssgProgress = typeProgress('SSG');
+        const dsgProgress = typeProgress('DSG');
+        function typeBar(label, progress){
+            if (!progress.total) return '';
+            const p = Math.round((progress.voted / progress.total) * 100);
+            return `
+            <div class="progress-split-item">
+                <span class="progress-split-label">${label}</span>
+                <div class="progress-split-track"><div class="progress-split-fill" style="width:${p}%;"></div></div>
+                <span class="progress-split-count">${progress.voted}/${progress.total}</span>
+            </div>`;
+        }
+        const progressHtml = totalEligible ? `
+        <div class="progress-strip">
+            <div class="progress-strip-label">
+                <span>Voting progress</span>
+                <span class="progress-strip-count">${votedCount} of ${totalEligible} voted</span>
+            </div>
+            <div class="progress-strip-track"><div class="progress-strip-fill" style="width:${pct}%;"></div></div>
+            <div class="progress-split">
+                ${typeBar('SSG', ssgProgress)}
+                ${typeBar('DSG', dsgProgress)}
+            </div>
+        </div>` : '';
+        const remaining = elections.filter(e => {
+            if (e.hasVoted) return false;
+            return electionUiStatus(e.config, now).isOpen;
         });
+
         let voteAllHtml;
         if (remaining.length > 0) {
-            const first = remaining[0];
             voteAllHtml = `
             <div class="vote-hero">
                 <div class="vote-hero-eyebrow"><span class="status-large"><span class="status-dot"></span>Voting Open</span></div>
                 <h2 class="vote-hero-title">Vote All Elections</h2>
-                <p class="vote-hero-dates">${remaining.length} election${remaining.length === 1 ? '' : 's'} left to vote in — we'll take you through them one after another.</p>
+                <p class="vote-hero-dates">${remaining.length} election${remaining.length === 1 ? '' : 's'} left to vote in — one continuous ballot, submitted once.</p>
                 <div class="vote-hero-cta">
-                    <a href="dashboard.php?page=vote&election_id=${first.id}&continuous=1" id="startVoteAllBtn" class="btn btn-primary">🗳 Start Voting</a>
-                    <button type="button" class="btn btn-secondary" onclick="showCandidatesFor(${first.id})">View Candidates</button>
+                    <a href="dashboard.php?page=vote&combined=1" id="startVoteAllBtn" class="btn btn-primary">🗳 Start Voting</a>
                 </div>
             </div>`;
         } else if (elections.length > 0) {
@@ -1414,38 +1449,14 @@
             electionsSectionHtml = `${filterBar}<div id="homeElectionGroups">${groupsHtml}</div>`;
         }
 
-        // Featured candidates — flatten every election's candidates, shuffle, cap at 12
-        const featuredPool = [];
-        elections.forEach(election => {
-            election.positions.forEach(pos => {
-                (pos.candidates || []).forEach(c => featuredPool.push({ candidate: c, position: pos.title }));
-            });
-        });
-        for (let i = featuredPool.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [featuredPool[i], featuredPool[j]] = [featuredPool[j], featuredPool[i]];
-        }
-        const featured = featuredPool.slice(0, 12);
-        const featuredHtml = featured.length ? `
-        <div class="featured-section">
-            <div class="featured-header">
-                <h3>Featured Candidates</h3>
-                <button type="button" class="btn btn-secondary" style="padding:0.3rem 1rem; font-size:0.85rem;" onclick="showPanel('candidates')">View All</button>
-            </div>
-            <div class="featured-carousel-viewport" id="featuredViewport">
-                <div class="featured-carousel-track" id="featuredTrack"></div>
-            </div>
-        </div>` : '';
-
         el.innerHTML = `
             <div class="home-greeting"><p>Here's your election dashboard.</p></div>
+            ${progressHtml}
             ${voteAllHtml}
             <h2 class="section-title">Your Elections</h2>
             ${electionsSectionHtml}
-            ${featuredHtml}
         `;
         startCountdowns(elections, now, 'countdown');
-        if (featured.length) startFeaturedCarousel(featured);
     }
 
     // ------------------------------------------------------------------
@@ -1489,6 +1500,11 @@
         const el = document.getElementById('panel-candidates');
         el.innerHTML = skeletonCandidates();
         window.__candMap = {};
+        // Two-page candidate directory: SSG first, then DSG. A controller at
+        // the top switches between them; each page is grouped by election
+        // and position so a student only sees the election(s) they can vote.
+        if (!window.__candTab) window.__candTab = 'ssg';
+        const candTab = window.__candTab;
         let data;
         try {
             data = await loadDashboardData();
@@ -1498,24 +1514,24 @@
         }
 
         const sections = [];
-        const partySet = new Set();
         data.elections.forEach(election => {
+            if ((candTab === 'ssg' && election.config.type !== 'SSG') || (candTab === 'dsg' && election.config.type !== 'DSG')) return;
             const positions = [];
             election.positions.forEach(pos => {
                 const cands = pos.candidates || [];
                 if (!cands.length) return;
-                cands.forEach(c => { if (c.party && c.party !== 'No Party / Independent') partySet.add(c.party); });
                 positions.push({ position: pos, candidates: cands });
             });
             if (positions.length) sections.push({ election, positions });
         });
-        const allParties = Array.from(partySet).sort();
 
         if (!sections.length) {
+            const emptyLabel = candTab === 'ssg' ? 'SSG (school-wide)' : 'DSG (your faculty)';
             el.innerHTML = `
                 <div class="cand-page">
                     <div class="cand-header"><h2 class="cand-title">Meet the Candidates</h2><p class="muted">Browse everyone on the ballot, grouped by election and position.</p></div>
-                    <div class="alert alert-info">No candidates to show yet.</div>
+                    ${candTabControllerHtml()}
+                    <div class="alert alert-info">No ${emptyLabel} candidates to show yet.</div>
                 </div>`;
             return;
         }
@@ -1526,17 +1542,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <input type="text" id="candSearch" placeholder="Search candidates, platforms, courses…" oninput="filterCandidates()">
                 </div>
-                ${allParties.length ? `
-                <select id="candPartyFilter" onchange="filterCandidates()">
-                    <option value="">All Parties</option>
-                    ${allParties.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join('')}
-                </select>` : ''}
             </div>`;
-
-        const jumpNavHtml = sections.length > 1 ? `
-            <nav class="cand-jump-nav" id="candJumpNav">
-                ${sections.map(sec => `<a href="#cand-sec-${sec.election.id}" class="cand-jump-link" data-target="cand-sec-${sec.election.id}">${escHtml(sec.election.config.name)}</a>`).join('')}
-            </nav>` : '';
 
         const sectionsHtml = sections.map(sec => `
             <section class="cand-election-section" id="cand-sec-${sec.election.id}">
@@ -1595,26 +1601,40 @@
         el.innerHTML = `
             <div class="cand-page">
                 <div class="cand-header"><h2 class="cand-title">Meet the Candidates</h2><p class="muted">Browse everyone on the ballot, grouped by election and position.</p></div>
+                ${candTabControllerHtml()}
                 ${toolbarHtml}
-                ${jumpNavHtml}
                 <div id="candNoResults" class="cand-no-results" style="display:none;">No candidates match your search.</div>
                 ${sectionsHtml}
             </div>
         `;
-        wireCandidateJumpNav();
+    }
+
+    function candTabControllerHtml(){
+        const isSsg = window.__candTab === 'ssg';
+        return `
+        <div class="cand-tab-controller" role="tablist" aria-label="Candidate directory">
+            <button type="button" class="cand-tab-btn ${isSsg ? 'active' : ''}" role="tab" ${isSsg ? 'aria-selected="true"' : ''} onclick="switchCandTab('ssg')">
+                <span class="cand-tab-icon">🎓</span><span>SSG</span><span class="cand-tab-sub">General Elections</span>
+            </button>
+            <button type="button" class="cand-tab-btn ${!isSsg ? 'active' : ''}" role="tab" ${!isSsg ? 'aria-selected="true"' : ''} onclick="switchCandTab('dsg')">
+                <span class="cand-tab-icon">🏛</span><span>DSG</span><span class="cand-tab-sub">Department Council</span>
+            </button>
+        </div>`;
+    }
+    function switchCandTab(tab){
+        window.__candTab = tab;
+        renderCandidatesPanel();
     }
 
     function filterCandidates() {
         const q = (document.getElementById('candSearch')?.value || '').trim().toLowerCase();
-        const partyFilter = document.getElementById('candPartyFilter')?.value || '';
         let anyVisible = false;
         document.querySelectorAll('.cand-card').forEach(card => {
             const name = card.dataset.name || '';
             const meta = card.dataset.meta || '';
             const party = card.dataset.party || '';
             const matchesQuery = !q || name.includes(q) || meta.includes(q) || party.toLowerCase().includes(q);
-            const matchesParty = !partyFilter || party === partyFilter;
-            const show = matchesQuery && matchesParty;
+            const show = matchesQuery;
             card.style.display = show ? '' : 'none';
             if (show) anyVisible = true;
         });
@@ -1682,60 +1702,31 @@
         document.body.style.overflow = '';
     }
 
-    function wireCandidateJumpNav() {
-        const nav = document.getElementById('candJumpNav');
-        if (!nav) return;
-        const links = Array.from(nav.querySelectorAll('.cand-jump-link'));
-        links.forEach(link => {
-            link.addEventListener('click', e => {
-                e.preventDefault();
-                const target = document.getElementById(link.dataset.target);
-                if (!target) return;
-                // Highlight immediately on click rather than waiting for the
-                // scroll-position observer below to catch up — the LAST
-                // section in the list often can't reliably trigger that
-                // observer at all, since there's not always enough page
-                // left below it to scroll it into the detection band. A
-                // click should always give clear feedback regardless of
-                // where the section happens to sit on the page.
-                links.forEach(l => l.classList.remove('active'));
-                link.classList.add('active');
-                const offset = nav.getBoundingClientRect().height + 84;
-                const top = target.getBoundingClientRect().top + window.pageYOffset - offset;
-                window.scrollTo({ top, behavior: 'smooth' });
-            });
-        });
-        if ('IntersectionObserver' in window) {
-            const sections = links.map(l => document.getElementById(l.dataset.target)).filter(Boolean);
-            const io = new IntersectionObserver(entries => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        links.forEach(l => l.classList.remove('active'));
-                        const active = links.find(l => l.dataset.target === entry.target.id);
-                        if (active) active.classList.add('active');
-                    }
-                });
-            }, { rootMargin: '-35% 0px -55% 0px', threshold: 0 });
-            sections.forEach(s => io.observe(s));
-
-            // Fallback for exactly that "last section" case: if the page is
-            // scrolled to (or near) the very bottom, force the last link
-            // active even if its section never entered the observer's
-            // narrow detection band.
-            window.addEventListener('scroll', () => {
-                const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 4;
-                if (atBottom && links.length) {
-                    links.forEach(l => l.classList.remove('active'));
-                    links[links.length - 1].classList.add('active');
-                }
-            }, { passive: true });
-        }
-    }
-
     // ------------------------------------------------------------------
     // RESULTS PANEL
     // ------------------------------------------------------------------
     let resultsFilterElectionId = null;
+
+    // SSG/DSG switcher for Live Results — the same controller the
+    // Candidates directory uses, so both panels read as one system. The
+    // pick survives the 15-second auto-refresh (window.__resultsTab).
+    function resultsTabControllerHtml(){
+        const isSsg = window.__resultsTab !== 'dsg';
+        return `
+        <div class="cand-tab-controller" role="tablist" aria-label="Live results">
+            <button type="button" class="cand-tab-btn ${isSsg ? 'active' : ''}" role="tab" ${isSsg ? 'aria-selected="true"' : ''} onclick="switchResultsTab('ssg')">
+                <span class="cand-tab-icon">🎓</span><span>SSG</span><span class="cand-tab-sub">General Elections</span>
+            </button>
+            <button type="button" class="cand-tab-btn ${!isSsg ? 'active' : ''}" role="tab" ${!isSsg ? 'aria-selected="true"' : ''} onclick="switchResultsTab('dsg')">
+                <span class="cand-tab-icon">🏛</span><span>DSG</span><span class="cand-tab-sub">Department Council</span>
+            </button>
+        </div>`;
+    }
+    function switchResultsTab(tab){
+        window.__resultsTab = tab;
+        resultsFilterElectionId = null; // a tab switch always shows that council's full list
+        renderResultsPanel();
+    }
 
     async function renderResultsPanel(filterElectionId) {
         if (filterElectionId !== undefined) resultsFilterElectionId = filterElectionId;
@@ -1754,25 +1745,52 @@
         if (resultsFilterElectionId) {
             scopedElections = data.elections.filter(e => e.id === resultsFilterElectionId);
             if (!scopedElections.length) notFound = true;
+            // Deep-linked from a ballot "View Results" — line the tab up with
+            // that election so "Back to all results" lands on the right one.
+            else window.__resultsTab = scopedElections[0].config.type === 'DSG' ? 'dsg' : 'ssg';
+        } else {
+            // Same SSG/DSG panels as the Candidates directory.
+            const wantedType = window.__resultsTab === 'dsg' ? 'DSG' : 'SSG';
+            scopedElections = scopedElections.filter(e => e.config.type === wantedType);
         }
 
-        const visibleElections = scopedElections.filter(election => {
+        // Split what the admin lets students see from what stays hidden.
+        // Hidden elections are NOT silently dropped — each one says why it
+        // can't be shown: "never shown" or "only after the election ends".
+        const visibleElections = [];
+        const hiddenElections = [];
+        scopedElections.forEach(election => {
             const config = election.config;
             const visible = config.results_visibility === 'always'
                 || (config.results_visibility === 'after' && ['closed', 'archived'].includes(config.status));
-            return visible && election.positions.length > 0;
+            if (visible && election.positions.length > 0) {
+                visibleElections.push(election);
+            } else if (config.results_visibility === 'never') {
+                hiddenElections.push({ name: config.name, reason: 'never' });
+            } else if (config.results_visibility === 'after') {
+                hiddenElections.push({ name: config.name, reason: 'after' });
+            }
         });
 
+        const tabControllerHtml = resultsFilterElectionId ? '' : resultsTabControllerHtml();
         const backLink = resultsFilterElectionId
             ? `<button type="button" class="btn btn-secondary" style="margin-bottom:1.25rem;display:inline-flex;" onclick="renderResultsPanel(null)">&larr; Back to all results</button>`
             : '';
+
+        const hiddenHtml = hiddenElections.map(h => `
+            <div class="alert alert-info"><strong>${escHtml(h.name)}</strong> — ${
+                h.reason === 'never'
+                    ? 'the admin has hidden these results; they will <strong>never</strong> be shown.'
+                    : 'results are hidden for now and will only appear <strong>after the election ends</strong>.'
+            }</div>`).join('');
 
         if (notFound) {
             el.innerHTML = `<h2>Live Results</h2><p class="muted">Results update automatically every 15 seconds.</p>${backLink}<div class="alert alert-error">That election could not be found.</div>`;
             return;
         }
-        if (!visibleElections.length) {
-            el.innerHTML = `<h2>Live Results</h2><p class="muted">Results update automatically.</p>${backLink}<div class="alert alert-info">Results are not available yet.</div>`;
+        if (!visibleElections.length && !hiddenHtml) {
+            const council = window.__resultsTab === 'dsg' ? 'DSG' : 'SSG';
+            el.innerHTML = `<h2>Live Results</h2><p class="muted">Results update automatically.</p>${tabControllerHtml}${backLink}<div class="alert alert-info">No ${council} election${window.__resultsTab === 'dsg' ? ' for your department ' : ' '}has results yet.</div>`;
             return;
         }
 
@@ -1801,7 +1819,7 @@
             return `<h2>${escHtml(election.config.name)}${election.config.target_school_year_label ? ` <span style="font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:.2rem .6rem;border-radius:999px;vertical-align:middle;">🎓 SY ${escHtml(election.config.target_school_year_label)}</span>` : ''}</h2>${positionsHtml}<hr>`;
         }).join('');
 
-        el.innerHTML = `<h2>Live Results</h2><p class="muted">Results update automatically every 15 seconds.</p>${backLink}${html}`;
+        el.innerHTML = `<h2>Live Results</h2><p class="muted">Results update automatically every 15 seconds.</p>${tabControllerHtml}${backLink}${hiddenHtml}${html}`;
 
         // Refresh vote counts on an interval, matching the old page's
         // meta-refresh behavior — but now it's just a data refetch + partial
@@ -1810,69 +1828,6 @@
         window.__resultsRefreshTimer = setInterval(() => {
             if (currentPanel === 'results') renderResultsPanel();
         }, 15000);
-    }
-
-    // ------------------------------------------------------------------
-    // FEATURED CANDIDATES CAROUSEL (ported as-is from the previous version)
-    // ------------------------------------------------------------------
-    function startFeaturedCarousel(featuredCandidates) {
-        const viewport = document.getElementById('featuredViewport');
-        const track = document.getElementById('featuredTrack');
-        if (!viewport || !track || !featuredCandidates.length) return;
-
-        const MIN_SCALE = 0.72, MAX_SCALE = 1.28, BASE_SPEED = 40, SPEED_VARIANCE = 0.85;
-        const setLength = featuredCandidates.length;
-        const renderList = [...featuredCandidates, ...featuredCandidates, ...featuredCandidates];
-
-        track.innerHTML = renderList.map(item => {
-            const c = item.candidate;
-            const photo = c.photo_url || 'assets/default-avatar.svg';
-            return `
-            <div class="fc-card">
-                <img src="${escHtml(photo)}" alt="${escHtml(c.name)}">
-                <div class="fc-name">${escHtml(c.name)}</div>
-                <div class="fc-position">${escHtml(item.position)}</div>
-            </div>`;
-        }).join('');
-
-        const cards = Array.from(track.children);
-        let cardWidth = 0, trackPosition = 0, paused = false, lastTime = null;
-        let VISIBLE_COUNT = window.innerWidth <= 768 ? 3 : 5;
-
-        function measure() {
-            VISIBLE_COUNT = window.innerWidth <= 768 ? 3 : 5;
-            cardWidth = viewport.clientWidth / VISIBLE_COUNT;
-            cards.forEach(card => { card.style.width = cardWidth + 'px'; });
-            trackPosition = setLength * cardWidth;
-        }
-        function easeSmooth(t) { return t * t * (3 - 2 * t); }
-        function tick(time) {
-            if (lastTime === null) lastTime = time;
-            const dt = (time - lastTime) / 1000;
-            lastTime = time;
-            if (!paused && cardWidth > 0) {
-                const phase = (trackPosition / cardWidth) % 1;
-                const speedFactor = 1 - SPEED_VARIANCE * Math.cos(2 * Math.PI * phase);
-                trackPosition += BASE_SPEED * speedFactor * dt;
-                const loopLength = setLength * cardWidth;
-                if (trackPosition >= loopLength * 2) trackPosition -= loopLength;
-            }
-            track.style.transform = `translateX(${-trackPosition}px)`;
-            const viewportCenter = viewport.clientWidth / 2;
-            cards.forEach((card, i) => {
-                const cardCenter = i * cardWidth + cardWidth / 2 - trackPosition;
-                const t = Math.min(Math.abs(cardCenter - viewportCenter) / cardWidth, 1);
-                const scale = MAX_SCALE - (MAX_SCALE - MIN_SCALE) * easeSmooth(t);
-                card.style.transform = `scale(${scale})`;
-                card.style.zIndex = String(Math.round((1 - t) * 100));
-            });
-            if (document.getElementById('featuredViewport')) requestAnimationFrame(tick);
-        }
-        measure();
-        window.addEventListener('resize', measure);
-        viewport.addEventListener('mouseenter', () => { paused = true; });
-        viewport.addEventListener('mouseleave', () => { paused = false; });
-        requestAnimationFrame(tick);
     }
 
     // ------------------------------------------------------------------

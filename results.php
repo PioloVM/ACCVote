@@ -71,15 +71,15 @@ function renderResultsMarkup(PDO $pdo): string
             $positionsByElection[(int) $row['election_id']][] = $row;
         }
 
-        // Batch 2 — turnout for all visible elections at once (was: one
-        // COUNT(DISTINCT user_id) per election). Same distinct-voter count;
-        // elections with no positions simply fall back to 0 below.
+        // Batch 2 — turnout for all visible elections at once. Counted from
+        // ballot_submissions, the same lock the student dashboard reads:
+        // a submitted ballot can be empty, in which case votes holds
+        // nothing to count but the student still voted.
         foreach ($pdo->query("
-            SELECT ep.election_id, COUNT(DISTINCT v.user_id) AS ballots
-            FROM election_positions ep
-            LEFT JOIN votes v ON v.position_id = ep.position_id
-            WHERE ep.election_id IN ($eidList)
-            GROUP BY ep.election_id
+            SELECT election_id, COUNT(DISTINCT user_id) AS ballots
+            FROM ballot_submissions
+            WHERE election_id IN ($eidList)
+            GROUP BY election_id
         ")->fetchAll(PDO::FETCH_KEY_PAIR) as $eid => $ballots) {
             $turnoutByElection[(int) $eid] = (int) $ballots;
         }
@@ -110,15 +110,17 @@ function renderResultsMarkup(PDO $pdo): string
         }
     }
 
-    // Batch 4 — eligible-voter counts in one grouped pass (was: one
-    // COUNT(*) per election). SSG elections use the total; each DSG
-    // election uses its department's count.
+    // Batch 4 — eligible-voter counts in one grouped pass. Same definition
+    // as admin/api/elections.php's electionTurnout(): active accounts that
+    // aren't dropped or graduated. SSG uses the total; each DSG uses its
+    // faculty's count.
     $eligibleAll = 0;
     $eligibleByDept = [];
     foreach ($pdo->query("
         SELECT department, COUNT(*) AS n
         FROM users
-        WHERE registration_status != 'unregistered'
+        WHERE registration_status = 'active'
+          AND account_status NOT IN ('dropped','graduated')
         GROUP BY department
     ")->fetchAll() as $row) {
         $n = (int) $row['n'];

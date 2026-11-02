@@ -13,12 +13,16 @@ if (!empty($_SESSION['user_id'])) {
 $error = '';
 $justRegistered = isset($_GET['registered']);
 
+// Opened before the POST branch because every query below runs through
+// this handle; getDbConnection() caches the connection, so there is only
+// ever one connection per request either way.
+$pdo = getDbConnection();
+syncElectionStatuses($pdo);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? null)) {
         $error = 'Your session expired. Please try again.';
     } else {
-        $pdo = getDbConnection();
-
         if (isRateLimited($pdo, 'student_login')) {
             $error = 'Too many login attempts. Please wait a few minutes and try again.';
         } else {
@@ -30,7 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             recordAttempt($pdo, 'student_login');
             $stmt = $pdo->prepare('
-            SELECT id, name, password, has_voted, registration_status
+            SELECT id, name, password, has_voted, registration_status, account_status,
+                   school_year_id
             FROM users
             WHERE student_id = :student_id
         ');
@@ -43,19 +48,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif ($user['registration_status'] === 'suspended') {
                     $error = 'This account has been suspended. Please contact the election administrator.';
                 } elseif (password_verify($password, $user['password'])) {
-                    session_regenerate_id(true);
-                    $_SESSION['user_id'] = $user['id'];
-                    $_SESSION['name'] = $user['name'];
+                    // ------------------------------------------------------
+                    // LIFECYCLE GATE — "more than 4 years" = the 5th school
+                    // year onward since the student started (see
+                    // SCHOOL_YEAR_OVERHAUL_PLAN.md).
+                    //
+                    // account_status = 'normal' is the ONLY status where
+                    // year_level is auto-computed from school_year_id on
+                    // every login. The moment it's anything else
+                    // (repeating/undergrad_repeating/suspended_repeating),
+                    // the student has taken manual control of their own
+                    // year_level (see update-account.php) — this gate never
+                    // recomputes or overwrites it again, and never forces
+                    // them through a confirmation screen on every future
+                    // login. That's a deliberate, one-time declaration, not
+                    // a recurring check-in.
+                    // ------------------------------------------------------
+                    $needsDeclaration = false;
+                    $activeSchoolYear = getActiveSchoolYear($pdo);
+                    $accountStatus = $user['account_status'] ?: 'normal';
 
-                    // Always land on the dashboard, never straight to
-                    // results.php. has_voted is a legacy "voted in at least
-                    // one election, ever" flag — with multiple elections
-                    // possibly running at once, a student who's voted in one
-                    // may still have another to vote in, and the dashboard
-                    // (which shows real per-election status, plus its own
-                    // Results tab) is the right landing spot either way.
-                    header('Location: dashboard.php');
-                    exit;
+                    if ($accountStatus === 'normal' && $user['school_year_id']) {
+                        $syStmt = $pdo->prepare('SELECT start_year FROM school_years WHERE id = :id');
+                        $syStmt->execute(['id' => $user['school_year_id']]);
+                        $studentStartYear = $syStmt->fetchColumn();
+
+                        if ($studentStartYear !== false) {
+                            $yearLevelNames = $pdo->query('SELECT name FROM year_levels ORDER BY sort_order, name')->fetchAll(PDO::FETCH_COLUMN);
+                            $computed = computeYearLevel((int) $studentStartYear, (int) $activeSchoolYear['start_year'], $yearLevelNames);
+
+                            if (!$computed['blocked']) {
+                                // Opportunistic refresh: keep the stored year_level
+                                // in sync on every login rather than requiring a
+                                // yearly bulk admin action — cheap, and always
+                                // correct the moment the calendar rolls over.
+                                if ($computed['label'] !== null) {
+                                    $pdo->prepare('UPDATE users SET year_level = :yl WHERE id = :id')
+                                        ->execute(['yl' => $computed['label'], 'id' => $user['id']]);
+                                }
+                            } else {
+                                // Just crossed into year 5+ with no status ever
+                                // declared. This is exactly the "repeating student
+                                // who was never asked" case (including anyone
+                                // whose account predates this whole system) — ASK
+                                // them rather than assuming graduated. One-time:
+                                // once they declare a status here, this branch
+                                // never fires again for them.
+                                $needsDeclaration = true;
+                            }
+                        }
+                    } elseif (in_array($accountStatus, ['dropped', 'graduated'], true)) {
+                        $error = $accountStatus === 'dropped'
+                            ? 'This account is no longer active. Please contact the election administrator.'
+                            : 'This account has graduated and can no longer log in to vote.';
+                    }
+                    // repeating / undergrad_repeating / suspended_repeating:
+                    // fall straight through — year_level is student-managed,
+                    // nothing to check or recompute here.
+
+                    if ($error === '') {
+                        session_regenerate_id(true);
+                        $_SESSION['user_id'] = $user['id'];
+                        $_SESSION['name'] = $user['name'];
+                        if ($needsDeclaration) {
+                            $_SESSION['needs_account_update'] = true;
+                            header('Location: update-account.php');
+                            exit;
+                        }
+
+                        // Always land on the dashboard, never straight to
+                        // results.php. has_voted is a legacy "voted in at least
+                        // one election, ever" flag — with multiple elections
+                        // possibly running at once, a student who's voted in one
+                        // may still have another to vote in, and the dashboard
+                        // (which shows real per-election status, plus its own
+                        // Results tab) is the right landing spot either way.
+                        header('Location: dashboard.php');
+                        exit;
+                    }
                 } else {
                     $error = 'Invalid ID or Password.';
                 }
@@ -178,6 +248,7 @@ $csrfToken = csrfToken();
         margin: -0.6rem 0 1.25rem;
         text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     }
+
 
     .page-center label {
         font-size: 0.92rem;
@@ -454,6 +525,7 @@ $csrfToken = csrfToken();
         </div>
         <h2 class="card-title">Welcome Back</h2>
         <p class="subtitle">Log in to cast your vote.</p>
+
 
         <?php if ($justRegistered && !$error): ?>
             <div class="alert alert-success">✅ Account activated! Please log in with your new password.</div>

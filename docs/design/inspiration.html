@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>voting-app3 — Design System &amp; Reference Pack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Civic ballot identity — voting-app3 actual design system */
+    --navy-950:#081428;
+    --navy-900:#0b1f3a;
+    --navy-800:#12294a;
+    --navy-700:#1c3a63;
+    --lime:#84cc16;
+    --lime-light:#c8f26a;
+    --gold:#d4af37;
+    --gold-light:#f0dca0;
+    --paper:#f7f5ef;
+    --paper-dim:#efece3;
+    --sheet:#ffffff;
+    --ink:#0f172a;
+    --navy:#0b1f3a;
+    --muted:#5c6b81;
+    /* #8b98ad is the site's DARK-theme secondary text; on cream it is 2.7:1.
+       This board is light, so light-surface secondary text is darkened to ~4.9:1. */
+    --faint:#5d6c82;
+    --brick:#b3261e;
+    /* lime #84cc16 is 1.8:1 on cream — unusable as text on light surfaces.
+       Lime stays lime on navy (8.4:1); on light surfaces text uses these. */
+    --lime-ink:#4d7c0f;
+    --gold-ink:#8a651e;
+    --font-display:'Sora',Georgia,sans-serif;
+    --font-sans:'Inter',system-ui,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+    --rule:#d8cfbc;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--font-sans);font-size:16px;line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  img{max-width:100%;display:block;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 2rem;}
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    background:var(--navy);
+    color:#fff;border-bottom:1px solid rgba(212,175,55,.25);
+  }
+  .masthead .wrap{padding-top:2.4rem;padding-bottom:2.6rem;}
+  .masthead-top{display:flex;align-items:flex-start;justify-content:space-between;gap:2rem;flex-wrap:wrap;}
+  .seal{
+    width:46px;height:46px;border:2px solid var(--gold);border-radius:50%;
+    display:grid;place-items:center;flex-shrink:0;
+    font:800 0.72rem/1 var(--font-mono);letter-spacing:.12em;color:var(--gold);
+  }
+  .masthead-meta{
+    font:400 0.62rem/1.6 var(--font-mono);letter-spacing:.12em;
+    text-transform:uppercase;color:#e2e8f0;text-align:right;
+  }
+  .masthead-meta strong{color:#fff;font-weight:500;}
+  .masthead h1{
+    margin:1.4rem 0 .5rem;font-family:var(--font-display);
+    font-size:clamp(2.5rem,5vw,4.4rem);font-weight:800;line-height:1.02;
+    letter-spacing:-.02em;max-width:14ch;color:#fff;
+  }
+  .masthead h1 em{font-style:italic;color:var(--lime);}
+  .masthead p{
+    margin:0;max-width:64ch;color:#e2e8f0;font-size:.98rem;line-height:1.7;
+  }
+  .masthead .rule{height:1px;background:rgba(212,175,55,.22);margin:2rem 0 1rem;}
+  .masthead-foot{
+    display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+    font:400 0.6rem/1.5 var(--font-mono);letter-spacing:.1em;
+    text-transform:uppercase;color:#a9a294;
+  }
+  .masthead-foot a{color:var(--lime);text-decoration:none;border-bottom:1px solid rgba(132,204,22,.4);}
+  .masthead-foot a:hover{border-color:var(--lime);}
+
+  /* ---------- sections ---------- */
+  section{padding:4.4rem 0;border-bottom:1px solid var(--rule);}
+  section:last-of-type{border-bottom:0;}
+  .section-head{display:grid;grid-template-columns:70px minmax(0,1fr);gap:1.4rem;align-items:start;margin-bottom:2.2rem;}
+  .section-num{
+    font:500 0.62rem/1.4 var(--font-mono);letter-spacing:.12em;
+    color:var(--lime-ink);padding-top:.35rem;
+  }
+  .eyebrow{
+    display:inline-block;font:500 0.63rem/1.4 var(--font-mono);
+    letter-spacing:.14em;text-transform:uppercase;color:var(--lime-ink);
+    border-left:3px solid var(--gold);padding-left:.6rem;margin-bottom:.7rem;
+  }
+  h2{
+    margin:0;font-family:var(--font-display);font-weight:800;
+    font-size:clamp(1.7rem,3vw,2.35rem);line-height:1.1;letter-spacing:-.02em;
+  }
+  .section-head p{margin:.7rem 0 0;max-width:68ch;color:var(--muted);font-size:.94rem;}
+  .rule{height:1px;background:var(--rule);border:0;margin:0;}
+
+  .lede{display:grid;grid-template-columns:1.25fr .75fr;gap:3rem;align-items:start;}
+  .lede blockquote{
+    margin:0;font-family:var(--font-display);font-size:clamp(1.35rem,2.6vw,2rem);
+    line-height:1.32;font-weight:400;letter-spacing:-.015em;
+  }
+  .lede blockquote strong{font-weight:800;color:var(--lime-ink);}
+  .lede .note{
+    border-left:1px solid var(--rule);padding-left:1.4rem;
+    color:var(--muted);font-size:.9rem;
+  }
+  .note dl{margin:0;display:grid;gap:.9rem;}
+  .note dt{font:500 0.6rem/1.4 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);}
+  .note dd{margin:.1rem 0 0;color:var(--ink);font-size:.88rem;}
+
+  /* ---------- reference shelf ---------- */
+  .refs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;}
+  .ref{
+    background:var(--sheet);border:1px solid var(--rule);border-radius:16px;
+    padding:1.25rem 1.2rem 1.1rem;display:flex;flex-direction:column;
+    min-height:210px;transition:border-color .15s ease;
+  }
+  .ref:hover{border-color:var(--lime);}
+  .ref .kicker{
+    display:flex;justify-content:space-between;gap:1rem;
+    font:500 0.58rem/1.4 var(--font-mono);letter-spacing:.08em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:.75rem;
+  }
+  .ref .kicker span:last-child{color:var(--lime-ink);}
+  .ref h3{
+    margin:0 0 .45rem;font-family:var(--font-display);font-weight:800;
+    font-size:1.08rem;line-height:1.25;
+  }
+  .ref p{margin:0 0 1rem;color:var(--muted);font-size:.82rem;line-height:1.55;flex:1;}
+  .ref a{
+    font:500 0.6rem/1.4 var(--font-mono);letter-spacing:.06em;
+    text-transform:uppercase;text-decoration:none;color:var(--lime-ink);
+    border-bottom:1px solid var(--rule);padding-bottom:.15rem;align-self:flex-start;
+  }
+  .ref a:hover{border-color:var(--gold-ink);color:var(--gold-ink);}
+
+  /* ---------- gallery ---------- */
+  .gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.2rem;}
+  .shot{
+    margin:0;background:var(--sheet);border:1px solid var(--rule);border-radius:16px;
+    overflow:hidden;
+  }
+  .shot a{display:block;height:290px;overflow:hidden;background:#ece5d7;}
+  .shot img{width:100%;height:100%;object-fit:cover;object-position:top center;transition:transform .4s ease;}
+  .shot a:hover img{transform:scale(1.015);}
+  .shot figcaption{
+    display:flex;justify-content:space-between;gap:1rem;align-items:baseline;
+    padding:.8rem 1rem .85rem;border-top:1px solid var(--rule);
+  }
+  .shot figcaption strong{font:700 0.86rem/1.3 var(--font-sans);}
+  .shot figcaption span{font:400 0.58rem/1.3 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
+  .gallery-note{
+    margin:1rem 0 0;font:400 0.64rem/1.5 var(--font-mono);letter-spacing:.05em;
+    text-transform:uppercase;color:var(--faint);
+  }
+
+  /* ---------- palette + type ---------- */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:start;}
+  .subhead{
+    font:500 0.6rem/1.4 var(--font-mono);letter-spacing:.12em;
+    text-transform:uppercase;color:var(--faint);margin:0 0 .9rem;
+  }
+  .swatches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55rem;}
+  .swatch{border:1px solid var(--rule);border-radius:16px;overflow:hidden;background:var(--sheet);}
+  .swatch .chip{height:46px;}
+  .swatch .lab{padding:.42rem .5rem .46rem;font:400 0.55rem/1.5 var(--font-mono);letter-spacing:.04em;color:var(--muted);}
+  .swatch .lab strong{display:block;color:var(--ink);font-weight:500;font-size:.62rem;}
+  .type-specimen{border-top:1px solid var(--rule);padding-top:1.1rem;}
+  .aa{
+    font-family:var(--font-display);font-size:5.2rem;line-height:.85;
+    font-weight:800;letter-spacing:-.04em;margin:0 0 .4rem;
+  }
+  .aa small{font-size:1.2rem;font-weight:400;letter-spacing:0;color:var(--faint);margin-left:.5rem;}
+  .type-row{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid var(--rule);font-size:.82rem;}
+  .type-row:last-child{border-bottom:0;}
+  .type-row span:first-child{font-family:var(--font-mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);}
+  .mono-sample{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;color:var(--lime-ink);}
+
+  /* ---------- borrowed / rejected ---------- */
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;}
+  .list-card{background:var(--sheet);border:1px solid var(--rule);border-radius:16px;padding:1.3rem 1.35rem;}
+  .list-card h3{margin:0 0 .9rem;font:500 0.62rem/1.4 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;}
+  .list-card.yes h3{color:var(--lime-ink);}
+  .list-card.no h3{color:var(--brick);}
+  .list-card ul{list-style:none;margin:0;padding:0;}
+  .list-card li{
+    display:grid;grid-template-columns:18px 1fr;gap:.55rem;
+    padding:.5rem 0;border-bottom:1px solid var(--rule);
+    color:var(--muted);font-size:.84rem;line-height:1.5;
+  }
+  .list-card li:last-child{border-bottom:0;}
+  .list-card li::before{font-family:var(--font-mono);font-size:.75rem;line-height:1.5;}
+  .list-card.yes li::before{content:'+';color:var(--lime-ink);}
+  .list-card.no li::before{content:'×';color:var(--brick);}
+
+  /* ---------- specimens ---------- */
+  .specimens{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;}
+  .specimen{background:var(--sheet);border:1px solid var(--rule);border-radius:16px;padding:1.4rem;}
+  .specimen .subhead{margin-bottom:1rem;}
+  .specimen .row{display:flex;flex-wrap:wrap;gap:.55rem;align-items:center;margin-bottom:1rem;}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;min-height:40px;
+    padding:.6rem 1rem;border:2px solid transparent;border-radius:999px;
+    font:700 0.72rem/1 var(--font-sans);text-decoration:none;cursor:pointer;
+  }
+  .btn-primary{background:var(--lime);border-color:var(--lime);color:#052e16;}
+  .btn-primary:hover{background:var(--lime-light);border-color:var(--lime-light);}
+  .btn-outline{background:transparent;border-color:var(--rule);color:var(--ink);}
+  .btn-outline:hover{border-color:var(--gold-ink);}
+  .pill{
+    display:inline-flex;align-items:center;gap:0.4rem;
+    padding:0.32rem 0.75rem;border-radius:999px;
+    font:600 0.58rem/1.2 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;
+  }
+  .pill.ongoing{background:rgba(34,197,94,.12);color:#15803d;}
+  .pill.elected{color:var(--lime-ink);}
+  .pill.closed{color:var(--brick);}
+  .record-row{
+    display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:baseline;
+    padding:.75rem 0;border-bottom:1px solid var(--rule);
+  }
+  .record-row:last-child{border-bottom:0;}
+  .record-row .name{font:600 0.9rem/1.35 var(--font-display);}
+  .record-row .meta{font:400 0.6rem/1.5 var(--font-mono);color:var(--faint);text-transform:uppercase;letter-spacing:.05em;}
+  .ink-band{
+    background:var(--ink);color:var(--paper);padding:.9rem 1rem;
+    display:flex;justify-content:space-between;gap:1rem;align-items:center;
+    font:400 0.58rem/1.4 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;
+  }
+  .ink-band .gold{color:var(--gold);}
+  .ballot-strip{border:1px solid var(--rule);border-radius:16px;padding:1rem 1.1rem;background:var(--paper);}
+  .ballot-strip .ballot-head{display:flex;justify-content:space-between;gap:1rem;border-bottom:1px solid var(--rule);padding-bottom:.55rem;margin-bottom:.65rem;font:500 0.56rem/1.4 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);}
+  .ballot-strip .cand{display:flex;align-items:center;gap:.55rem;padding:.32rem 0;font-size:.82rem;}
+  .ballot-strip .box{width:13px;height:13px;border:1px solid var(--rule);border-radius:1px;flex-shrink:0;}
+  .ballot-strip .box.on{background:var(--lime);border-color:var(--lime);}
+
+  /* ---------- page map ---------- */
+  .pages{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.75rem;}
+  .page-card{border-top:2px solid var(--ink);padding:.9rem .2rem 0;}
+  .page-card .n{font:500 0.58rem/1.4 var(--font-mono);letter-spacing:.1em;color:var(--lime-ink);}
+  .page-card h3{margin:.35rem 0 .35rem;font:700 0.98rem/1.25 var(--font-display);}
+  .page-card p{margin:0;color:var(--muted);font-size:.78rem;line-height:1.5;}
+
+  /* ---------- footer ---------- */
+  .footer{background:var(--ink);color:var(--paper);padding:2.2rem 0;}
+  .footer .wrap{display:flex;justify-content:space-between;gap:2rem;flex-wrap:wrap;align-items:flex-end;}
+  .footer p{margin:0;font:400 0.62rem/1.6 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1;}
+  .footer .gold{color:var(--gold);}
+  .footer a{color:var(--lime);text-decoration:none;border-bottom:1px solid rgba(132,204,22,.4);}
+  .footer a:hover{border-color:var(--lime);}
+
+  @media (max-width:1000px){
+    .refs{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .pages{grid-template-columns:repeat(3,minmax(0,1fr));}
+  }
+  @media (max-width:800px){
+    .wrap{padding:0 1.2rem;}
+    section{padding:3rem 0;}
+    .lede,.split,.twocol,.specimens{grid-template-columns:1fr;gap:1.4rem;}
+    .section-head{grid-template-columns:44px 1fr;gap:.8rem;}
+    .masthead h1{font-size:2.5rem;}
+    .gallery{grid-template-columns:1fr;}
+    .shot a{height:240px;}
+    .refs{grid-template-columns:1fr;}
+    .pages{grid-template-columns:1fr 1fr;}
+  }
+  @media (max-width:520px){
+    .pages{grid-template-columns:1fr;}
+    .swatches{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .masthead-meta{text-align:left;}
+    .shot a{height:210px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="masthead-top">
+      <div style="display:flex;gap:1rem;align-items:center;">
+        <div class="seal">ACC</div>
+        <div style="font:500 0.62rem/1.6 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:#e2e8f0;">
+          School Elections<br><span style="color:var(--lime);">Design direction</span>
+        </div>
+      </div>
+      <div class="masthead-meta">
+        <strong>Panel review</strong><br>
+        October 2026<br>
+        voting-app3
+      </div>
+    </div>
+    <h1>Your Voice,<br><em>Your Choice</em></h1>
+    <p>The design system behind voting-app3: a dark navy hero, lime as the one action color, gold for seals and eyebrows, a blurred glass nav, pill buttons, and a perforated ballot stub — carried through both light and dark dashboard themes.</p>
+    <div class="rule"></div>
+    <div class="masthead-foot">
+      <span>Design direction &amp; reference pack</span>
+      <span><a href="INSPIRATION.md">Read the notes</a> &nbsp;·&nbsp; <a href="screens/01-landing.jpeg">Open a screen</a></span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-num">01 / Concept</div>
+        <div>
+          <div class="eyebrow">The direction in one line</div>
+          <h2>The idiom this site already runs: dark navy, lime, gold, pills.</h2>
+          <p>This pack documents what voting-app3 <em>is</em>, not a proposed restyle. The system is a dark radial-gradient hero with a lime action color and gold seals up top, a blurred glass nav, pill CTAs and badges, rounded cards with soft shadows, and matching light (<span style="font-family:var(--font-mono);font-size:.8rem;">#f8fafc</span>) and dark (<span style="font-family:var(--font-mono);font-size:.8rem;">#0a1120</span>) dashboard themes.</p>
+        </div>
+      </div>
+      <div class="lede">
+        <blockquote>Election night, not enterprise software: a <strong>dark board</strong>, one lime signal for "this is your action", and a ballot stub you can read at arm's length.</blockquote>
+        <div class="note">
+          <dl>
+            <div><dt>Job of the landing</dt><dd>Explain the election and establish trust before login.</dd></div>
+            <div><dt>Job of the ballot</dt><dd>Make one decision at a time unambiguous.</dd></div>
+            <div><dt>Job of the results</dt><dd>Publish a record that can be printed, signed, and posted.</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-num">02 / References</div>
+        <div>
+          <div class="eyebrow">The shelf</div>
+          <h2>What this direction actually tracks to.</h2>
+          <p>voting-app3 is a <strong>dark navy + lime dashboard idiom</strong>, not a flat print document — so the visual references below are dashboard and component systems, not Swiss posters. Each card is tagged honestly: <em>visual match</em> if it looks like the site, <em>clarity only</em> if we borrow its wording rules and nothing else.</p>
+        </div>
+      </div>
+      <div class="refs">
+        <article class="ref">
+          <div class="kicker"><span>Visual match</span><span>01</span></div>
+          <h3>Material Design 3</h3>
+          <p>Pill buttons, tonal chips, rounded cards and fully-rounded badges. This is the shape language the site already runs — 999px buttons and status pills throughout.</p>
+          <a href="https://m3.material.io/" target="_blank" rel="noopener">m3.material.io</a>
+        </article>
+        <article class="ref">
+          <div class="kicker"><span>Visual match</span><span>02</span></div>
+          <h3>Carbon Design System</h3>
+          <p>IBM's system for data-heavy admin tools: Plex type, dense tables, dark themes. Closest match to the admin registry, results and logs panels.</p>
+          <a href="https://carbondesignsystem.com/" target="_blank" rel="noopener">carbondesignsystem.com</a>
+        </article>
+        <article class="ref">
+          <div class="kicker"><span>Visual match</span><span>03</span></div>
+          <h3>shadcn/ui patterns</h3>
+          <p>Dashboard cards, filter pills, badges and toggles in matched light and dark themes — the same structure as <span style="font-family:var(--font-mono);font-size:.78rem;">dashboard-app.css</span> with its two token sets.</p>
+          <a href="https://ui.shadcn.com/" target="_blank" rel="noopener">ui.shadcn.com</a>
+        </article>
+        <article class="ref">
+          <div class="kicker"><span>Visual match</span><span>04</span></div>
+          <h3>Sora · Inter · IBM Plex Mono</h3>
+          <p>The three faces the site actually loads: Sora for page headlines, Inter for forms and UI, Plex Mono for IDs, dates and labels.</p>
+          <a href="https://fonts.google.com/" target="_blank" rel="noopener">fonts.google.com</a>
+        </article>
+        <article class="ref">
+          <div class="kicker"><span>Clarity only</span><span>05</span></div>
+          <h3>AIGA — Design for Democracy</h3>
+          <p>Borrowed for ballot instructions and plain language only. Deliberately <strong>not</strong> a visual reference: AIGA's system is flat print, this site is dark, rounded and glowing.</p>
+          <a href="https://www.aiga.org/design-for-democracy" target="_blank" rel="noopener">aiga.org/design-for-democracy</a>
+        </article>
+        <article class="ref">
+          <div class="kicker"><span>Clarity only</span><span>06</span></div>
+          <h3>Center for Civic Design</h3>
+          <p>Candidate-list hierarchy and first-time-voter instructions — how a ballot section reads, not how it looks. The look comes from the four references above.</p>
+          <a href="https://civicdesign.org/field-guides/" target="_blank" rel="noopener">civicdesign.org/field-guides</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-num">03 / Evidence</div>
+        <div>
+          <div class="eyebrow">The direction, applied</div>
+          <h2>Five surfaces, one system.</h2>
+          <p>Live captures of the site as it stands — not comps. Full-size images are in <span style="font-family:var(--font-mono);font-size:.8rem;">docs/design/screens/</span>, including every admin and student panel.</p>
+        </div>
+      </div>
+      <div class="gallery">
+        <figure class="shot"><a href="screens/01-landing.jpeg" target="_blank" rel="noopener"><img src="screens/01-landing.jpeg" alt="Landing page"></a><figcaption><strong>Landing — the notice board</strong><span>Public / desktop</span></figcaption></figure>
+        <figure class="shot"><a href="screens/02-login.jpeg" target="_blank" rel="noopener"><img src="screens/02-login.jpeg" alt="Student login"></a><figcaption><strong>Login — the glass card</strong><span>Auth / desktop</span></figcaption></figure>
+        <figure class="shot"><a href="screens/07-admin-dashboard.jpeg" target="_blank" rel="noopener"><img src="screens/07-admin-dashboard.jpeg" alt="Admin dashboard"></a><figcaption><strong>Admin — the control room</strong><span>Admin / desktop</span></figcaption></figure>
+        <figure class="shot"><a href="screens/09-student-candidates.jpeg" target="_blank" rel="noopener"><img src="screens/09-student-candidates.jpeg" alt="Student candidates page"></a><figcaption><strong>Student — the ballot folder</strong><span>Student / desktop</span></figcaption></figure>
+        <figure class="shot"><a href="screens/04-results-public.jpeg" target="_blank" rel="noopener"><img src="screens/04-results-public.jpeg" alt="Public results page"></a><figcaption><strong>Results — the tally sheet</strong><span>Public / desktop</span></figcaption></figure>
+        <figure class="shot"><a href="screens/06-mobile-landing.jpeg" target="_blank" rel="noopener"><img src="screens/06-mobile-landing.jpeg" alt="Mobile landing"></a><figcaption><strong>Landing — mobile</strong><span>Public / 390px</span></figcaption></figure>
+      </div>
+      <p class="gallery-note">Full gallery: landing · login · register · admin dashboard · admin elections · students · settings · student home · candidates · vote · public results · 404 · mobile</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-num">04 / System</div>
+        <div>
+          <div class="eyebrow">Palette &amp; type</div>
+          <h2>A small system, used consistently.</h2>
+          <p>Lime is action; gold is ceremony; navy is authority. Sora carries authority, Inter carries the form, Mono carries the record.</p>
+        </div>
+      </div>
+      <div class="split">
+        <div>
+          <p class="subhead">Brand / light theme / dark theme</p>
+          <div class="swatches">
+            <div class="swatch"><div class="chip" style="background:#081428"></div><div class="lab"><strong>Navy 950</strong>#081428</div></div>
+            <div class="swatch"><div class="chip" style="background:#0b1f3a"></div><div class="lab"><strong>Navy 900</strong>#0B1F3A</div></div>
+            <div class="swatch"><div class="chip" style="background:#0b2545"></div><div class="lab"><strong>Auth navy</strong>#0B2545</div></div>
+            <div class="swatch"><div class="chip" style="background:#84cc16"></div><div class="lab"><strong>Lime — action</strong>#84CC16</div></div>
+            <div class="swatch"><div class="chip" style="background:#65a30d"></div><div class="lab"><strong>Lime dark</strong>#65A30D</div></div>
+            <div class="swatch"><div class="chip" style="background:#d4af37"></div><div class="lab"><strong>Gold — seal</strong>#D4AF37</div></div>
+            <div class="swatch"><div class="chip" style="background:#f7f5ef"></div><div class="lab"><strong>Paper band</strong>#F7F5EF</div></div>
+            <div class="swatch"><div class="chip" style="background:#fff;border-bottom:1px solid var(--rule)"></div><div class="lab"><strong>Sheet — card</strong>#FFFFFF</div></div>
+            <div class="swatch"><div class="chip" style="background:#0f172a"></div><div class="lab"><strong>Ink — text</strong>#0F172A</div></div>
+            <div class="swatch"><div class="chip" style="background:#0a1120"></div><div class="lab"><strong>Dark bg</strong>#0A1120</div></div>
+            <div class="swatch"><div class="chip" style="background:#111a2c"></div><div class="lab"><strong>Dark card</strong>#111A2C</div></div>
+            <div class="swatch"><div class="chip" style="background:#8b98ad"></div><div class="lab"><strong>Dark secondary</strong>#8B98AD</div></div>
+          </div>
+          <p style="margin:.8rem 0 0;font:400 0.62rem/1.6 var(--font-mono);letter-spacing:.04em;color:var(--faint);">Last swatch: dark-theme text only — on cream it measures 2.7:1, so light surfaces darken it to <span style="color:var(--lime-ink);">#5D6C82</span>.</p>
+        </div>
+        <div class="type-specimen">
+          <p class="subhead">Display / body / data</p>
+          <div class="aa">Aa<small>Sora</small></div>
+          <div class="type-row"><span>Display</span><span style="font-family:var(--font-display);font-size:1.2rem;">Official student ballot</span></div>
+          <div class="type-row"><span>Body</span><span>One vote per position. Review before submitting.</span></div>
+          <div class="type-row"><span>Data</span><span class="mono-sample">STUDENT 987654321 · 2026-10-25</span></div>
+          <div class="type-row"><span>Label</span><span style="font-family:var(--font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--lime-ink);">Election record</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-num">05 / Discipline</div>
+        <div>
+          <div class="eyebrow">In the system / not in it</div>
+          <h2>What the code actually does.</h2>
+          <p>Both columns are checked against <span style="font-family:var(--font-mono);font-size:.8rem;">landingpage.php</span> and <span style="font-family:var(--font-mono);font-size:.8rem;">assets/dashboard-app.css</span> — including the things that are easy to misremember: the glass blur, the gradients, and the emoji are all deliberately <em>part</em> of this design, not leftovers.</p>
+        </div>
+      </div>
+      <div class="twocol">
+        <div class="list-card yes">
+          <h3>In the system</h3>
+          <ul>
+            <li>Dark navy surfaces — hero radial-gradient <span style="font-family:var(--font-mono);font-size:.78rem;">#16345c → #0b1f3a → #081428</span> and the gradient sidebar</li>
+            <li>Lime <span style="font-family:var(--font-mono);font-size:.78rem;">#84cc16</span> as the single action color: buttons, active nav, progress fills, tally bars</li>
+            <li>Gold <span style="font-family:var(--font-mono);font-size:.78rem;">#d4af37</span> for eyebrows, seals, stamps and the ballot-stub header</li>
+            <li>999px pills for hero CTAs, nav items, filter chips and status badges; 8–12px for fields and cards</li>
+            <li>Rounded cards (12–18px) with soft shadows and a hover lift</li>
+            <li>Blurred glass sticky nav — <span style="font-family:var(--font-mono);font-size:.78rem;">rgba(11,31,58,.82)</span> + <span style="font-family:var(--font-mono);font-size:.78rem;">blur(14px)</span></li>
+            <li>Perforated ballot stub, rotated 2.5°, with a <span style="font-family:var(--font-mono);font-size:.78rem;">0 30px 60px</span> shadow</li>
+            <li>Pulse-glow ring on the primary CTA</li>
+            <li>Emoji as labels and icons — 🗳 🎓 ✅ in buttons, tabs and banners</li>
+            <li>Two matched dashboard themes: light <span style="font-family:var(--font-mono);font-size:.78rem;">#f8fafc</span> and dark <span style="font-family:var(--font-mono);font-size:.78rem;">#0a1120</span></li>
+            <li>Sora headlines, Inter body, IBM Plex Mono data</li>
+          </ul>
+        </div>
+        <div class="list-card no">
+          <h3>Not in the system</h3>
+          <ul>
+            <li>Pure black — the darkest surface is <span style="font-family:var(--font-mono);font-size:.78rem;">#081428</span></li>
+            <li>A second accent hue: lime does the action job alone, status colors are semantic only</li>
+            <li>Confetti or celebration animation — the receipt is a quiet check mark</li>
+            <li>Motion beyond the CTA pulse and hover lifts</li>
+            <li>Marketing superlatives or exclamation-mark copy in the interface</li>
+            <li>Emoji inside body paragraphs or headings</li>
+            <li>Decorative texture that sits behind form fields or tables</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-num">06 / Components</div>
+        <div>
+          <div class="eyebrow">Template specimens</div>
+          <h2>Copy, paste, and keep the rules.</h2>
+          <p>These are the reusable pieces. The production source is <span style="font-family:var(--font-mono);font-size:.8rem;">assets/dashboard-app.css</span> and <span style="font-family:var(--font-mono);font-size:.8rem;">landingpage.php</span> inline styles.</p>
+        </div>
+      </div>
+      <div class="specimens">
+        <div class="specimen">
+          <p class="subhead">Buttons &amp; pills</p>
+          <div class="row">
+            <a class="btn btn-primary" href="#">Cast your vote</a>
+            <a class="btn btn-outline" href="#">View results</a>
+          </div>
+          <div class="row">
+            <span class="pill ongoing">Ongoing</span>
+            <span class="pill elected">Elected</span>
+            <span class="pill closed">Closed</span>
+          </div>
+          <div class="record-row"><div><div class="name">Maria Santos</div><div class="meta">President · Unity</div></div><div class="meta">1,204 · 42.8%</div></div>
+          <div class="record-row"><div><div class="name">Julian Reyes</div><div class="meta">President · Progressive</div></div><div class="meta">987 · 35.1%</div></div>
+          <div class="record-row"><div><div class="name">Anna Cruz</div><div class="meta">President · Unity</div></div><div class="meta">622 · 22.1%</div></div>
+        </div>
+        <div class="specimen">
+          <p class="subhead">Ink band &amp; ballot strip</p>
+          <div class="ink-band"><span>School Elections</span><span class="gold">Official Record</span></div>
+          <div style="height:1rem"></div>
+          <div class="ballot-strip">
+            <div class="ballot-head"><span>President · SSG</span><span>Choose one</span></div>
+            <div class="cand"><span class="box on"></span>Maria Santos <span style="margin-left:auto;font-family:var(--font-mono);font-size:.55rem;color:var(--faint);">UNITY</span></div>
+            <div class="cand"><span class="box"></span>Julian Reyes <span style="margin-left:auto;font-family:var(--font-mono);font-size:.55rem;color:var(--faint);">PROGRESSIVE</span></div>
+            <div class="cand"><span class="box"></span>Anna Cruz <span style="margin-left:auto;font-family:var(--font-mono);font-size:.55rem;color:var(--faint);">UNITY</span></div>
+          </div>
+          <div style="height:1rem"></div>
+          <div class="record-row"><div class="name">Ballot ID</div><div class="meta">#0043 · 2026-10-25 14:08</div></div>
+          <div class="record-row"><div class="name">Status</div><div class="meta" style="color:var(--lime-ink);">Submitted</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-num">07 / Map</div>
+        <div>
+          <div class="eyebrow">Page by page</div>
+          <h2>The same system in five rooms.</h2>
+        </div>
+      </div>
+      <div class="pages">
+        <div class="page-card"><div class="n">01</div><h3>Landing</h3><p>Navy hero with the live ballot stub, a scrolling count ticker, open elections, how-it-works, candidate roster, closing CTA.</p></div>
+        <div class="page-card"><div class="n">02</div><h3>Auth</h3><p>One translucent glass card over a blurred campus photo. White fields, lime focus ring, rounded buttons.</p></div>
+        <div class="page-card"><div class="n">03</div><h3>Admin</h3><p>Control room: KPI strip, turnout donut, election cards, registry tables, status pills.</p></div>
+        <div class="page-card"><div class="n">04</div><h3>Student</h3><p>Ballot folder: one continuous scroll, one decision per block, sticky progress.</p></div>
+        <div class="page-card"><div class="n">05</div><h3>Results</h3><p>One card per election, position-by-position tallies, lime share bars, LIVE/ONGOING pills.</p></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div>
+      <p><span class="gold">voting-app3</span> — design system &amp; reference pack</p>
+      <p>Prepared for panel review · October 2026 · voting-app3</p>
+    </div>
+    <div style="text-align:right;">
+      <p><a href="INSPIRATION.md">Inspiration notes</a> &nbsp;·&nbsp; <a href="screens/01-landing.jpeg">Open a screen</a></p>
+      <p>Navy, lime, gold, rules, seals, record.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -8,39 +8,64 @@ $pdo = getDbConnection();
 syncElectionStatuses($pdo);
 $isLoggedIn = !empty($_SESSION['user_id']);
 
-// Election logos — SSG's site-wide logo, and each department's DSG logo.
-// electionLogoHtml() (includes/functions.php) falls back to a generic
-// placeholder glyph if a given type/department has no logo uploaded yet.
-$ssgLogo = getSiteSetting($pdo, 'ssg_logo');
-$departmentLogos = getDepartmentLogos($pdo);
+// Everything below is public-page data. A DB hiccup here shouldn't take
+// the whole homepage down (the global exception handler would show a
+// generic 500) — instead the page renders with empty state blocks and
+// zeroed stats, and the real error goes to the server log.
+$ssgLogo = null;
+$departmentLogos = [];
+$elections = [];
+$candidates = [];
+$totalStudents = 0;
+$totalVoters = 0;
+$ongoingElections = [];
+try {
+    // Election logos — SSG's site-wide logo, and each department's DSG logo.
+    // electionLogoHtml() (includes/functions.php) falls back to a generic
+    // placeholder glyph if a given type/department has no logo uploaded yet.
+    $ssgLogo = getSiteSetting($pdo, 'ssg_logo');
+    $departmentLogos = getDepartmentLogos($pdo);
 
-// Current elections (non-draft)
-$elections = $pdo->query("
-    SELECT name, type, department, status, start_date, end_date
-    FROM elections
-    WHERE status != 'draft'
-    ORDER BY start_date ASC
-")->fetchAll();
+    // Current elections. Archived ones are past cycles the admin has
+    // explicitly tucked away — they don't belong under "Current Elections"
+    // on the public homepage any more than they belong on a student's
+    // dashboard.
+    $elections = $pdo->query("
+        SELECT e.name, e.type, e.department, e.status, e.start_date, e.end_date,
+               sy.label AS target_school_year_label
+        FROM elections e
+        LEFT JOIN school_years sy ON sy.id = e.target_school_year_id
+        WHERE e.status NOT IN ('draft', 'archived')
+        ORDER BY e.start_date ASC
+    ")->fetchAll();
 
-// Candidates for the marquee (limit to 16)
-$candStmt = $pdo->prepare('
-    SELECT c.id, c.name, c.photo, p.title AS position_title, e.name AS election_name
-    FROM candidates c
-    JOIN positions p ON p.id = c.position_id
-    JOIN election_positions ep ON ep.position_id = p.id
-    JOIN elections e ON e.id = ep.election_id
-    WHERE e.status != \'draft\'
-    ORDER BY RANDOM()
-    LIMIT 16
-');
-$candStmt->execute();
-$candidates = $candStmt->fetchAll();
+    // Candidates for the marquee (limit to 16) — same archived exclusion.
+    $candStmt = $pdo->prepare('
+        SELECT c.id, c.name, c.photo, p.title AS position_title, e.name AS election_name
+        FROM candidates c
+        JOIN positions p ON p.id = c.position_id
+        JOIN election_positions ep ON ep.position_id = p.id
+        JOIN elections e ON e.id = ep.election_id
+        WHERE e.status NOT IN (\'draft\', \'archived\')
+        ORDER BY ' . (isMysql() ? 'RAND()' : 'RANDOM()') . '
+        LIMIT 16
+    ');
+    $candStmt->execute();
+    $candidates = $candStmt->fetchAll();
 
-// Ticker stats — real numbers, not placeholders
-$totalStudents = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
-$totalVoters   = (int) $pdo->query('SELECT COUNT(DISTINCT user_id) FROM votes')->fetchColumn();
+    // Ticker stats — real numbers, not placeholders
+    $totalStudents = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+    $totalVoters   = (int) $pdo->query('SELECT COUNT(DISTINCT user_id) FROM votes')->fetchColumn();
+} catch (Throwable $e) {
+    error_log('Landing page data load failed: ' . $e->getMessage());
+}
 $liveCount = 0;
-foreach ($elections as $e) { if ($e['status'] === 'ongoing') $liveCount++; }
+foreach ($elections as $e) {
+    if ($e['status'] === 'ongoing') {
+        $liveCount++;
+        $ongoingElections[] = $e;
+    }
+}
 
 function statusLabel($s) {
     return ['draft'=>'Not Started','scheduled'=>'Upcoming','ongoing'=>'Ongoing','paused'=>'Paused','closed'=>'Ended','archived'=>'Archived'][$s] ?? $s;
@@ -104,15 +129,23 @@ a{color:inherit;}
    ===================================================================== */
 .nav{
     position:sticky;top:0;z-index:200;
-    background:rgba(11,31,58,0.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    background:transparent;
     border-bottom:1px solid rgba(212,175,55,0.25);
 }
+/* The bar's surface lives on this pseudo-element instead of .nav itself, so it
+   can paint above the mobile menu (z-index 0) but below the brand and
+   hamburger. Also keeps backdrop-filter off .nav, which would otherwise become
+   the containing block for the fixed-position menu and shrink it to bar size. */
+.nav::before{
+    content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:rgba(11,31,58,0.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
 .nav-inner{display:flex;align-items:center;justify-content:space-between;padding:.9rem 0;}
-.brand{display:flex;align-items:center;gap:.75rem;text-decoration:none;}
+.brand{display:flex;align-items:center;gap:.75rem;text-decoration:none;position:relative;z-index:220;}
 .brand img{height:38px;width:38px;border-radius:50%;background:#fff;}
 .brand .name{color:#fff;font-weight:700;font-size:.98rem;line-height:1.25;}
 .brand .name small{display:block;color:var(--gold-light);font-weight:500;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;}
-.nav-links{display:flex;align-items:center;gap:.4rem;}
+.nav-links{display:flex;align-items:center;gap:.4rem;position:relative;z-index:2;}
 .nav-links a{
     padding:.5rem .95rem;border-radius:999px;font-weight:600;font-size:.85rem;text-decoration:none;
     color:#dbe4f2;transition:background .15s,color .15s;
@@ -122,13 +155,57 @@ a{color:inherit;}
 .nav-links a.pill:hover{background:rgba(212,175,55,0.12);}
 .nav-links a.solid{background:var(--lime);color:#052e16;}
 .nav-links a.solid:hover{background:var(--lime-light);}
-.nav-toggle{display:none;background:none;border:none;color:#fff;font-size:1.6rem;cursor:pointer;}
-@media (max-width:760px){
-    .nav-links{position:fixed;top:64px;left:0;right:0;background:var(--navy-900);flex-direction:column;align-items:stretch;padding:1rem 1.25rem;gap:.5rem;transform:translateY(-130%);transition:transform .25s ease;border-bottom:1px solid rgba(212,175,55,.25);}
-    .nav-links.open{transform:translateY(0);}
-    .nav-links a{text-align:center;}
-    .nav-toggle{display:block;}
-}
+    .nav-toggle{display:none;background:none;border:none;color:#fff;cursor:pointer;z-index:230;position:relative;padding:0.45rem;}
+    .nav-toggle .hamburger{display:block;position:relative;width:24px;height:16px;}
+    .nav-toggle .hamburger::before,
+    .nav-toggle .hamburger::after,
+    .nav-toggle .hamburger span{content:'';position:absolute;left:0;right:0;height:2px;background:#fff;border-radius:1px;transition:transform .2s ease,opacity .15s ease;}
+    .nav-toggle .hamburger::before{top:0;}
+    .nav-toggle .hamburger span{top:50%;transform:translateY(-50%);}
+    .nav-toggle .hamburger::after{bottom:0;}
+    .nav-toggle[aria-expanded="true"] .hamburger::before{top:50%;transform:translateY(-50%) rotate(45deg);}
+    .nav-toggle[aria-expanded="true"] .hamburger span{opacity:0;}
+    .nav-toggle[aria-expanded="true"] .hamburger::after{bottom:auto;top:50%;transform:translateY(-50%) rotate(-45deg);}
+    @media (max-width:760px){
+        /* Compact dropdown panel. Without a filter/transform on the nav, fixed
+           resolves against the viewport. z-index 0 keeps it beneath .nav::before
+           (z-index 1) and the brand/hamburger, so the panel slides out from
+           behind the top bar instead of covering it. Height is content-driven,
+           so it ends right below the last link instead of spanning the screen. */
+        body.nav-open{overflow:hidden;}
+        .nav-links{
+            position:fixed;top:0;left:0;right:0;z-index:0;
+            flex-direction:column;
+            align-items:stretch;
+            justify-content:flex-start;
+            gap:.45rem;
+            max-height:100vh;
+            padding:4.6rem 1.25rem 1.25rem;
+            background:var(--navy-900);
+            border-bottom:1px solid rgba(212,175,55,.3);
+            border-radius:0 0 18px 18px;
+            box-shadow:0 22px 45px rgba(2,10,26,.5);
+            overflow-y:auto;
+            transform:translateY(-100%);
+            visibility:hidden;
+            transition:transform .3s cubic-bezier(.22,.8,.24,1),visibility 0s linear .3s;
+        }
+        .nav-links.open{transform:translateY(0);visibility:visible;transition-delay:0s;}
+        .nav-links a{
+            display:flex;align-items:center;justify-content:center;
+            width:100%;min-height:46px;
+            padding:.8rem 1rem;
+            text-align:center;
+            font-size:.95rem;
+            border-radius:12px;
+            background:rgba(255,255,255,.05);
+        }
+        .nav-links a:hover{background:rgba(255,255,255,.1);}
+        .nav-links a.pill{border-width:1px;}
+        .nav-links a.pill:hover{background:rgba(212,175,55,.14);}
+        .nav-links a.solid:hover{background:var(--lime-light);}
+        .nav-toggle{display:block;}
+    }
 
 /* =====================================================================
    HERO
@@ -170,6 +247,13 @@ a{color:inherit;}
     color:#c3ceE0;font-size:1.08rem;line-height:1.65;max-width:520px;margin:1.5rem 0 2.25rem;
 }
 .hero-ctas{display:flex;gap:1rem;flex-wrap:wrap;}
+.hero-voting-banner{
+    background:rgba(132,204,22,0.14);border:1px solid rgba(132,204,22,0.4);
+    border-radius:12px;padding:.9rem 1.1rem;margin:0 0 1.5rem;max-width:520px;
+}
+.hero-voting-banner-title{font-weight:700;font-size:.85rem;color:#fff;margin-bottom:.5rem;}
+.hero-voting-banner-row{display:flex;justify-content:space-between;gap:.75rem;font-size:.82rem;color:#dbe4f2;padding:.2rem 0;flex-wrap:wrap;}
+.hero-voting-banner-ends{color:var(--lime-light);font-weight:600;white-space:nowrap;}
 .btn{
     display:inline-flex !important;align-items:center;justify-content:center;gap:.5rem;
     height:56px !important;min-height:56px !important;max-height:56px !important;line-height:1 !important;
@@ -188,12 +272,23 @@ a{color:inherit;}
 .btn-outline{background:#fff;color:var(--navy-900);border-color:rgba(255,255,255,.7);}
 .btn-outline:hover{background:var(--gold-light);border-color:var(--gold-light);}
 
-/* --- Signature element: the ballot stub --- */
+/* --- Signature element: the ballot stub ---
+   The stub frame stays decorative (perforated edge, seal, stamp), but the
+   content inside is a faithful miniature of the REAL student ballot in
+   dashboard.php: same progress header, position-step eyebrow/title/
+   instruction, and candidate cards (bubble + name + party + meta +
+   platform + photo), re-themed into the landing palette. Class names are
+   prefixed bs- to keep them scoped away from the dashboard stylesheet. */
 .ballot-stub{
     position:relative;background:var(--paper);border-radius:14px;
     box-shadow:0 30px 60px rgba(2,10,26,.45);padding:1.6rem 1.6rem 1.8rem;
-    transform:rotate(2.5deg);
 }
+/* The 2.5° tilt is part of the stub's identity, but .reveal/.reveal.in-view
+   (equal/higher specificity) would clobber a plain transform — so the
+   rotation is paired with the reveal states directly. */
+.ballot-stub.reveal{transform:rotate(2.5deg) translateY(24px);}
+.ballot-stub.reveal.in-view{transform:rotate(2.5deg) translateY(0);}
+@media (prefers-reduced-motion:reduce){ .ballot-stub.reveal,.ballot-stub.reveal.in-view{transform:rotate(2.5deg);} }
 .ballot-stub::before{
     content:'';position:absolute;top:0;bottom:0;left:-11px;width:22px;
     background:radial-gradient(circle,var(--navy-950) 9px,transparent 9.5px);
@@ -207,21 +302,53 @@ a{color:inherit;}
 }
 .ballot-stub .bs-head .bs-title{font-family:var(--mono);font-size:.7rem;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;text-align:right;}
 .ballot-stub .bs-title strong{display:block;color:var(--ink);font-size:.85rem;letter-spacing:0;}
-.ballot-row{display:flex;align-items:center;gap:.85rem;padding:.65rem 0;border-bottom:1px solid var(--paper-dim);}
-.ballot-row:last-of-type{border-bottom:none;}
-.ballot-row .bubble{
-    width:24px;height:24px;border-radius:50%;border:2px solid var(--navy-700);flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;background:transparent;
+
+/* Mirrors .ballot-progress-track / .ballot-progress-fill / .ballot-progress-label */
+.bs-progress-track{height:8px;background:var(--paper-dim);border-radius:999px;overflow:hidden;}
+.bs-progress-fill{height:100%;width:100%;background:linear-gradient(90deg,#84cc16,#65a30d);border-radius:999px;transition:width .35s ease;}
+.bs-progress-label{margin-top:.45rem;font-size:.72rem;font-weight:600;color:var(--muted);}
+
+/* Mirrors .ballot-step + .ballot-step (dashed rule between positions) */
+.bs-step + .bs-step{margin-top:1.15rem;padding-top:1.05rem;border-top:1px dashed #ddd6c4;}
+
+/* Mirrors .ballot-step-eyebrow / .ballot-position-title / .ballot-instruction */
+.bs-eyebrow{display:inline-block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#65a30d;background:rgba(132,204,22,.14);padding:.2rem .55rem;border-radius:999px;margin-bottom:.45rem;}
+.bs-position-title{margin:0;font-family:var(--display);font-weight:800;font-size:1.08rem;color:var(--ink);border-left:3px solid var(--lime);padding-left:.5rem;}
+.bs-instruction{margin:.3rem 0 0;color:var(--muted);font-size:.74rem;}
+
+/* Mirrors .ballot-candidates / .ballot-candidate */
+.bs-candidates{display:flex;flex-direction:column;gap:.55rem;margin-top:.7rem;}
+.bs-candidate{
+    display:flex;align-items:center;gap:.75rem;
+    background:#fff;border:2px solid var(--paper-dim);border-radius:12px;
+    padding:.65rem .8rem;transition:border-color .2s,box-shadow .2s;
 }
-.ballot-row .bubble .fill{
-    width:0;height:0;border-radius:50%;background:#1a1a1a;
-    transition:width .4s cubic-bezier(.34,1.2,.64,1),height .4s cubic-bezier(.34,1.2,.64,1);
-}
-.ballot-row.marked .bubble{border-color:#1a1a1a;}
-.ballot-row.marked .bubble .fill{width:100%;height:100%;}
-.ballot-row .name{font-weight:700;font-size:.92rem;color:var(--ink);transition:color .3s;}
-.ballot-row.marked .name{color:var(--navy-900);}
-.ballot-row .role{font-size:.72rem;color:var(--muted);}
+.bs-candidate.marked{border-color:var(--ink);box-shadow:0 4px 12px rgba(15,23,42,.08);}
+
+/* Mirrors .ballot-bubble / .ballot-bubble-fill — no gap, edge-to-edge fill */
+.bs-bubble{flex-shrink:0;width:22px;height:22px;border-radius:50%;border:2.5px solid var(--muted);box-sizing:border-box;display:block;transition:border-color .2s;}
+.bs-bubble-fill{display:block;width:100%;height:100%;border-radius:50%;background:transparent;transition:background-color .15s ease;}
+.bs-candidate.marked .bs-bubble{border-color:var(--ink);}
+.bs-candidate.marked .bs-bubble-fill{background:var(--ink);}
+
+/* Mirrors .ballot-candidate-name / -party / -meta / -platform */
+.bs-candidate-body{display:flex;flex-direction:column;gap:.1rem;min-width:0;flex:1;}
+.bs-candidate-name{font-weight:700;font-size:.88rem;color:var(--ink);}
+.bs-candidate-party{font-size:.68rem;font-weight:600;color:#65a30d;}
+.bs-candidate-meta{display:flex;flex-wrap:wrap;gap:.4rem;font-size:.66rem;color:var(--muted);}
+.bs-candidate-meta span:not(:last-child)::after{content:'·';margin-left:.4rem;color:#b9b19b;}
+.bs-candidate-platform{font-size:.68rem;color:var(--ink);margin-top:.15rem;line-height:1.4;}
+
+/* Mirrors .candidate-avatar — placeholder art until real photos exist */
+.bs-avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;background:var(--paper-dim);border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.1);flex-shrink:0;margin-left:auto;}
+
+/* Mirrors .ballot-submit-block */
+.bs-submit-block{margin-top:1.15rem;padding-top:.95rem;border-top:2px solid var(--paper-dim);text-align:center;}
+.bs-submit-block .bs-instruction{font-size:.68rem;}
+.bs-submit-btn{display:inline-flex;align-items:center;justify-content:center;margin-top:.6rem;padding:.55rem 1.5rem;border-radius:999px;background:var(--lime);color:#052e16;font-weight:700;font-size:.8rem;}
+
+@media (max-width:520px){ .bs-avatar{width:40px;height:40px;} .bs-candidate-platform{display:none;} }
+
 .bs-foot{margin-top:1.1rem;display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:.68rem;color:var(--muted);letter-spacing:.04em;}
 .bs-foot .stamp{color:var(--gold);border:1px solid var(--gold);padding:.2rem .55rem;border-radius:5px;transform:rotate(-4deg);font-weight:600;}
 
@@ -254,11 +381,11 @@ a{color:inherit;}
    ELECTIONS — ballot-stub cards
    ===================================================================== */
 .elections{background:var(--paper);}
-.elec-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;}
-@media (max-width:920px){ .elec-grid{grid-template-columns:repeat(2,1fr);} }
+.elec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.5rem;}
+@media (max-width:920px){ .elec-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
 @media (max-width:600px){ .elec-grid{grid-template-columns:1fr;} }
 .elec-card{
-    position:relative;background:#fff;border-radius:16px;padding:1.6rem 1.6rem 1.4rem;
+    position:relative;background:#fff;border-radius:16px;padding:1.6rem 1.6rem 1.4rem;min-width:0;
     box-shadow:0 2px 10px rgba(15,23,42,.06);border-top:4px solid var(--lime);
     transition:transform .2s,box-shadow .2s;
 }
@@ -399,10 +526,9 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
             <img src="assets/logo.png" alt="ACC seal">
             <span class="name">Aklan Catholic College<small>School Elections</small></span>
         </a>
-        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="navLinks"><span class="hamburger"><span></span></span></button>
         <div class="nav-links" id="navLinks">
             <a href="#elections">Elections</a>
-            <a href="results.php">Results</a>
             <?php if ($isLoggedIn): ?>
                 <a href="dashboard.php" class="solid">Dashboard</a>
                 <a href="logout.php" class="pill">Log Out</a>
@@ -418,32 +544,77 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
 <section class="hero">
     <div class="wrap hero-grid">
         <div>
-            <div class="eyebrow">Official Ballot &middot; A.Y. 2025&ndash;2026</div>
             <h1 aria-label="Your Voice Your Choice">Your V<span class="ballot-o empty" aria-hidden="true"></span>ice<span class="line2">Your Ch<span class="ballot-o filled" aria-hidden="true"></span>ice</span></h1>
             <p class="sub">Participate in shaping the future of Aklan Catholic College. Cast your vote for the leaders who will represent your department and your school.</p>
+            <?php if ($ongoingElections): ?>
+                <div class="hero-voting-banner">
+                    <div class="hero-voting-banner-title">🗳 Voting is open right now — don't miss it</div>
+                    <?php foreach ($ongoingElections as $oe): ?>
+                        <div class="hero-voting-banner-row">
+                            <span><?= h($oe['name']) ?><?= !empty($oe['target_school_year_label']) ? ' · SY ' . h($oe['target_school_year_label']) : '' ?></span>
+                            <span class="hero-voting-banner-ends">ends <?= date('M j, g:ia', strtotime($oe['end_date'])) ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
             <div class="hero-ctas">
                 <a href="<?= $isLoggedIn ? 'dashboard.php' : 'login.php' ?>" class="btn btn-primary"><svg class="icon"><use href="#icon-check"/></svg> Vote Now</a>
-                <a href="results.php" class="btn btn-outline"><svg class="icon"><use href="#icon-chart"/></svg> View Live Results</a>
             </div>
         </div>
 
         <div class="ballot-stub reveal">
             <div class="bs-head">
                 <div class="seal">ACC</div>
-                <div class="bs-title">Sample ballot<strong>President &mdash; SSG</strong></div>
+                <div class="bs-title">Sample ballot<strong>SSG General Elections</strong></div>
             </div>
+            <!-- Faithful miniature of the real student ballot (dashboard.php):
+                 progress header, position steps with eyebrow/title/instruction,
+                 candidate cards with bubble + details + placeholder photo. -->
             <div class="ballot-demo" id="ballotDemo">
-                <div class="ballot-row marked">
-                    <div class="bubble"><div class="fill"></div></div>
-                    <div><div class="name">Maria Santos</div><div class="role">4th Year &middot; BS IT</div></div>
+                <div class="bs-progress-track"><div class="bs-progress-fill" id="bsProgressFill"></div></div>
+                <div class="bs-progress-label" id="bsProgressLabel">1 of 1 positions answered</div>
+
+                <div class="bs-step">
+                    <span class="bs-eyebrow">Position 1 of 1</span>
+                    <h3 class="bs-position-title">President &mdash; SSG</h3>
+                    <p class="bs-instruction">Select one candidate, then continue.</p>
+                    <div class="bs-candidates">
+                        <div class="bs-candidate marked">
+                            <span class="bs-bubble"><span class="bs-bubble-fill"></span></span>
+                            <span class="bs-candidate-body">
+                                <span class="bs-candidate-name">Maria Santos</span>
+                                <span class="bs-candidate-party">Kabataan Alliance</span>
+                                <span class="bs-candidate-meta"><span>BS Information Technology</span><span>4th Year</span></span>
+                                <span class="bs-candidate-platform"><strong>Platform:</strong> Transparent SSG funds, faster campus Wi-Fi, longer library hours.</span>
+                            </span>
+                            <img class="bs-avatar" src="assets/default-avatar.svg" alt="">
+                        </div>
+                        <div class="bs-candidate">
+                            <span class="bs-bubble"><span class="bs-bubble-fill"></span></span>
+                            <span class="bs-candidate-body">
+                                <span class="bs-candidate-name">Julian Reyes</span>
+                                <span class="bs-candidate-party">Independent</span>
+                                <span class="bs-candidate-meta"><span>BS Business Administration</span><span>3rd Year</span></span>
+                                <span class="bs-candidate-platform"><strong>Platform:</strong> Cheaper photocopy rates and more student lounges.</span>
+                            </span>
+                            <img class="bs-avatar" src="assets/default-avatar.svg" alt="">
+                        </div>
+                        <div class="bs-candidate">
+                            <span class="bs-bubble"><span class="bs-bubble-fill"></span></span>
+                            <span class="bs-candidate-body">
+                                <span class="bs-candidate-name">Anna Cruz</span>
+                                <span class="bs-candidate-party">ACC Youth List</span>
+                                <span class="bs-candidate-meta"><span>AB Communication</span><span>4th Year</span></span>
+                                <span class="bs-candidate-platform"><strong>Platform:</strong> Mental-health days and a student feedback hotline.</span>
+                            </span>
+                            <img class="bs-avatar" src="assets/default-avatar.svg" alt="">
+                        </div>
+                    </div>
                 </div>
-                <div class="ballot-row">
-                    <div class="bubble"><div class="fill"></div></div>
-                    <div><div class="name">Julian Reyes</div><div class="role">3rd Year &middot; BSBA</div></div>
-                </div>
-                <div class="ballot-row">
-                    <div class="bubble"><div class="fill"></div></div>
-                    <div><div class="name">Anna Cruz</div><div class="role">4th Year &middot; AB Comm</div></div>
+
+                <div class="bs-submit-block">
+                    <p class="bs-instruction">Skipping any position is allowed &mdash; leave it blank if you'd rather not choose. Your selections can't be changed after you submit.</p>
+                    <span class="bs-submit-btn">Submit My Vote</span>
                 </div>
             </div>
             <div class="bs-foot">
@@ -503,6 +674,9 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
                             <span class="elec-status <?= $sClass ?>"><span class="d"></span><?= $statusText ?></span>
                         </div>
                         <div class="dates"><?= date('M j, Y', $start->getTimestamp()) ?> &rarr; <?= date('M j, Y', $end->getTimestamp()) ?></div>
+                        <?php if (!empty($e['target_school_year_label'])): ?>
+                            <div class="dates">🎓 For school year <?= h($e['target_school_year_label']) ?></div>
+                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -578,7 +752,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
         <?php
             $badgeHtml = '';
             foreach ($candidates as $c) {
-                $photo = !empty($c['photo']) ? $c['photo'] : 'assets/default-avatar.png';
+                $photo = !empty($c['photo']) ? $c['photo'] : 'assets/default-avatar.svg';
                 $badgeHtml .= '<div class="cand-badge"><div class="tab"></div>'
                     . '<img src="' . htmlspecialchars($photo) . '" alt="">'
                     . '<div class="cb-name">' . htmlspecialchars($c['name']) . '</div>'
@@ -612,7 +786,6 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
             <div><strong>Aklan Catholic College</strong><small>Student Elections &middot; &copy; <?= date('Y') ?> School Elections, ACC</small></div>
         </div>
         <div class="foot-links">
-            <a href="results.php">Results</a>
             <a href="login.php">Log In</a>
             <a href="student/register.php">Register</a>
         </div>
@@ -623,7 +796,32 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
 // Mobile nav toggle
 const navToggle = document.getElementById('navToggle');
 const navLinks = document.getElementById('navLinks');
-navToggle?.addEventListener('click', () => navLinks.classList.toggle('open'));
+if (navToggle && navLinks) {
+    const setNavOpen = (open) => {
+        navLinks.classList.toggle('open', open);
+        navToggle.setAttribute('aria-expanded', String(open));
+        document.body.classList.toggle('nav-open', open);
+    };
+    navToggle.addEventListener('click', () => setNavOpen(!navLinks.classList.contains('open')));
+    // In-page links (#elections) don't reload, so close the panel or it would
+    // stay covering the section it just scrolled to.
+    navLinks.addEventListener('click', (e) => {
+        if (e.target.closest('a')) setNavOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && navLinks.classList.contains('open')) {
+            setNavOpen(false);
+            navToggle.focus();
+        }
+    });
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 760) setNavOpen(false);
+    });
+    // With a compact dropdown, tapping anywhere outside it should dismiss it.
+    document.addEventListener('click', (e) => {
+        if (navLinks.classList.contains('open') && !e.target.closest('.nav')) setNavOpen(false);
+    });
+}
 
 // Scroll-reveal
 const revealEls = document.querySelectorAll('.reveal');
@@ -641,22 +839,38 @@ if ('IntersectionObserver' in window) {
     revealEls.forEach(el => el.classList.add('in-view'));
 }
 
-// Sample ballot: loop the vote between candidates so the bubble-shading
-// animation is visible on load, not just on interaction.
+// Sample ballot: mirrors the real ballot's behavior — cycle the picks
+// position by position (one radio-style pick per position) so the
+// bubble-shading AND the answered-progress bar animate on load, not
+// just on interaction. Reduced-motion keeps the static marked state.
 (function() {
     const demo = document.getElementById('ballotDemo');
     if (!demo) return;
-    const rows = demo.querySelectorAll('.ballot-row');
-    if (rows.length < 2) return;
+    const steps = Array.prototype.slice.call(demo.querySelectorAll('.bs-step'));
+    if (!steps.length) return;
+    const fill = document.getElementById('bsProgressFill');
+    const label = document.getElementById('bsProgressLabel');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) return;
 
-    let current = 0;
+    function render() {
+        const answered = steps.filter(s => s.querySelector('.bs-candidate.marked')).length;
+        if (fill) fill.style.width = (answered / steps.length * 100) + '%';
+        if (label) label.textContent = answered + ' of ' + steps.length + ' positions answered';
+    }
+
+    let active = 0;
     setInterval(() => {
-        rows[current].classList.remove('marked');
-        current = (current + 1) % rows.length;
-        rows[current].classList.add('marked');
+        const candidates = Array.prototype.slice.call(steps[active].querySelectorAll('.bs-candidate'));
+        if (candidates.length) {
+            const markedIndex = candidates.findIndex(c => c.classList.contains('marked'));
+            candidates.forEach(c => c.classList.remove('marked'));
+            candidates[(markedIndex + 1) % candidates.length].classList.add('marked');
+        }
+        active = (active + 1) % steps.length;
+        render();
     }, 2400);
+    render();
 })();
 </script>
 </body>
