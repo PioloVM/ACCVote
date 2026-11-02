@@ -354,7 +354,7 @@ $csrfToken = csrfToken();
         </form>
 
         <div class="footer-links">
-            <a href="../login.php">&larr; Student Login</a>
+            <a href="../student/login.php">&larr; Student Login</a>
         </div>
     </div>
 </div>

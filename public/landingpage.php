@@ -523,18 +523,18 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
 <nav class="nav">
     <div class="wrap nav-inner">
         <a href="#" class="brand">
-            <img src="assets/logo.png" alt="ACC seal">
+            <img src="../assets/logo.png" alt="ACC seal">
             <span class="name">Aklan Catholic College<small>School Elections</small></span>
         </a>
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="navLinks"><span class="hamburger"><span></span></span></button>
         <div class="nav-links" id="navLinks">
             <a href="#elections">Elections</a>
             <?php if ($isLoggedIn): ?>
-                <a href="dashboard.php" class="solid">Dashboard</a>
-                <a href="logout.php" class="pill">Log Out</a>
+                <a href="../student/dashboard.php" class="solid">Dashboard</a>
+                <a href="../student/logout.php" class="pill">Log Out</a>
             <?php else: ?>
-                <a href="student/register.php" class="pill">Register</a>
-                <a href="login.php" class="solid">Log In</a>
+                <a href="../student/register.php" class="pill">Register</a>
+                <a href="../student/login.php" class="solid">Log In</a>
             <?php endif; ?>
         </div>
     </div>
@@ -558,7 +558,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
                 </div>
             <?php endif; ?>
             <div class="hero-ctas">
-                <a href="<?= $isLoggedIn ? 'dashboard.php' : 'login.php' ?>" class="btn btn-primary"><svg class="icon"><use href="#icon-check"/></svg> Vote Now</a>
+                <a href="<?= $isLoggedIn ? '../student/dashboard.php' : '../student/login.php' ?>" class="btn btn-primary"><svg class="icon"><use href="#icon-check"/></svg> Vote Now</a>
             </div>
         </div>
 
@@ -587,7 +587,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
                                 <span class="bs-candidate-meta"><span>BS Information Technology</span><span>4th Year</span></span>
                                 <span class="bs-candidate-platform"><strong>Platform:</strong> Transparent SSG funds, faster campus Wi-Fi, longer library hours.</span>
                             </span>
-                            <img class="bs-avatar" src="assets/default-avatar.svg" alt="">
+                            <img class="bs-avatar" src="../assets/default-avatar.svg" alt="">
                         </div>
                         <div class="bs-candidate">
                             <span class="bs-bubble"><span class="bs-bubble-fill"></span></span>
@@ -597,7 +597,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
                                 <span class="bs-candidate-meta"><span>BS Business Administration</span><span>3rd Year</span></span>
                                 <span class="bs-candidate-platform"><strong>Platform:</strong> Cheaper photocopy rates and more student lounges.</span>
                             </span>
-                            <img class="bs-avatar" src="assets/default-avatar.svg" alt="">
+                            <img class="bs-avatar" src="../assets/default-avatar.svg" alt="">
                         </div>
                         <div class="bs-candidate">
                             <span class="bs-bubble"><span class="bs-bubble-fill"></span></span>
@@ -607,7 +607,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
                                 <span class="bs-candidate-meta"><span>AB Communication</span><span>4th Year</span></span>
                                 <span class="bs-candidate-platform"><strong>Platform:</strong> Mental-health days and a student feedback hotline.</span>
                             </span>
-                            <img class="bs-avatar" src="assets/default-avatar.svg" alt="">
+                            <img class="bs-avatar" src="../assets/default-avatar.svg" alt="">
                         </div>
                     </div>
                 </div>
@@ -752,7 +752,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
         <?php
             $badgeHtml = '';
             foreach ($candidates as $c) {
-                $photo = !empty($c['photo']) ? $c['photo'] : 'assets/default-avatar.svg';
+                $photo = !empty($c['photo']) ? $c['photo'] : '../assets/default-avatar.svg';
                 $badgeHtml .= '<div class="cand-badge"><div class="tab"></div>'
                     . '<img src="' . htmlspecialchars($photo) . '" alt="">'
                     . '<div class="cb-name">' . htmlspecialchars($c['name']) . '</div>'
@@ -771,9 +771,9 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
         <h2>Every ballot <span class="hi">counts</span></h2>
         <p>Make sure your voice is heard — it takes less than two minutes.</p>
         <div class="ctas">
-            <a href="<?= $isLoggedIn ? 'dashboard.php' : 'login.php' ?>" class="btn btn-primary">Log In to Vote</a>
+            <a href="<?= $isLoggedIn ? '../student/dashboard.php' : '../student/login.php' ?>" class="btn btn-primary">Log In to Vote</a>
             <?php if (!$isLoggedIn): ?>
-                <a href="student/register.php" class="btn btn-outline">Register Now</a>
+                <a href="../student/register.php" class="btn btn-outline">Register Now</a>
             <?php endif; ?>
         </div>
     </div>
@@ -782,12 +782,12 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
 <footer>
     <div class="wrap foot-inner">
         <div class="foot-brand">
-            <img src="assets/logo.png" alt="ACC seal">
+            <img src="../assets/logo.png" alt="ACC seal">
             <div><strong>Aklan Catholic College</strong><small>Student Elections &middot; &copy; <?= date('Y') ?> School Elections, ACC</small></div>
         </div>
         <div class="foot-links">
-            <a href="login.php">Log In</a>
-            <a href="student/register.php">Register</a>
+            <a href="../student/login.php">Log In</a>
+            <a href="../student/register.php">Register</a>
         </div>
     </div>
 </footer>

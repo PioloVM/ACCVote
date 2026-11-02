@@ -8,8 +8,13 @@
 //      so SCRIPT_NAME is /router.php and the base resolves to ''.
 // Deliberately self-contained: no session, no DB, no shared stylesheet -
 // an error page must render even when everything else is broken.
-$scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/404.php');
+$scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '/public/404.php');
 $base = rtrim(dirname($scriptName), '/');
+// 404.php now lives in public/. Under Apache the base ends in
+// "/public" and is stripped back to the app root; under the php -S
+// router the base is "" or router-shaped, so the fallback "" is
+// correct for the domain-root mount.
+$root = str_ends_with($base, '/public') ? substr($base, 0, -strlen('/public')) : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -143,13 +148,13 @@ $base = rtrim(dirname($scriptName), '/');
         <p>The address you followed doesn&rsquo;t exist or may have moved. Head back and pick up where you left off.</p>
 
         <div class="actions">
-            <a class="btn btn-primary" href="<?= htmlspecialchars($base, ENT_QUOTES) ?>/login.php">
+            <a class="btn btn-primary" href="<?= htmlspecialchars($root, ENT_QUOTES) ?>/student/login.php">
                 Back to login
                 <span class="ico" aria-hidden="true">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
                 </span>
             </a>
-            <a class="btn btn-ghost" href="<?= htmlspecialchars($base, ENT_QUOTES) ?>/index.php">Go home</a>
+            <a class="btn btn-ghost" href="<?= htmlspecialchars($root, ENT_QUOTES) ?>/public/index.php">Go home</a>
         </div>
 
         <p class="foot">Office of the Registrar</p>

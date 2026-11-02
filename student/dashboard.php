@@ -37,7 +37,7 @@
 
         if (!$user) {
             session_destroy();
-            header('Location: index.php');
+            header('Location: ../public/index.php');
             exit;
         }
     }
@@ -290,8 +290,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= assetV('assets/style.css') ?>">
-    <link rel="stylesheet" href="<?= assetV('assets/dashboard-app.css') ?>">
+    <link rel="stylesheet" href="<?= assetV('assets/style.css', '../') ?>">
+    <link rel="stylesheet" href="<?= assetV('assets/dashboard-app.css', '../') ?>">
     <script>
     (function () {
         var saved = localStorage.getItem('studentTheme');
@@ -304,7 +304,7 @@
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <div class="sidebar" id="sidebar">
         <div class="logo-area">
-            <img src="assets/logo.png" alt="FICT Logo">
+            <img src="../assets/logo.png" alt="FICT Logo">
             <h2>School Elections</h2>
             <span class="logo-tagline">Student Portal</span>
         </div>
@@ -511,7 +511,7 @@
                                                                 <span class="ballot-candidate-platform"><strong>Platform:</strong> <?= h($candidate['platform']) ?></span>
                                                             <?php endif; ?>
                                                         </span>
-                                                        <img class="candidate-avatar" loading="lazy" src="<?= !empty($candidate['photo']) ? h('photo.php?c=' . (int) $candidate['id']) : 'assets/default-avatar.svg' ?>" alt="">
+                                                        <img class="candidate-avatar" loading="lazy" src="<?= !empty($candidate['photo']) ? h('photo.php?c=' . (int) $candidate['id']) : '../assets/default-avatar.svg' ?>" alt="">
                                                     </label>
                                                 <?php endforeach; ?>
                                             </fieldset>
@@ -889,8 +889,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= assetV('assets/style.css') ?>">
-    <link rel="stylesheet" href="<?= assetV('assets/dashboard-app.css') ?>">
+    <link rel="stylesheet" href="<?= assetV('assets/style.css', '../') ?>">
+    <link rel="stylesheet" href="<?= assetV('assets/dashboard-app.css', '../') ?>">
     <script>
     // Applied synchronously, before the body renders, so the page never
     // flashes light-then-dark on load. Default is light unless the
@@ -910,7 +910,7 @@
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="logo-area">
-            <img src="assets/logo.png" alt="FICT Logo">
+            <img src="../assets/logo.png" alt="FICT Logo">
             <h2>School Elections</h2>
             <span class="logo-tagline">Student Portal</span>
         </div>
@@ -1561,7 +1561,7 @@
                         <div class="cand-grid">
                             ${posBlock.candidates.map(c => {
                                 const party = (c.party && c.party !== 'No Party / Independent') ? c.party : '';
-                                const photo = c.photo_url || 'assets/default-avatar.svg';
+                                const photo = c.photo_url || '../assets/default-avatar.svg';
                                 const platform = (c.platform || '').trim();
                                 const searchMeta = `${c.department || ''} ${c.course || ''} ${c.year_level || ''} ${platform}`.toLowerCase().trim();
                                 window.__candMap[c.id] = {
@@ -1666,7 +1666,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
                 <div class="cand-modal-left">
-                    <div class="cand-modal-photo"><img src="${escHtml(c.photo_url || 'assets/default-avatar.svg')}" alt="${escHtml(c.name)}"></div>
+                    <div class="cand-modal-photo"><img src="${escHtml(c.photo_url || '../assets/default-avatar.svg')}" alt="${escHtml(c.name)}"></div>
                     <div class="cand-modal-info">
                         <h2 class="cand-modal-name">${escHtml(c.name)}</h2>
                         ${c.party ? `<span class="cand-modal-party">${escHtml(c.party)}</span>` : ''}

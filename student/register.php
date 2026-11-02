@@ -6,7 +6,7 @@ startSecureSession();
 
 // If already logged in, go to dashboard (root)
 if (!empty($_SESSION['user_id'])) {
-    header('Location: ../dashboard.php');
+    header('Location: dashboard.php');
     exit;
 }
 

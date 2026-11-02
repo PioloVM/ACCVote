@@ -358,14 +358,14 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
 <nav class="nav">
     <div class="wrap nav-inner">
         <a href="landingpage.php" class="brand">
-            <img src="assets/logo.png" alt="School seal">
+            <img src="../assets/logo.png" alt="School seal">
             <span class="name">Aklan Catholic College<small>Live Election Results</small></span>
         </a>
         <div class="nav-actions">
             <?php if (!empty($_SESSION['user_id'])): ?>
-                <a href="dashboard.php" class="solid">Dashboard</a>
+                <a href="../student/dashboard.php" class="solid">Dashboard</a>
             <?php else: ?>
-                <a href="login.php" class="solid">Student Login</a>
+                <a href="../student/login.php" class="solid">Student Login</a>
             <?php endif; ?>
         </div>
     </div>

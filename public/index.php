@@ -13,5 +13,10 @@ require_once __DIR__ . '/../includes/functions.php';
 
 startSecureSession();
 
-header('Location: ' . (!empty($_SESSION['user_id']) ? 'dashboard.php' : 'landingpage.php'));
+$scriptName = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+$dir = dirname($scriptName);
+// Served from <approot>/public/index.php (DirectoryIndex or direct hit);
+// php -S serves it at the domain root. Absolute targets work from either base.
+$appRoot = str_ends_with($dir, '/public') ? substr($dir, 0, -strlen('/public')) : '';
+header('Location: ' . $appRoot . (!empty($_SESSION['user_id']) ? '/student/dashboard.php' : '/public/landingpage.php'));
 exit;

@@ -56,7 +56,7 @@ set_exception_handler(function (Throwable $e): void {
             . 'font-family:system-ui,sans-serif;background:#f7f5ef;color:#0f172a;text-align:center;padding:1.5rem;">'
             . '<div><h1 style="font-size:1.4rem;margin:0 0 .5rem;">Something went wrong</h1>'
             . '<p style="color:#5c6b81;margin:0 0 1.25rem;">An unexpected error occurred. Please try again later.</p>'
-            . '<a href="index.php" style="color:#65a30d;font-weight:600;">&larr; Back to home</a></div>'
+            . '<a href="../public/index.php" style="color:#65a30d;font-weight:600;">&larr; Back to home</a></div>'
             . '</body></html>';
     }
     exit;
@@ -114,12 +114,14 @@ function h(?string $value): string
  * copy immediately instead of serving a stale cached stylesheet/script
  * (which is how dark-mode CSS fixes once failed to appear for users).
  * Falls back to a plain version-less path if the file doesn't exist.
+ * $prefix is prepended to the EMITTED URL only (e.g. "../" from a page
+ * one folder deep); the filesystem stat path stays root-anchored.
  */
-function assetV(string $path): string
+function assetV(string $path, string $prefix = ''): string
 {
     $full = __DIR__ . '/../' . ltrim($path, '/');
     $mtime = @filemtime($full);
-    return $mtime ? $path . '?v=' . $mtime : $path;
+    return $mtime ? $prefix . $path . '?v=' . $mtime : $prefix . $path;
 }
 
 /**

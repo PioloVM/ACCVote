@@ -50,7 +50,7 @@ $student = $stmt->fetch();
 
 if (!$student) {
     session_destroy();
-    header('Location: index.php');
+    header('Location: ../public/index.php');
     exit;
 }
 
@@ -177,7 +177,7 @@ $computedBlocked = $computed ? (bool) $computed['blocked'] : false;
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Enrollment Details | School Elections</title>
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="../assets/style.css">
 <style>
     html, body { margin: 0; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; }
     .page-center {

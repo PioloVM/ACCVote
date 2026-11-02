@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($user) {
                 if ($user['registration_status'] === 'unregistered') {
-                    $error = 'This account needs to be activated. Please <a href="student/register.php">register first</a>.';
+                    $error = 'This account needs to be activated. Please <a href="register.php">register first</a>.';
                 } elseif ($user['registration_status'] === 'suspended') {
                     $error = 'This account has been suspended. Please contact the election administrator.';
                 } elseif (password_verify($password, $user['password'])) {
@@ -146,7 +146,7 @@ $csrfToken = csrfToken();
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Login | School Elections</title>
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="../assets/style.css">
 <style>
     * { -webkit-tap-highlight-color: transparent; }
 
@@ -162,7 +162,7 @@ $csrfToken = csrfToken();
         position: fixed;
         inset: 0;
         z-index: -2;
-        background-image: url('assets/school-bg.jpg');
+        background-image: url('../assets/school-bg.jpg');
         background-size: cover;
         background-position: center;
         filter: blur(6px) brightness(0.85);
@@ -521,7 +521,7 @@ $csrfToken = csrfToken();
 <div class="page-center">
     <div class="card<?= $error ? ' has-error' : '' ?>" id="loginCard">
         <div class="logo-area">
-            <img src="assets/logo.png" alt="FICT Logo" class="logo">
+            <img src="../assets/logo.png" alt="FICT Logo" class="logo">
         </div>
         <h2 class="card-title">Welcome Back</h2>
         <p class="subtitle">Log in to cast your vote.</p>
@@ -568,11 +568,11 @@ $csrfToken = csrfToken();
 
         <div class="register-cta">
             Not yet registered?
-            <a href="student/register.php" class="btn">Register here</a>
+            <a href="register.php" class="btn">Register here</a>
         </div>
 
         <div class="back-home">
-            <a href="landingpage.php">&larr; Back to Home</a>
+            <a href="../public/landingpage.php">&larr; Back to Home</a>
         </div>
     </div>
 </div>
