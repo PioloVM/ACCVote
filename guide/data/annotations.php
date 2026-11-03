@@ -2486,7 +2486,7 @@ return [
                 ],
                 [
                     'file' => 'student/dashboard-data.php',
-                    'anchor' => 'MAX(c.photo IS NOT NULL) AS has_photo',
+                    'anchor' => 'MAX(CASE WHEN c.photo IS NOT NULL THEN 1 ELSE 0 END) AS has_photo',
                     'before' => 5,
                     'after' => 12,
                     'label' => 'Photo existence, not bytes',

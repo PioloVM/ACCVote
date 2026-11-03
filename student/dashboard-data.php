@@ -135,7 +135,7 @@ if ($allowedPositionIds) {
     $candStmt = $pdo->prepare('
         SELECT c.position_id, c.id, c.name, c.party, c.department,
                c.candidate_year AS year_level, c.platform,
-               MAX(c.photo IS NOT NULL) AS has_photo,
+               MAX(CASE WHEN c.photo IS NOT NULL THEN 1 ELSE 0 END) AS has_photo,
                COUNT(v.id) AS vote_count
         FROM candidates c
         LEFT JOIN votes v ON v.candidate_id = c.id
