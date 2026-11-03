@@ -65,10 +65,19 @@ if ($file && $root && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_
 // Directory URLs (e.g. /guide/) resolve to their index.php, the way
 // Apache's mod_dir does locally. Requiring the file keeps the request
 // URI (and therefore relative asset URLs) pointing at the directory.
-if ($file && $root && str_starts_with($file, $root . DIRECTORY_SEPARATOR)
-    && is_dir($file) && is_file($file . DIRECTORY_SEPARATOR . 'index.php')) {
-    require $file . DIRECTORY_SEPARATOR . 'index.php';
-    return true;
+// A directory URL without the trailing slash is 301-redirected to the
+// slash form first (mod_dir's DirectorySlash behavior) - otherwise the
+// page's relative asset URLs resolve one level too high (/guide +
+// assets/tour.js -> /assets/tour.js) and the page loads bare.
+if ($file && $root && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_dir($file)) {
+    if ($path !== '/' && !str_ends_with($path, '/')) {
+        header('Location: ' . $path . '/' . ($query !== '' ? '?' . $query : ''), true, 301);
+        return true;
+    }
+    if (is_file($file . DIRECTORY_SEPARATOR . 'index.php')) {
+        require $file . DIRECTORY_SEPARATOR . 'index.php';
+        return true;
+    }
 }
 
 http_response_code(404);
