@@ -96,29 +96,29 @@ Assert-True "prelude: ssg_logo snapshotted" ($logoSnap -ne '') "nothing captured
 $mysql = "C:\xampp\mysql\bin\mysql.exe"
 & $mysql -u root voting_app -e "UPDATE candidates SET photo='$pngDataUrl' WHERE id=1; UPDATE candidates SET photo=NULL WHERE id=2; INSERT INTO site_settings (setting_key, setting_value) VALUES ('ssg_logo', '$pngDataUrl') ON DUPLICATE KEY UPDATE setting_value='$pngDataUrl';" 2>&1 | Out-Null
 
-$r = Invoke-Get "$base/photo.php?c=1"
+$r = Invoke-Get "$base/student/photo.php?c=1"
 Assert-True "photo.php c=1 returns 200" ($r.Code -eq "200") "got $($r.Code)"
 Assert-True "photo.php c=1 Cache-Control public" ($r.Headers -match "Cache-Control:\s*public") ($r.Headers -split "`n" | Select-String "Cache" | Out-String)
 Assert-True "photo.php c=1 Content-Type image" ($r.Headers -match "Content-Type:\s*image/") ""
 $fixtureBytes = [Convert]::FromBase64String($pngDataUrl.Split(',')[1]).Length
 Assert-True "photo.php c=1 bytes match fixture" ($r.Body.Length -eq $fixtureBytes) "got $($r.Body.Length), want $fixtureBytes"
 
-$r = Invoke-Get "$base/photo.php?c=2"
+$r = Invoke-Get "$base/student/photo.php?c=2"
 Assert-True "photo.php c=2 (no photo) returns 404" ($r.Code -eq "404") "got $($r.Code)"
 
-$r = Invoke-Get "$base/photo.php?c=999999"
+$r = Invoke-Get "$base/student/photo.php?c=999999"
 Assert-True "photo.php unknown id returns 404" ($r.Code -eq "404") "got $($r.Code)"
 Assert-True "photo.php 404 body leaks nothing" ($r.Text -notmatch "SQLSTATE|PDO|neon|password") $r.Text.Substring(0, [Math]::Min(120, $r.Text.Length))
 
-$r = Invoke-Get "$base/icon.php?e=1"
+$r = Invoke-Get "$base/student/icon.php?e=1"
 Assert-True "icon.php e=1 (ssg_logo set) returns 200" ($r.Code -eq "200") "got $($r.Code)"
 Assert-True "icon.php e=1 Cache-Control public" ($r.Headers -match "Cache-Control:\s*public") ""
 Assert-True "icon.php e=1 Content-Type image" ($r.Headers -match "Content-Type:\s*image/") ""
 
-$r = Invoke-Get "$base/icon.php?e=2"
+$r = Invoke-Get "$base/student/icon.php?e=2"
 Assert-True "icon.php e=2 (DSG, no dept logo) returns 404" ($r.Code -eq "404") "got $($r.Code)"
 
-$r = Invoke-Get "$base/icon.php?e=999999"
+$r = Invoke-Get "$base/student/icon.php?e=999999"
 Assert-True "icon.php unknown election returns 404" ($r.Code -eq "404") "got $($r.Code)"
 Assert-True "icon.php 404 body leaks nothing" ($r.Text -notmatch "SQLSTATE|PDO|neon|password") $r.Text.Substring(0, [Math]::Min(120, $r.Text.Length))
 
@@ -140,13 +140,13 @@ UPDATE users SET has_voted=0 WHERE id=$uidSql;
 DELETE FROM login_attempts;
 "@ 2>&1 | Out-Null
 
-$loginHtml = ((curl.exe -s -c $jar "$base/login.php") -join "`n")
+$loginHtml = ((curl.exe -s -c $jar "$base/student/login.php") -join "`n")
 $token = [regex]::Match($loginHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
 Assert-True "login form yields csrf token" ($token -ne "") "not found in login page"
-$loginCode = curl.exe -s -b $jar -c $jar -o NUL -w "%{http_code}" -X POST "$base/login.php" -d "csrf_token=$token&student_id=987654321&password=password123"
+$loginCode = curl.exe -s -b $jar -c $jar -o NUL -w "%{http_code}" -X POST "$base/student/login.php" -d "csrf_token=$token&student_id=987654321&password=password123"
 Assert-True "login succeeds (302)" ($loginCode -eq "302") "got $loginCode"
 
-$data = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$data = ((curl.exe -s -b $jar "$base/student/dashboard-data.php") -join "") | ConvertFrom-Json
 $votable = @($data.elections | Where-Object { $_.config.status -eq 'ongoing' -and -not $_.hasVoted -and $_.totalPositions -gt 0 })
 Assert-True "fixture yields at least 2 votable elections" ($votable.Count -ge 2) "got $($votable.Count)"
 
@@ -155,7 +155,7 @@ $first = $votable[0]
 # 1. Empty ballot (no position_* fields at all) must be accepted as an
 #    abstention. Response contract after the combined-ballot rework:
 #    submitted_elections names every election this submit locked.
-$respText = ((curl.exe -s -b $jar -X POST "$base/vote.php" -d "csrf_token=$token&election_id=$($first.id)") -join "")
+$respText = ((curl.exe -s -b $jar -X POST "$base/student/vote.php" -d "csrf_token=$token&election_id=$($first.id)") -join "")
 $resp = $respText | ConvertFrom-Json
 Assert-True "empty ballot accepted" ($resp.success -eq $true) $respText
 Assert-True "response carries submitted_elections key" (($resp.PSObject.Properties.Name -contains 'submitted_elections')) $respText
@@ -164,18 +164,18 @@ if (($resp.PSObject.Properties.Name -contains 'submitted_elections')) {
 }
 
 # 2. Re-submitting the same election must 409 (the lock).
-$code2 = curl.exe -s -b $jar -o NUL -w "%{http_code}" -X POST "$base/vote.php" -d "csrf_token=$token&election_id=$($first.id)"
+$code2 = curl.exe -s -b $jar -o NUL -w "%{http_code}" -X POST "$base/student/vote.php" -d "csrf_token=$token&election_id=$($first.id)"
 Assert-True "re-submit returns 409" ($code2 -eq "409") "got $code2"
 
 # 3. The dashboard must now report the election as voted.
-$data2 = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$data2 = ((curl.exe -s -b $jar "$base/student/dashboard-data.php") -join "") | ConvertFrom-Json
 $eAfter = $data2.elections | Where-Object { $_.id -eq $first.id }
 Assert-True "hasVoted flips true after empty submit" ($eAfter.hasVoted -eq $true) "hasVoted=$($eAfter.hasVoted)"
 
 # ----------------------------------------------------------------
 # Section: payload contract — URLs instead of base64 (Task 5)
 # ----------------------------------------------------------------
-$respRaw = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "")
+$respRaw = ((curl.exe -s -b $jar "$base/student/dashboard-data.php") -join "")
 $respBytes = [System.Text.Encoding]::UTF8.GetByteCount($respRaw)
 Assert-True "payload has photo_url" ($respRaw -match '"photo_url"') ""
 Assert-True "payload has icon_url" ($respRaw -match '"icon_url"') ""
@@ -199,7 +199,7 @@ DELETE FROM login_attempts;
 "@ 2>&1 | Out-Null
 
 $ballotTarget = $votable[0]
-$ballotHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$($ballotTarget.id)") -join "`n")
+$ballotHtml = ((curl.exe -s -b $jar "$base/student/dashboard.php?page=vote&election_id=$($ballotTarget.id)") -join "`n")
 Assert-True "ballot page renders voteForm" ($ballotHtml -match 'id="voteForm"') ""
 Assert-True "stays votable (no already-voted alert)" ($ballotHtml -notmatch 'already voted in this election') ""
 Assert-True "no step-machine JS (ballotNext)" ($ballotHtml -notmatch 'ballotNext') ""
@@ -221,7 +221,7 @@ Assert-True "answered-positions label present" ($ballotHtml -match 'ballotProgre
 # The old continuous=1 chain param is gone (combined-ballot rework).
 # A single-election request must stay single (data-election, no
 # data-combined); the combined URL flips the form to combined mode.
-$contHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&combined=1") -join "`n")
+$contHtml = ((curl.exe -s -b $jar "$base/student/dashboard.php?page=vote&combined=1") -join "`n")
 Assert-True "combined=1 sets data-combined on form" ($contHtml -match 'data-combined="1"') ""
 Assert-True "single-election ballot is not combined" ($ballotHtml -notmatch 'data-combined') ""
 
@@ -240,20 +240,20 @@ DELETE FROM login_attempts;
 "@ 2>&1 | Out-Null
 
 # (a) votable list — the client's canVote predicate, evaluated server-side
-$chainData = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$chainData = ((curl.exe -s -b $jar "$base/student/dashboard-data.php") -join "") | ConvertFrom-Json
 $chainIds = @($chainData.elections | Where-Object { $_.config.status -eq 'ongoing' -and -not $_.hasVoted -and $_.totalPositions -gt 0 } | ForEach-Object { [int]$_.id })
 Assert-True "chain fixture: at least 2 votable elections" ($chainIds.Count -ge 2) "got $($chainIds.Count)"
 
 # Vote All UI sources (combined-ballot redesign) — fetched BEFORE the
 # submit while the elections are still unvoted.
-$homeHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=home") -join "")
+$homeHtml = ((curl.exe -s -b $jar "$base/student/dashboard.php?page=home") -join "")
 Assert-True "home source has Vote All button id" ($homeHtml -match 'startVoteAllBtn') ""
 Assert-True "home source has Start Voting label" ($homeHtml -match 'Start Voting') ""
 Assert-True "home card links the combined ballot" ($homeHtml -match 'combined=1') ""
 Assert-True "home source opens remaining branch" ($homeHtml -match 'if \(remaining\.length > 0\)') ""
 Assert-True "featured hero selection removed" ($homeHtml -notmatch 'heroActionable') ""
 
-$chainBallotHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&combined=1") -join "")
+$chainBallotHtml = ((curl.exe -s -b $jar "$base/student/dashboard.php?page=vote&combined=1") -join "")
 Assert-True "combined ballot sets data-combined" ($chainBallotHtml -match 'data-combined="1"') ""
 Assert-True "combined ballot posts every election id" ($chainBallotHtml -match 'name="combined_elections\[\]"') ""
 Assert-True "combined ballot titled Your Combined Ballot" ($chainBallotHtml -match 'Your Combined Ballot') ""
@@ -264,7 +264,7 @@ Assert-True "ballot has success modal" ($chainBallotHtml -match 'id="ballotSucce
 # the whole votable list, submitted_elections reports them all back.
 $comboBody = "csrf_token=$token&combined=1"
 foreach ($cid in $chainIds) { $comboBody += "&combined_elections[]=$cid" }
-$linkResp = ((curl.exe -s -b $jar -X POST "$base/vote.php" -d $comboBody) -join "") | ConvertFrom-Json
+$linkResp = ((curl.exe -s -b $jar -X POST "$base/student/vote.php" -d $comboBody) -join "") | ConvertFrom-Json
 Assert-True "combined submit succeeds" ($linkResp.success -eq $true) ($linkResp | ConvertTo-Json -Compress)
 $gotStr = (@($linkResp.submitted_elections) | ForEach-Object { [int]$_ } | Sort-Object) -join ','
 $wantStr = (@($chainIds) | ForEach-Object { [int]$_ } | Sort-Object) -join ','
@@ -274,7 +274,7 @@ if (@($chainIds).Count -gt 1) {
 }
 
 # After the combined submit: every chained election reports hasVoted
-$chainData2 = ((curl.exe -s -b $jar "$base/dashboard-data.php") -join "") | ConvertFrom-Json
+$chainData2 = ((curl.exe -s -b $jar "$base/student/dashboard-data.php") -join "") | ConvertFrom-Json
 $stillOpen = @($chainData2.elections | Where-Object { $_.id -in $chainIds -and -not $_.hasVoted })
 Assert-True "all chained elections report hasVoted" ($stillOpen.Count -eq 0) ("still unvoted: " + (($stillOpen | ForEach-Object { $_.id }) -join ','))
 
@@ -288,10 +288,10 @@ UPDATE users SET has_voted=0 WHERE id=$uidSql3;
 # ----------------------------------------------------------------
 # Section: nav cleanup + draft remnants (Task 8)
 # ----------------------------------------------------------------
-$payloadRaw = (curl.exe -s -b $jar "$base/dashboard-data.php") -join ""
+$payloadRaw = (curl.exe -s -b $jar "$base/student/dashboard-data.php") -join ""
 Assert-True "payload has no answeredPositionIds" ($payloadRaw -notmatch 'answeredPositionIds') ""
 
-$shellHtml = ((curl.exe -s -b $jar "$base/dashboard.php?page=home") -join "")
+$shellHtml = ((curl.exe -s -b $jar "$base/student/dashboard.php?page=home") -join "")
 Assert-True "shell has no quick-action markup" ($shellHtml -notmatch 'quick-action') ""
 Assert-True "shell has no ballot progress stepper" ($shellHtml -notmatch 'renderBallotProgressStepper') ""
 Assert-True "shell has no answeredPositionIds use" ($shellHtml -notmatch 'answeredPositionIds') ""
@@ -408,7 +408,7 @@ Assert-True "report school year defaults to the serving year" ($adminSrc -match 
 # Section: 9.5 batch — brand port (landing fonts carried inward)
 # ----------------------------------------------------------------
 $studentCss = Get-Content .\assets\dashboard-app.css -Raw
-$dashSrc = Get-Content .\dashboard.php -Raw
+$dashSrc = Get-Content .\student\dashboard.php -Raw
 Assert-True "student css defines the landing fonts as tokens" ($studentCss -match "--font-display: 'Sora'" -and $studentCss -match "--font-mono: 'IBM Plex Mono'") "font tokens missing"
 Assert-True "student page header uses the display font" ($studentCss -match '(?s)\.page-header h1 \{[^}]*font-family: var\(--font-display\)') "page-header h1 still system-ui"
 Assert-True "student section titles use the display font" ($studentCss -match '(?s)\.section-title \{[^}]*font-family: var\(--font-display\)') "section-title still system-ui"
@@ -432,7 +432,7 @@ Assert-True "no informational label below .75rem in student css" (-not ($student
 # WRITE stays only because the partner's uncommitted login.php redirects on
 # it — flagged in the ledger, not edited.
 Assert-True "student dashboard no longer selects the legacy has_voted flag" ($dashSrc -notmatch "SELECT id, name, has_voted, department, year_level FROM users") "flag still selected in dashboard.php"
-$ddSrc = Get-Content .\dashboard-data.php -Raw
+$ddSrc = Get-Content .\student\dashboard-data.php -Raw
 Assert-True "dashboard-data no longer selects the legacy has_voted flag" ($ddSrc -notmatch 'has_voted') "flag still selected in dashboard-data.php"
 $studentsApiSrc = Get-Content .\admin\api\students.php -Raw
 Assert-True "admin student list derives voted from ballot_submissions" ($studentsApiSrc -match 'EXISTS\(SELECT 1 FROM ballot_submissions bs WHERE bs\.user_id = u\.id\) AS has_voted') "chip still reads the legacy column"
@@ -442,7 +442,7 @@ Assert-True "admin student list derives voted from ballot_submissions" ($student
 # ----------------------------------------------------------------
 # Both login flows already throttle per-IP (8 attempts / 5 min) via
 # includes/functions.php. Pinned here so it cannot silently regress.
-$studentLoginSrc = Get-Content .\login.php -Raw
+$studentLoginSrc = Get-Content .\student\login.php -Raw
 Assert-True "student login throttles before verifying credentials" ($studentLoginSrc -match 'isRateLimited\(\$pdo, ''student_login''\)' -and $studentLoginSrc -match 'recordAttempt\(\$pdo, ''student_login''\)') "student login unthrottled"
 $adminLoginSrc = Get-Content .\admin\login.php -Raw
 Assert-True "admin login throttles before verifying credentials" ($adminLoginSrc -match 'isRateLimited\(\$pdo, ''admin_login''\)' -and $adminLoginSrc -match 'recordAttempt\(\$pdo, ''admin_login''\)') "admin login unthrottled"
@@ -460,7 +460,7 @@ Assert-True "dead party-chart code removed" ($adminSrc -notmatch 'function drawP
 # router.php wired into the Dockerfile's php -S CMD (Render). The .htaccess
 # also stops shipping the commented-out Neon credential so it can be
 # committed as the local XAMPP config.
-$notFoundSrc = if (Test-Path .\404.php) { Get-Content .\404.php -Raw } else { '' }
+$notFoundSrc = if (Test-Path .\public\404.php) { Get-Content .\public\404.php -Raw } else { '' }
 Assert-True "branded 404 page exists with the brand headline" ($notFoundSrc -match "isn't on the ballot") "404.php missing or unbranded"
 Assert-True "404 page carries the brand fonts" ($notFoundSrc -match 'family=Sora') "404 not on-brand"
 $htaccessSrc = Get-Content .\.htaccess -Raw
@@ -468,7 +468,7 @@ Assert-True "htaccess ships an ErrorDocument 404" ($htaccessSrc -match 'ErrorDoc
 Assert-True "htaccess carries no database credentials" ($htaccessSrc -notmatch 'npg_|postgresql://[^\s]*:[^\s]*@') "credential still in .htaccess"
 $gitignoreSrc = Get-Content .\.gitignore -Raw
 Assert-True "htaccess is no longer gitignored" ($gitignoreSrc -notmatch '(?m)^\.htaccess\s*$') ".gitignore still excludes .htaccess"
-$routerSrc = if (Test-Path .\router.php) { Get-Content .\router.php -Raw } else { '' }
+$routerSrc = if (Test-Path .\config\router.php) { Get-Content .\config\router.php -Raw } else { '' }
 Assert-True "php -S router exists and serves the branded 404" ($routerSrc -match '404\.php' -and $routerSrc -match 'http_response_code\(404\)') "router missing"
 $dockerfileSrc = Get-Content .\Dockerfile -Raw
 Assert-True "Dockerfile wires the router" ($dockerfileSrc -match 'router\.php') "Dockerfile not using router"
@@ -562,7 +562,7 @@ if ($node) {
 $e1row = & $mysql -u root voting_app -N -e "SELECT status, start_date, end_date FROM elections WHERE id=1"
 $e1 = @((($e1row -join "`n") -split "`t") | ForEach-Object { $_.Trim() })
 & $mysql -u root voting_app -e "UPDATE elections SET status='scheduled', start_date=DATE_SUB(NOW(), INTERVAL 1 DAY), end_date=DATE_ADD(NOW(), INTERVAL 7 DAY) WHERE id=1" 2>&1 | Out-Null
-$syncLoad = Invoke-Get "$base/landingpage.php"
+$syncLoad = Invoke-Get "$base/public/landingpage.php"
 $flipped = ((& $mysql -u root voting_app -N -e "SELECT status FROM elections WHERE id=1") -join '').Trim()
 & $mysql -u root voting_app -e "UPDATE elections SET status='$($e1[0])', start_date='$($e1[1])', end_date='$($e1[2])' WHERE id=1" 2>&1 | Out-Null
 Assert-True "landing load returns 200 during sync test" ($syncLoad.Code -eq '200') "got $($syncLoad.Code)"
@@ -570,8 +570,8 @@ Assert-True "past-scheduled election flips to ongoing on page load" ($flipped -e
 
 # (b) Repeat load: no error, and the second load is not slower than the
 #     first — guards against per-load work creeping back into the prelude.
-$sw1 = [Diagnostics.Stopwatch]::StartNew(); $lb1 = Invoke-Get "$base/landingpage.php"; $sw1.Stop()
-$sw2 = [Diagnostics.Stopwatch]::StartNew(); $lb2 = Invoke-Get "$base/landingpage.php"; $sw2.Stop()
+$sw1 = [Diagnostics.Stopwatch]::StartNew(); $lb1 = Invoke-Get "$base/public/landingpage.php"; $sw1.Stop()
+$sw2 = [Diagnostics.Stopwatch]::StartNew(); $lb2 = Invoke-Get "$base/public/landingpage.php"; $sw2.Stop()
 Assert-True "repeat landing loads both 200" ($lb1.Code -eq '200' -and $lb2.Code -eq '200') "got $($lb1.Code)/$($lb2.Code)"
 Assert-True "second landing load not slower than the first" ($sw2.ElapsedMilliseconds -le ($sw1.ElapsedMilliseconds * 2 + 500)) "t1=$($sw1.ElapsedMilliseconds)ms t2=$($sw2.ElapsedMilliseconds)ms"
 
@@ -579,7 +579,7 @@ Assert-True "second landing load not slower than the first" ($sw2.ElapsedMillise
 #     markup (data-panel marker keeps this from passing vacuously on a
 #     redirect to the login page).
 $spaFile = [System.IO.Path]::GetTempFileName()
-$spaCode = (curl.exe -s -b $jar -o $spaFile -w "%{http_code}" "$base/dashboard.php") -join ''
+$spaCode = (curl.exe -s -b $jar -o $spaFile -w "%{http_code}" "$base/student/dashboard.php") -join ''
 $spaText = [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($spaFile))
 Remove-Item $spaFile -Force
 Assert-True "student dashboard (no ?page) loads 200" ($spaCode -eq '200') "got $spaCode"
@@ -589,7 +589,7 @@ Assert-True "dashboard no ?page has no ballot-step markup" ($spaText -notmatch '
 # (d) Source: the heavy per-election data block must run AFTER page
 #     detection and only inside the page=vote gate, so Branch B loads
 #     keep only session/user/light queries.
-$dashSrc = Get-Content .\dashboard.php -Raw
+$dashSrc = Get-Content .\student\dashboard.php -Raw
 $pageDetectIdx = $dashSrc.IndexOf('$page = $_GET[')
 $heavyGateIdx = $dashSrc.IndexOf("if (`$page === 'vote' && (`$selectedElectionId || `$isCombined)) {")
 $heavyStartIdx = $dashSrc.IndexOf('$electionData = [];')
@@ -600,7 +600,7 @@ Assert-True "heavy election-data block gated behind page=vote" ($heavyGateIdx -g
 # visible election's card. Election 1 (SSG 2027, results_visibility
 # "always") always renders regardless of status; tallies are
 # fixture-stable because no test asserts their values here.
-$r = Invoke-Get "$base/results.php"
+$r = Invoke-Get "$base/public/results.php"
 Assert-True "results page loads 200" ($r.Code -eq '200') "got $($r.Code)"
 Assert-True "results renders visible election card" ($r.Text -match 'SSG General Elections 2027') "SSG 2027 card missing"
 Assert-True "results renders turnout line" ($r.Text -match 'ballots cast') "turnout line missing"
@@ -615,7 +615,7 @@ Assert-True "results renders turnout line" ($r.Text -match 'ballots cast') "turn
 # confirm-before-cast plus the irreversible-submit warning. Re-click
 # unvote: clicking an already-selected radio clears it (the no-vote
 # option for single-choice positions).
-$ballotSrc = Get-Content .\dashboard.php -Raw
+$ballotSrc = Get-Content .\student\dashboard.php -Raw
 Assert-True "ballot opens a confirm modal before casting" ($ballotSrc -match 'openBallotConfirm') "no confirm flow"
 Assert-True "submit warns selections are final" ($ballotSrc -match "can't be changed after you submit") "finality warning missing"
 Assert-True "selected radio can be unvoted by re-clicking it" ($ballotSrc -match 'prevCheckedByGroup') "no re-click unvote logic found"
@@ -659,13 +659,13 @@ Assert-True "candidate modal close button stays reachable when scrolled" ($ballo
 # must exist in BOTH .htaccess (Apache) and router.php (production). The
 # CSP must allow cdnjs (SheetJS + Chart.js on the student dashboard,
 # SRI-pinned) and Google Fonts, or those break silently.
-$r = Invoke-Get "$base/login.php"
+$r = Invoke-Get "$base/student/login.php"
 Assert-True "Content-Security-Policy served on pages" ($r.Headers -match "Content-Security-Policy:") "CSP header missing"
 Assert-True "CSP restricts framing to same origin" ($r.Headers -match "frame-ancestors 'self'") "frame-ancestors missing"
 Assert-True "CSP allows the cdnjs chart/export libraries" ($r.Headers -match "cdnjs\.cloudflare\.com") "cdnjs not whitelisted"
 Assert-True "X-Content-Type-Options nosniff served" ($r.Headers -match "X-Content-Type-Options:\s*nosniff") "nosniff missing"
 Assert-True "X-Frame-Options SAMEORIGIN served" ($r.Headers -match "X-Frame-Options:\s*SAMEORIGIN") "XFO missing"
-$routerSrc = Get-Content .\router.php -Raw
+$routerSrc = Get-Content .\config\router.php -Raw
 Assert-True "router.php sets the security headers (production php -S)" (($routerSrc -match 'X-Content-Type-Options') -and ($routerSrc -match 'Content-Security-Policy')) "router header block missing"
 Assert-True "router.php gates HSTS behind HTTPS" (($routerSrc -match 'Strict-Transport-Security') -and ($routerSrc -match "HTTPS")) "router HSTS missing or ungated"
 $htaccessSrc = Get-Content .\.htaccess -Raw
@@ -938,9 +938,9 @@ Remove-Item $bBody, $sjar -Force -ErrorAction SilentlyContinue
 # Source pins: BOTH schema files must carry the flag column so fresh
 # installs on either engine get it (schema_parity keeps them equal),
 # and the gate page must exist.
-Assert-True "mysql schema has password_reset_pending" ((Get-Content .\schema.mysql.sql -Raw) -match 'password_reset_pending') "missing"
-Assert-True "pg schema has password_reset_pending" ((Get-Content .\schema.sql -Raw) -match 'password_reset_pending') "missing"
-$ccSrc = Get-Content .\change-password.php -Raw -ErrorAction SilentlyContinue
+Assert-True "mysql schema has password_reset_pending" ((Get-Content .\database\schema.mysql.sql -Raw) -match 'password_reset_pending') "missing"
+Assert-True "pg schema has password_reset_pending" ((Get-Content .\database\schema.sql -Raw) -match 'password_reset_pending') "missing"
+$ccSrc = Get-Content .\student\change-password.php -Raw -ErrorAction SilentlyContinue
 Assert-True "change-password.php gate page exists" ($ccSrc -and $ccSrc -match 'pw-reset-gate') "missing"
 
 # Save the fixture student's exact credentials for a byte-exact restore
@@ -982,54 +982,54 @@ Assert-True "temp password meets policy (8+, letters+numbers)" (($tempPw.Length 
 # a success rotates the session and drops the pre-auth token).
 function New-StudentLoginProbe([string]$sid, [string]$pw) {
     $j = [System.IO.Path]::GetTempFileName()
-    $h = ((curl.exe -s -c $j "$base/login.php") -join "`n")
+    $h = ((curl.exe -s -c $j "$base/student/login.php") -join "`n")
     $t = [regex]::Match($h, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
-    $code = curl.exe -s -b $j -c $j -o NUL -w "%{http_code}" -X POST "$base/login.php" -d "csrf_token=$t&student_id=$sid&password=$pw"
+    $code = curl.exe -s -b $j -c $j -o NUL -w "%{http_code}" -X POST "$base/student/login.php" -d "csrf_token=$t&student_id=$sid&password=$pw"
     Remove-Item $j -Force -ErrorAction SilentlyContinue
     return $code
 }
 
 # Sticky session logged in WITH the temp password - used for the gate.
 $pjar = [System.IO.Path]::GetTempFileName()
-$ph = ((curl.exe -s -c $pjar "$base/login.php") -join "`n")
+$ph = ((curl.exe -s -c $pjar "$base/student/login.php") -join "`n")
 $pt = [regex]::Match($ph, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
-$pcode = curl.exe -s -b $pjar -c $pjar -o NUL -w "%{http_code}" -X POST "$base/login.php" -d "csrf_token=$pt&student_id=987654321&password=$tempPw"
+$pcode = curl.exe -s -b $pjar -c $pjar -o NUL -w "%{http_code}" -X POST "$base/student/login.php" -d "csrf_token=$pt&student_id=987654321&password=$tempPw"
 Assert-True "student session with temp password (302)" ($pcode -eq "302") "got $pcode"
 
 # Dashboard must bounce the pending student to the gate.
 $gHdr = [System.IO.Path]::GetTempFileName()
-$gCode = curl.exe -s -b $pjar -c $pjar -o NUL -D $gHdr -w "%{http_code}" "$base/dashboard.php"
+$gCode = curl.exe -s -b $pjar -c $pjar -o NUL -D $gHdr -w "%{http_code}" "$base/student/dashboard.php"
 $gLoc = ((Get-Content $gHdr) | Select-String '^Location:').ToString()
 Remove-Item $gHdr -Force -ErrorAction SilentlyContinue
 Assert-True "dashboard redirects pending student to the gate" (($gCode -eq "302") -and ($gLoc -match 'change-password\.php')) "got $gCode / $gLoc"
 
-$gateHtml = ((curl.exe -s -b $pjar "$base/change-password.php") -join "`n")
+$gateHtml = ((curl.exe -s -b $pjar "$base/student/change-password.php") -join "`n")
 Assert-True "gate page renders (pw-reset-gate)" ($gateHtml -match 'pw-reset-gate') "missing"
 $gTok = [regex]::Match($gateHtml, 'name="csrf_token"\s+value="([^"]+)"').Groups[1].Value
 Assert-True "gate form carries a csrf token" ($gTok -ne "") "not found"
 
 # Weak password refused, flag untouched.
-$wCode = curl.exe -s -b $pjar -c $pjar -o NUL -w "%{http_code}" -X POST "$base/change-password.php" -d "csrf_token=$gTok&password=short&confirm=short"
+$wCode = curl.exe -s -b $pjar -c $pjar -o NUL -w "%{http_code}" -X POST "$base/student/change-password.php" -d "csrf_token=$gTok&password=short&confirm=short"
 Assert-True "gate refuses weak password (200)" ($wCode -eq "200") "got $wCode"
 $flagA = Invoke-MysqlOut "SELECT password_reset_pending FROM users WHERE student_id='987654321';"
 Assert-True "flag still set after weak attempt" ($flagA -eq "1") "got '$flagA'"
 
 # Bogus CSRF refused.
-$bCode = curl.exe -s -b $pjar -o NUL -w "%{http_code}" -X POST "$base/change-password.php" -d "csrf_token=bogus&password=StudentNew1&confirm=StudentNew1"
+$bCode = curl.exe -s -b $pjar -o NUL -w "%{http_code}" -X POST "$base/student/change-password.php" -d "csrf_token=bogus&password=StudentNew1&confirm=StudentNew1"
 Assert-True "gate refuses bad csrf (200)" ($bCode -eq "200") "got $bCode"
 
 # Valid change succeeds and clears the flag.
 $chHdr = [System.IO.Path]::GetTempFileName()
-$cCode = curl.exe -s -b $pjar -c $pjar -o NUL -D $chHdr -w "%{http_code}" -X POST "$base/change-password.php" -d "csrf_token=$gTok&password=StudentNew1&confirm=StudentNew1"
+$cCode = curl.exe -s -b $pjar -c $pjar -o NUL -D $chHdr -w "%{http_code}" -X POST "$base/student/change-password.php" -d "csrf_token=$gTok&password=StudentNew1&confirm=StudentNew1"
 Remove-Item $chHdr -Force -ErrorAction SilentlyContinue
 Assert-True "password change succeeds (302)" ($cCode -eq "302") "got $cCode"
 $flagB = Invoke-MysqlOut "SELECT password_reset_pending FROM users WHERE student_id='987654321';"
 Assert-True "flag cleared after change" ($flagB -eq "0") "got '$flagB'"
 
 # Gate no longer intercepts this session.
-$ccNow = curl.exe -s -b $pjar -o NUL -w "%{http_code}" "$base/change-password.php"
+$ccNow = curl.exe -s -b $pjar -o NUL -w "%{http_code}" "$base/student/change-password.php"
 Assert-True "change-password redirects when not pending (302)" ($ccNow -eq "302") "got $ccNow"
-$dashNow = curl.exe -s -b $pjar -o NUL -w "%{http_code}" "$base/dashboard.php"
+$dashNow = curl.exe -s -b $pjar -o NUL -w "%{http_code}" "$base/student/dashboard.php"
 Assert-True "dashboard serves normally after change (200)" ($dashNow -eq "200") "got $dashNow"
 
 # Old temp is dead; the new password works.
@@ -1039,7 +1039,7 @@ $newCode = New-StudentLoginProbe '987654321' 'StudentNew1'
 Assert-True "new password works (302)" ($newCode -eq "302") "got $newCode"
 
 # Enforcement + audit + UI source pins.
-$voteSrc = Get-Content .\vote.php -Raw
+$voteSrc = Get-Content .\student\vote.php -Raw
 Assert-True "vote.php blocks pending-password students" ($voteSrc -match 'password_reset_pending') "missing"
 $audB2 = Invoke-MysqlOut "SELECT COUNT(*) FROM activity_logs WHERE action LIKE 'Reset password for student%';"
 Assert-True "temp reset is audited" ($audB2 -match '^[1-9][0-9]*$') "got '$audB2'"
@@ -1169,7 +1169,7 @@ Assert-True "C2 fixture election created" (($pv1 -match '"success":true') -and (
 # 1a. Draft preview - the whole point of previewing BEFORE scheduling:
 # the ballot must render for a draft even though it isn't open yet
 # (preview lets drafts through and skips the not-open gate).
-$pvDraft = ((curl.exe -s -b $pvjar "$base/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
+$pvDraft = ((curl.exe -s -b $pvjar "$base/student/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
 Assert-True "draft ballot previews before scheduling" (($pvDraft -match 'id="voteForm"') -and ($pvDraft -match 'preview-banner') -and ($pvDraft -notmatch 'not currently open')) "draft preview broken"
 $pvPromote = [System.IO.Path]::GetTempFileName()
 [System.IO.File]::WriteAllText($pvPromote, '{ "csrf_token": "' + $pvcsrf + '", "id": ' + $prevId + ', "start": "2026-10-01 08:00", "end": "2026-12-31 17:00" }')
@@ -1183,7 +1183,7 @@ $pv2b = ((curl.exe -s -b $pvjar -X PUT "$base/admin/api/elections.php" --data-bi
 Assert-True "C2 fixture promoted to ongoing" ($pv2b -match '"success":true') "got: $pv2b"
 
 # 1. Admin + preview=1 renders the REAL ballot, banner on, submit off.
-$pvHtml = ((curl.exe -s -b $pvjar "$base/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
+$pvHtml = ((curl.exe -s -b $pvjar "$base/student/dashboard.php?page=vote&election_id=$prevId&preview=1") -join "`n")
 Assert-True "preview renders for the admin session" ($pvHtml -match 'id="voteForm"') "ballot missing"
 Assert-True "preview banner is shown" ($pvHtml -match 'preview-banner') "banner missing"
 Assert-True "submit disabled server-side in preview" ($pvHtml -match 'id="submitBtn"[^>]*disabled') "submit not disabled"
@@ -1191,11 +1191,11 @@ Assert-True "confirm-cast disabled too in preview" ($pvHtml -match 'id="confirmS
 Assert-True "preview shows the fixture candidate" ($pvHtml -match 'Bob Santos') "roster missing"
 
 # 2. Admin without the flag does NOT get the ballot.
-$pvNo = curl.exe -s -b $pvjar -o NUL -w "%{http_code}" "$base/dashboard.php?page=vote&election_id=$prevId"
+$pvNo = curl.exe -s -b $pvjar -o NUL -w "%{http_code}" "$base/student/dashboard.php?page=vote&election_id=$prevId"
 Assert-True "no preview flag = no ballot for admin" ($pvNo -ne "200") "got $pvNo"
 
 # 3. Anonymous + preview=1 refused.
-$pvAnon = curl.exe -s -o NUL -w "%{http_code}" "$base/dashboard.php?page=vote&election_id=$prevId&preview=1"
+$pvAnon = curl.exe -s -o NUL -w "%{http_code}" "$base/student/dashboard.php?page=vote&election_id=$prevId&preview=1"
 Assert-True "anonymous preview refused" ($pvAnon -ne "200") "got $pvAnon"
 
 # 4. Student + preview=1 sees their NORMAL ballot (no banner): the
@@ -1208,15 +1208,15 @@ $stuDept = Invoke-MysqlOut "SELECT department FROM users WHERE student_id='98765
 $stuEid = Invoke-MysqlOut "SELECT id FROM elections WHERE status='ongoing' AND type='DSG' AND department='$stuDept' AND start_date <= NOW() AND end_date >= NOW() LIMIT 1;"
 Assert-True "fixture student has an open own-faculty election" ($stuEid -match '^[1-9]\d*$') "got '$stuEid' (dept '$stuDept')"
 & $mysql -u root voting_app -e "DELETE FROM ballot_submissions WHERE user_id=(SELECT id FROM users WHERE student_id='987654321'); DELETE FROM votes WHERE user_id=(SELECT id FROM users WHERE student_id='987654321'); UPDATE users SET has_voted=0 WHERE student_id='987654321';" 2>&1 | Out-Null
-$pvStu = ((curl.exe -s -b $jar "$base/dashboard.php?page=vote&election_id=$stuEid&preview=1") -join "`n")
+$pvStu = ((curl.exe -s -b $jar "$base/student/dashboard.php?page=vote&election_id=$stuEid&preview=1") -join "`n")
 Assert-True "student ballot renders without the banner" (($pvStu -match 'id="voteForm"') -and ($pvStu -notmatch 'preview-banner')) "unexpected preview state"
 
 # 5. The preview admin session cannot actually vote.
-$pvVote = curl.exe -s -b $pvjar -o NUL -w "%{http_code}" -X POST "$base/vote.php" -d "election_id=$prevId"
+$pvVote = curl.exe -s -b $pvjar -o NUL -w "%{http_code}" -X POST "$base/student/vote.php" -d "election_id=$prevId"
 Assert-True "preview session cannot submit votes (401)" ($pvVote -eq "401") "got $pvVote"
 
 # 6. Source pins.
-$dashSrcC2 = Get-Content .\dashboard.php -Raw
+$dashSrcC2 = Get-Content .\student\dashboard.php -Raw
 Assert-True "dashboard has preview mode" ($dashSrcC2 -match '\$isPreview') "missing"
 Assert-True "preview forces hasVoted off" ($dashSrcC2 -match 'isPreview \? false : userHasVotedInElection') "missing"
 
@@ -1268,21 +1268,21 @@ Assert-True "D1 backups dir is gitignored" ((Get-Content .gitignore -Raw) -match
 # ----------------------------------------------------------------
 # Section: Batch D2 - health endpoint + uptime workflow
 # ----------------------------------------------------------------
-$d2Health = Test-Path .\health.php
+$d2Health = Test-Path .\public\health.php
 Assert-True "D2 health endpoint exists" ($d2Health) "missing health.php"
 
 # Live: DB up -> 200, ok/db-up JSON, nothing internal, nothing cached.
-$healthCode = curl.exe -s -o NUL -w "%{http_code}" "$base/health.php"
-$healthBody = ((curl.exe -s "$base/health.php") -join "`n")
+$healthCode = curl.exe -s -o NUL -w "%{http_code}" "$base/public/health.php"
+$healthBody = ((curl.exe -s "$base/public/health.php") -join "`n")
 Assert-True "D2 health endpoint is 200 when DB is up" ($healthCode -eq "200") "got $healthCode"
 Assert-True "D2 health body reports ok" ($healthBody -match '"ok":true') "got: $healthBody"
 Assert-True "D2 health body reports db up" ($healthBody -match '"db":"up"') "got: $healthBody"
 Assert-True "D2 health body leaks no internals" ($healthBody -notmatch 'password|3306|root@|localhost|PDOException|voting_app') "got: $healthBody"
-$healthHdr = ((curl.exe -s -D - -o NUL "$base/health.php") -join "`n")
+$healthHdr = ((curl.exe -s -D - -o NUL "$base/public/health.php") -join "`n")
 Assert-True "D2 health response is not cacheable" ($healthHdr -match 'no-store') "got headers: $healthHdr"
 
 # Source pins: 503 failure path, public probe stays stateless.
-$healthSrc = if ($d2Health) { Get-Content .\health.php -Raw } else { '' }
+$healthSrc = if ($d2Health) { Get-Content .\public\health.php -Raw } else { '' }
 Assert-True "D2 health answers 503 on failure" ($healthSrc -match '503') "missing"
 Assert-True "D2 health never starts a session" ($healthSrc -notmatch 'session_start|startSecureSession') "sessions in health check"
 

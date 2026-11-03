@@ -15,7 +15,7 @@
  * Local XAMPP development (the default):
  *   MariaDB on localhost with DB "voting_app" — load schema.mysql.sql once:
  *     C:\xampp\mysql\bin\mysql.exe -u root -e "CREATE DATABASE voting_app"
- *     C:\xampp\mysql\bin\mysql.exe -u root voting_app < schema.mysql.sql
+ *     C:\xampp\mysql\bin\mysql.exe -u root voting_app < database/schema.mysql.sql
  */
 
 function dbDriver(): string

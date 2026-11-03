@@ -11,12 +11,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   page.on('pageerror', e => console.log('PAGEERROR', e.message));
 
   // Public pages
-  await page.goto(BASE + '/landingpage.php', { waitUntil: 'networkidle' });
+  await page.goto(BASE + '/public/landingpage.php', { waitUntil: 'networkidle' });
   await page.waitForTimeout(700);
   await page.screenshot({ path: OUT + '\\01-landing.jpeg', fullPage: true, type: 'jpeg', quality: 78 });
   console.log('landing');
 
-  await page.goto(BASE + '/login.php', { waitUntil: 'networkidle' });
+  await page.goto(BASE + '/student/login.php', { waitUntil: 'networkidle' });
   await page.waitForTimeout(700);
   await page.screenshot({ path: OUT + '\\02-login.jpeg', fullPage: true, type: 'jpeg', quality: 78 });
   console.log('login');
@@ -26,12 +26,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await page.screenshot({ path: OUT + '\\03-register.jpeg', fullPage: true, type: 'jpeg', quality: 78 });
   console.log('register');
 
-  await page.goto(BASE + '/results.php', { waitUntil: 'networkidle' });
+  await page.goto(BASE + '/public/results.php', { waitUntil: 'networkidle' });
   await page.waitForTimeout(700);
   await page.screenshot({ path: OUT + '\\04-results-public.jpeg', fullPage: true, type: 'jpeg', quality: 78 });
   console.log('results public');
 
-  await page.goto(BASE + '/404.php', { waitUntil: 'networkidle' });
+  await page.goto(BASE + '/public/404.php', { waitUntil: 'networkidle' });
   await page.waitForTimeout(700);
   await page.screenshot({ path: OUT + '\\05-404.jpeg', fullPage: true, type: 'jpeg', quality: 78 });
   console.log('404');
@@ -39,7 +39,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   // Mobile landing
   const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   const mpage = await mctx.newPage();
-  await mpage.goto(BASE + '/landingpage.php', { waitUntil: 'networkidle' });
+  await mpage.goto(BASE + '/public/landingpage.php', { waitUntil: 'networkidle' });
   await mpage.waitForTimeout(700);
   await mpage.screenshot({ path: OUT + '\\06-mobile-landing.jpeg', fullPage: true, type: 'jpeg', quality: 78 });
   console.log('mobile landing');
@@ -62,7 +62,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   }
 
   // Student login
-  await page.goto(BASE + '/login.php', { waitUntil: 'networkidle' });
+  await page.goto(BASE + '/student/login.php', { waitUntil: 'networkidle' });
   await page.fill('#student_id', '987654321');
   await page.fill('#password', 'password123');
   await Promise.all([page.waitForURL(/dashboard\.php/, { timeout: 15000 }), page.click('#submitBtn')]);
@@ -79,7 +79,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   }
 
   // Mobile student home
-  await mpage.goto(BASE + '/login.php', { waitUntil: 'networkidle' });
+  await mpage.goto(BASE + '/student/login.php', { waitUntil: 'networkidle' });
   await mpage.fill('#student_id', '987654321');
   await mpage.fill('#password', 'password123');
   await Promise.all([mpage.waitForURL(/dashboard\.php/, { timeout: 15000 }), mpage.click('#submitBtn')]);

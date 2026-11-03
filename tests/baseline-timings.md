@@ -3,7 +3,7 @@
 Local environment: XAMPP Apache (localhost/voting-app2-updated), MariaDB 10.4.32 (local),
 PHP 8.0.30. Measured with `curl -w "%{time_total}"`, 3 runs, min–max.
 
-## Test account (local `voting_app` DB, seeded by schema.mysql.sql)
+## Test account (local `voting_app` DB, seeded by database/schema.mysql.sql)
 
 - Student: `987654321` / `password123` (verified against stored hash)
 - Other seeded students: `20230101`–`20230105`, `20260001`/`20260002` (unregistered)

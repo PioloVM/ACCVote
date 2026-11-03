@@ -1,7 +1,7 @@
 # School Year Overhaul — Plan & Spec
 
-Phase 1 (schema) is done — see `migration_schoolyear.sql` /
-`migration_schoolyear.mysql.sql`. This doc is the spec for Phases 2–4 so
+Phase 1 (schema) is done — see `database/migration_schoolyear.sql` /
+`database/migration_schoolyear.mysql.sql`. This doc is the spec for Phases 2–4 so
 each one can be built without re-deciding the rules.
 
 ## Decisions locked in
@@ -49,7 +49,7 @@ existing `year_levels` admin settings table as the label source, so
 `election_positions.year_restriction` matching doesn't change at all —
 only where the label comes from changes.
 
-## Login gate (Phase 3, in login.php)
+## Login gate (Phase 3, in student/login.php)
 
 On successful password check, before issuing the session:
 
@@ -116,7 +116,7 @@ New Results → Reports view:
    reorder), remove Majors section, relabel Department → Faculty in
    Settings UI only.
 2. **Phase 3 — Registration + login + Next School Year action**: the
-   business logic above, touching `register.php`, `login.php`,
+   business logic above, touching `student/register.php`, `student/login.php`,
    `includes/functions.php`, and a new admin API action.
 3. **Phase 4 — Admin Students panel + CSV**: remove major/section
    fields, add School Year picker (replaces manual Year Level dropdown),

@@ -14,8 +14,8 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-$mysqlFile = __DIR__ . '/../schema.mysql.sql';
-$pgFile    = __DIR__ . '/../schema.sql';
+$mysqlFile = __DIR__ . '/../database/schema.mysql.sql';
+$pgFile    = __DIR__ . '/../database/schema.sql';
 
 if (!is_readable($mysqlFile) || !is_readable($pgFile)) {
     fwrite(STDERR, "FAIL: cannot read schema files\n");
