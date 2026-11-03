@@ -27,7 +27,7 @@ if (!in_array($role, ['student', 'admin'], true)) {
 // The admin bridge opens a REAL full-privilege admin session, so it must
 // never be reachable from the public internet - remote visitors only get
 // the (read-mostly, no-elections) student demo.
-if ($role === 'admin' && !guide_is_loopback()) {
+if ($role === 'admin' && !guide_is_truly_local()) {
     guide_json(['ok' => false, 'error' => 'The admin demo bridge is only available on localhost.'], 403);
 }
 

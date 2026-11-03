@@ -35,6 +35,18 @@ function guide_is_loopback(): bool
     return in_array($ip, ['127.0.0.1', '::1', '::ffff:127.0.0.1'], true);
 }
 
+function guide_is_truly_local(): bool
+{
+    // Render fronts every request with its own proxy, so REMOTE_ADDR inside
+    // the container is loopback even for internet visitors - a loopback check
+    // alone cannot distinguish locals there. The injected RENDER variables
+    // are the reliable signal that no request is genuinely local.
+    if (getenv('RENDER') === 'true' || getenv('RENDER_SERVICE_ID') !== false) {
+        return false;
+    }
+    return guide_is_loopback();
+}
+
 function guide_is_local(): bool
 {
     if (getenv('GUIDE_ALLOW_REMOTE') === '1') {
