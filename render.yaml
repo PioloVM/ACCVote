@@ -1,0 +1,20 @@
+# Render Blueprint for the School Voting System (voting-app3)
+#
+# Deploy via the Render dashboard: New + -> Blueprint -> select this repo.
+# You will be prompted once for DATABASE_URL (the Neon connection string,
+# pooled endpoint, e.g. postgresql://...@ep-xxx-pooler...neon.tech/voting_app?sslmode=require).
+
+services:
+  - type: web
+    name: voteacc
+    runtime: docker
+    plan: free
+    region: sin
+    healthCheckPath: /public/health.php
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_DRIVER
+        value: pgsql
+      - key: GUIDE_ALLOW_REMOTE
+        value: "1"
