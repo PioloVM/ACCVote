@@ -21,6 +21,12 @@ $adminUsername = $_SESSION['admin_username'] ?? 'Admin';
 <title>Admin Dashboard | School Elections</title>
 <style>
 :root{
+    /* Tells the browser which UA color palette to use for NATIVE widget
+       rendering (select dropdown popups, date-picker icons, number
+       spinners, scrollbars, autofill). Without this, dark-theme text
+       (white --ink) can be paired with a light system popup background
+       → invisible white-on-white options. */
+    color-scheme:light;
     --navy:#101828;
     --navy-2:#1d2939;
     --navy-3:#28374b;
@@ -72,6 +78,9 @@ $adminUsername = $_SESSION['admin_username'] ?? 'Admin';
    the sidebar. Sidebar itself stays the same dark navy in both modes
    (it's already dark), so only the main content surface tokens change. */
 [data-theme="dark"]{
+    /* Native widgets (dropdown popups, pickers, spinners, scrollbars)
+       must render with the dark UA palette to match the theme above. */
+    color-scheme:dark;
     --bg:#0a1120;
     --ink:#e7ecf5;
     --muted:#8b98ad;
@@ -702,7 +711,7 @@ html,body{overflow-x:hidden;}
 @keyframes toastOut{to{opacity:0;transform:translateX(12px);}}
 .toast .toast-icon{width:20px;height:20px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;}
 .toast .toast-icon svg{width:12px;height:12px;}
-.toast.success .toast-icon{background:#dcfce7;color:#16a34a;}
+.toast.success .toast-icon{background:#dcfce7;color:#15803d;}
 .toast.error .toast-icon{background:#fee2e2;color:#dc2626;}
 .toast.info .toast-icon{background:#dbeafe;color:#2563eb;}
 .toast.warning .toast-icon{background:#fef3c7;color:#b45309;}
@@ -835,10 +844,20 @@ html,body{overflow-x:hidden;}
 
 [data-theme="dark"] .skeleton{background:linear-gradient(90deg,#182238 25%,#212e48 37%,#182238 63%);background-size:400% 100%;}
 
-[data-theme="dark"] .field-invalid{border-color:#f87171 !important;background:rgba(239,68,68,.08);}
+/* MUST stay opaque: this class lands on <select> too, and Chrome
+   propagates the select's color (near-white --ink) to the native dropdown
+   popup while a translucent background can't be composited there — the
+   popup falls back to a near-white surface → invisible white-on-white
+   options. #211b28 is the old rgba(239,68,68,.08) wash pre-composited over
+   --input-bg (#0f1726), so the tint looks identical but survives the
+   popup. Alpha < 1 here re-breaks the Faculty dropdown. */
+[data-theme="dark"] .field-invalid{border-color:#f87171 !important;background:#211b28;}
 [data-theme="dark"] .field-error-msg{color:#f87171;}
 
 [data-theme="dark"] .type-choice.selected{background:rgba(132,204,22,.1);}
+/* OFF-state toggle track was hardcoded light gray (#cbd5e1) — a bright
+   pill on the dark card. Dark slate keeps the white thumb readable. */
+[data-theme="dark"] .toggle-switch .track{background:#475569;}
 [data-theme="dark"] .btn-danger{color:#f87171;}
 
 [data-theme="dark"] .candidate-photo-row img{border-color:var(--surface);background:var(--surface-2);}

@@ -1,4 +1,9 @@
     :root {
+        /* Native-widget UA palette (select popups, pickers, scrollbars,
+           autofill). Light here, dark under [data-theme="dark"] below —
+           without this pair the popup can come out light while its text
+           inherits the theme's near-white --text (white-on-white). */
+        color-scheme: light;
         --bg: #f8fafc;
         --text: #0f172a;
         --text-secondary: #64748b;
@@ -32,6 +37,7 @@
        modes (it's already dark), so only the main content surface tokens
        change here. */
     [data-theme="dark"] {
+        color-scheme: dark;
         --bg: #0a1120;
         --text: #e7ecf5;
         --text-secondary: #8b98ad;
@@ -638,7 +644,10 @@
     .cand-tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1rem .5rem;gap:.25rem;border:none;background:transparent;color:var(--text-secondary);font-size:.8rem;font-weight:800;letter-spacing:.02em;text-transform:uppercase;cursor:pointer;transition:background .2s,color .2s;border-right:1px solid var(--border);}
     .cand-tab-btn:last-child{border-right:none;}
     .cand-tab-btn:hover{color:var(--text);background:rgba(132,204,22,.06);}
-    .cand-tab-btn.active{color:var(--accent);background:rgba(132,204,22,.12);}
+    /* var(--text), not var(--accent): lime-on-pale-lime measured 1.8:1 in
+       light theme (unreadable "SSG"/subtitle). The token flips per theme,
+       so both modes stay high-contrast; the lime fill still marks active. */
+    .cand-tab-btn.active{color:var(--text);background:rgba(132,204,22,.12);}
     .cand-tab-btn .cand-tab-icon{font-size:1.5rem;line-height:1;}
     .cand-tab-btn .cand-tab-sub{font-size:.65rem;font-weight:600;opacity:.8;text-transform:none;letter-spacing:normal;}
 
@@ -840,7 +849,7 @@
     .ballot-group-progress span { font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
     .ballot-step-heading { margin-bottom: 1.25rem; }
-    .ballot-step-eyebrow { display: inline-block; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #65a30d; background: rgba(132,204,22,0.14); padding: 0.25rem 0.65rem; border-radius: 999px; margin-bottom: 0.6rem; }
+    .ballot-step-eyebrow { display: inline-block; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #4d7c0f; background: rgba(132,204,22,0.14); padding: 0.25rem 0.65rem; border-radius: 999px; margin-bottom: 0.6rem; }
     .ballot-position-title { margin: 0 0 0.3rem; font-size: 1.5rem; color: var(--text); font-family: var(--font-display); border-left: 3px solid var(--accent); padding-left: 0.6rem; }
     .ballot-instruction { margin: 0.35rem 0 0; color: var(--text-secondary); font-size: 0.9rem; }
 
@@ -892,7 +901,7 @@
 
     .ballot-select-count {
         display: inline-block; margin-left: 0.5rem; font-weight: 700; font-size: 0.78rem;
-        color: #65a30d; background: rgba(132,204,22,0.14); padding: 0.15rem 0.6rem; border-radius: 999px;
+        color: #4d7c0f; background: rgba(132,204,22,0.14); padding: 0.15rem 0.6rem; border-radius: 999px;
         vertical-align: middle;
     }
 
@@ -903,7 +912,7 @@
     }
     .ballot-candidate-body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; flex: 1; }
     .ballot-candidate-name { font-weight: 700; font-size: 1.05rem; color: var(--text); }
-    .ballot-candidate-party { font-size: 0.8rem; font-weight: 600; color: #65a30d; }
+    .ballot-candidate-party { font-size: 0.8rem; font-weight: 600; color: #4d7c0f; }
     .ballot-candidate-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem; color: var(--text-secondary); }
     .ballot-candidate-meta span:not(:last-child)::after { content: '·'; margin-left: 0.5rem; color: var(--border-strong); }
     .ballot-candidate-platform { font-size: 0.82rem; color: var(--text); margin-top: 0.35rem; line-height: 1.45; }
@@ -991,7 +1000,7 @@
         display: flex; align-items: center; justify-content: center;
         transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
     }
-    .bps-dot.filled { background: #65a30d; border-color: #65a30d; }
+    .bps-dot.filled { background: #4d7c0f; border-color: #4d7c0f; }
     .bps-dot-num { font-size: 8px; font-weight: 800; color: var(--text-secondary); line-height: 1; }
     .bps-dot.filled .bps-dot-num { color: #fff; }
     .bps-line { flex: 1 0 16px; min-width: 16px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 0 -1px; }
@@ -1028,7 +1037,7 @@
     @keyframes toastOut { to { opacity: 0; transform: translateX(12px); } }
     .toast .toast-icon { width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
     .toast .toast-icon svg { width: 12px; height: 12px; }
-    .toast.success .toast-icon { background: rgba(34,197,94,0.15); color: #16a34a; }
+    .toast.success .toast-icon { background: rgba(34,197,94,0.15); color: #15803d; }
     .toast.error .toast-icon { background: rgba(239,68,68,0.15); color: #dc2626; }
     .toast.info .toast-icon { background: rgba(59,130,246,0.15); color: #2563eb; }
     .toast.warning .toast-icon { background: rgba(245,158,11,0.18); color: #b45309; }
@@ -1081,7 +1090,7 @@
     .cand-modal-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .cand-modal-info { padding: 1.5rem; }
     .cand-modal-name { margin: 0 0 0.4rem; font-size: 1.5rem; font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
-    .cand-modal-party { display: inline-block; font-size: 0.78rem; font-weight: 700; color: var(--accent-dark); background: rgba(132,204,22,0.14); padding: 0.25rem 0.7rem; border-radius: 999px; margin-bottom: 1rem; }
+    .cand-modal-party { display: inline-block; font-size: 0.78rem; font-weight: 700; color: #4d7c0f; background: rgba(132,204,22,0.14); padding: 0.25rem 0.7rem; border-radius: 999px; margin-bottom: 1rem; }
     .cand-modal-meta-list { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border); }
     .cand-modal-meta-row { display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.88rem; color: var(--text); }
     .cand-modal-meta-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
@@ -1240,6 +1249,9 @@
        pattern; brighten the glyph colors in dark mode (mirrors the admin
        panel's overrides). */
     [data-theme="dark"] .toast.success .toast-icon { background: rgba(34,197,94,0.18); color: #4ade80; }
+    /* cand-modal-party's base color was darkened for light-theme contrast
+       (lime-on-lime was 2.8:1); dark needs the bright lime back. */
+    [data-theme="dark"] .cand-modal-party { color: #a3e635; }
     [data-theme="dark"] .toast.error .toast-icon { background: rgba(239,68,68,0.18); color: #f87171; }
     [data-theme="dark"] .toast.info .toast-icon { background: rgba(59,130,246,0.18); color: #60a5fa; }
     [data-theme="dark"] .toast.warning .toast-icon { background: rgba(245,158,11,0.18); color: #fbbf24; }
