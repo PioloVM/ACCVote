@@ -298,7 +298,7 @@ function recordAttempt(PDO $pdo, string $bucket): void
  * TIMEZONE NOTE: start_date/end_date are stored as the literal wall-clock
  * value the admin typed into the schedule picker (Philippines time),
  * with no timezone attached — same as activity_logs treats CURRENT_
- * TIMESTAMP as UTC on the frontend (see dashboard2.php's
+ * TIMESTAMP as UTC on the frontend (see admin/dashboard.php's
  * parseServerTimestamp()). Postgres's own NOW() returns the current
  * instant in UTC on this host, so comparing it directly against a
  * Philippines-local literal would be off by the UTC+8 offset — an
