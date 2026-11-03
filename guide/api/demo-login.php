@@ -24,6 +24,12 @@ $role = $_POST['role'] ?? '';
 if (!in_array($role, ['student', 'admin'], true)) {
     guide_json(['ok' => false, 'error' => 'Unknown demo role.'], 400);
 }
+// The admin bridge opens a REAL full-privilege admin session, so it must
+// never be reachable from the public internet - remote visitors only get
+// the (read-mostly, no-elections) student demo.
+if ($role === 'admin' && !guide_is_loopback()) {
+    guide_json(['ok' => false, 'error' => 'The admin demo bridge is only available on localhost.'], 403);
+}
 
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../config/db.php';

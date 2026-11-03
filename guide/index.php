@@ -7,7 +7,7 @@ guide_require_local();
 $annotations = guide_annotations();
 $system = guide_system();
 $guideData = [
-    'appRoot' => GUIDE_APP_ROOT,
+    'appRoot' => guide_app_root(),
     'groups' => $annotations['groups'] ?? [],
     'chapters' => $annotations['chapters'] ?? [],
     'annotations' => $annotations['annotations'] ?? [],

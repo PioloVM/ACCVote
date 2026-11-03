@@ -8,12 +8,31 @@
 
 declare(strict_types=1);
 
-const GUIDE_APP_ROOT = '/voting-app3/';
-
 function guide_root(): string
 {
     $root = realpath(__DIR__ . '/..');
     return $root !== false ? $root : dirname(__DIR__);
+}
+
+function guide_app_root(): string
+{
+    // The guide mounts at <app root>/guide/, so the URL prefix above the
+    // /guide/ segment is the app root ('/voting-app3/' under XAMPP, '/' when
+    // deployed at a domain root). Deriving it keeps the tour's previews and
+    // links working in both mountings.
+    foreach ([$_SERVER['SCRIPT_NAME'] ?? '', $_SERVER['PHP_SELF'] ?? ''] as $script) {
+        $pos = strpos($script, '/guide/');
+        if ($pos !== false) {
+            return rtrim(substr($script, 0, $pos), '/') . '/';
+        }
+    }
+    return '/';
+}
+
+function guide_is_loopback(): bool
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    return in_array($ip, ['127.0.0.1', '::1', '::ffff:127.0.0.1'], true);
 }
 
 function guide_is_local(): bool
@@ -22,8 +41,7 @@ function guide_is_local(): bool
         return true;
     }
 
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-    return in_array($ip, ['127.0.0.1', '::1', '::ffff:127.0.0.1'], true);
+    return guide_is_loopback();
 }
 
 function guide_json(array $payload, int $status = 200): void

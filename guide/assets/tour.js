@@ -1660,7 +1660,7 @@
         var route = currentRoute();
         var shown = route.path + (route.search || '');
         if (urlPill) {
-            urlPill.textContent = 'localhost' + appRoot.replace(/\/$/, '') + shown;
+            urlPill.textContent = (window.location.hostname || 'localhost') + appRoot.replace(/\/$/, '') + shown;
         }
         if (routePill) { routePill.textContent = shown; }
         if (openFrame) {
