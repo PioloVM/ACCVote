@@ -614,9 +614,26 @@
 
     function syncChapterForAnnotation(id) {
         if (!state.follow) { return; }
-        for (var i = 0; i < chapters.length; i++) {
-            var steps = chapters[i].steps || [];
-            for (var j = 0; j < steps.length; j++) {
+        var i, j, steps;
+        // Chapters reuse annotations, so prefer the chapter the tour is
+        // already showing: a shared step must not drag the position back to
+        // an earlier chapter that happens to contain the same annotation.
+        var current = chapterFor(state.chapterId);
+        steps = (current && current.steps) || [];
+        for (j = 0; j < steps.length; j++) {
+            if (steps[j].annotation === id) {
+                if (state.stepIndex !== j) {
+                    state.stepIndex = j;
+                    updateChapterUI();
+                    updateStepBar();
+                    saveState();
+                }
+                return;
+            }
+        }
+        for (i = 0; i < chapters.length; i++) {
+            steps = chapters[i].steps || [];
+            for (j = 0; j < steps.length; j++) {
                 if (steps[j].annotation === id) {
                     state.chapterId = chapters[i].id;
                     state.stepIndex = j;
@@ -663,7 +680,7 @@
 
     function sourceFileForPath(path) {
         var clean = normalizePath(path).replace(/^\//, '');
-        return clean || 'index.php';
+        return clean || 'public/index.php';
     }
 
     function syntheticAnnotation(target) {
@@ -709,6 +726,7 @@
         { id: 'database', label: 'Database' },
         { id: 'api', label: 'API' },
         { id: 'security', label: 'Security' },
+        { id: 'functions', label: 'Functions' },
         { id: 'defense', label: 'Defense kit' },
         { id: 'quality', label: 'Testing & deployment' },
         { id: 'glossary', label: 'Glossary' }
@@ -886,6 +904,7 @@
         else if (active === 'database') { renderSystemDatabase(focus); }
         else if (active === 'api') { renderSystemApi(); }
         else if (active === 'security') { renderSystemSecurity(); }
+        else if (active === 'functions') { renderSystemFunctions(); }
         else if (active === 'defense') { renderSystemDefense(); }
         else if (active === 'quality') { renderSystemQuality(); }
         else if (active === 'glossary') { renderSystemGlossary(); }
@@ -1174,6 +1193,33 @@
                 card.appendChild(list);
             }
             card.addEventListener('click', function () { openSystemEntry(securityAnnotation(entry)); });
+            grid.appendChild(card);
+        });
+        systemBody.appendChild(grid);
+    }
+
+    function functionAnnotation(entry) {
+        return {
+            title: entry.name + '()',
+            category: 'logic',
+            summary: entry.purpose,
+            behavior: entry.behavior || '',
+            under_the_hood: 'Plain PHP helper in includes/functions.php — no framework layer between this code and the page that calls it.',
+            code: codeFor(entry, entry.name + '()'),
+            connections: entry.connections || [],
+            defense: entry.defense || ''
+        };
+    }
+
+    function renderSystemFunctions() {
+        var grid = make('div', 'function-grid');
+        (system.functions || []).forEach(function (entry) {
+            var card = make('button', 'function-card');
+            card.type = 'button';
+            card.setAttribute('data-system-entry', 'function:' + entry.name);
+            card.appendChild(make('h3', '', entry.name + '()'));
+            card.appendChild(make('p', '', entry.purpose || ''));
+            card.addEventListener('click', function () { openSystemEntry(functionAnnotation(entry)); });
             grid.appendChild(card);
         });
         systemBody.appendChild(grid);
@@ -1599,12 +1645,12 @@
     /* --------------------------------------------------------- chrome --- */
 
     var PAGE_TITLES = {
-        '/landingpage.php': 'Landing page',
-        '/login.php': 'Student login',
-        '/register.php': 'Student registration',
-        '/results.php': 'Public results',
-        '/dashboard.php': 'Student dashboard',
-        '/update-account.php': 'Account update',
+        '/public/landingpage.php': 'Landing page',
+        '/student/login.php': 'Student login',
+        '/student/register.php': 'Student registration',
+        '/public/results.php': 'Public results',
+        '/student/dashboard.php': 'Student dashboard',
+        '/student/update-account.php': 'Account update',
         '/forgot-password.php': 'Password recovery',
         '/admin/login.php': 'Admin login',
         '/admin/dashboard.php': 'Admin panel'
@@ -1622,7 +1668,7 @@
         }
         if (stageTitle) {
             var title = PAGE_TITLES[route.path] || titleCase(route.path.replace(/^\//, '').replace(/\.php$/, '') || 'Landing page');
-            if (route.path === '/dashboard.php' && route.page) { title += ' · ' + titleCase(route.page); }
+            if (route.path === '/student/dashboard.php' && route.page) { title += ' · ' + titleCase(route.page); }
             if (route.path === '/admin/dashboard.php' && route.panel) { title += ' · ' + titleCase(route.panel); }
             stageTitle.textContent = title;
         }
@@ -1978,7 +2024,7 @@
 
     function loginAs(role, options) {
         var isAdmin = role === 'admin';
-        var dashboardPath = isAdmin ? '/admin/dashboard.php' : '/dashboard.php';
+        var dashboardPath = isAdmin ? '/admin/dashboard.php' : '/student/dashboard.php';
         var label = isAdmin ? 'Admin' : 'Student';
         var opts = options || {};
 
@@ -2011,7 +2057,7 @@
             state.previewId = null;
             updateRolePill();
             toast('Demo sessions cleared.');
-            return navigateApp('/landingpage.php');
+            return navigateApp('/public/landingpage.php');
         });
     }
 
@@ -2038,13 +2084,13 @@
         var stepWantsAdmin = stepMatch.preview === true
             || normalizePath(stepMatch.path || '').indexOf('/admin/') === 0;
 
-        if (route.path === '/login.php' && stepWantsAdmin) {
+        if (route.path === '/student/login.php' && stepWantsAdmin) {
             showBanner('This ballot preview needs an admin session.', 'Log in as demo admin', function () {
                 loginAs('admin', { returnAnnotation: stepAnnotation ? stepAnnotation.id : null });
             });
             return;
         }
-        if (route.path === '/login.php') {
+        if (route.path === '/student/login.php') {
             showBanner('This screen needs a student session.', 'Log in as demo student', function () {
                 loginAs('student', { returnAnnotation: stepAnnotation ? stepAnnotation.id : null });
             });
@@ -2068,11 +2114,36 @@
 
     /* -------------------------------------------------------- fallback --- */
 
+    /* Routes moved during the folder restructure. Recorded fallback screens
+       keep their original keys, so the old key is mapped from the new path. */
+    var LEGACY_ROUTE = {
+        '/public/landingpage.php': 'landingpage',
+        '/public/index.php': 'index',
+        '/public/results.php': 'results',
+        '/public/health.php': 'health',
+        '/public/404.php': '404',
+        '/student/login.php': 'login',
+        '/student/dashboard.php': 'dashboard',
+        '/student/vote.php': 'vote',
+        '/student/draft.php': 'draft',
+        '/student/dashboard-data.php': 'dashboard-data',
+        '/student/update-account.php': 'update-account',
+        '/student/change-password.php': 'change-password',
+        '/student/logout.php': 'logout',
+        '/student/photo.php': 'photo',
+        '/student/icon.php': 'icon',
+        '/config/router.php': 'router'
+    };
+
     function screenKeyForRoute(route) {
+        var legacy = LEGACY_ROUTE[route.path];
+        if (legacy) {
+            if (route.path === '/student/dashboard.php' && route.page && route.page !== 'home') { return legacy + '-' + route.page; }
+            return legacy;
+        }
         var path = (route.path || '/').replace(/^\/|\/$/g, '');
         if (!path) { path = 'landingpage'; }
         path = path.replace(/\.php$/, '').replace(/\//g, '-');
-        if (route.path === '/dashboard.php' && route.page && route.page !== 'home') { path += '-' + route.page; }
         if (route.path === '/admin/dashboard.php' && route.panel && route.panel !== 'dashboard') { path += '-' + route.panel; }
         return path;
     }
@@ -2134,9 +2205,9 @@
         try {
             var win = frameWin();
             if (win) { win.location.reload(); }
-            else { frame.src = appUrl('/landingpage.php').href; }
+            else { frame.src = appUrl('/public/landingpage.php').href; }
         } catch (e) {
-            frame.src = appUrl('/landingpage.php').href;
+            frame.src = appUrl('/public/landingpage.php').href;
         }
     }
 
@@ -2487,6 +2558,9 @@
         (system.security || []).forEach(function (entry) {
             pushSystem('Security', entry.title, entry.summary, 'security', 'security:' + entry.id);
         });
+        (system.functions || []).forEach(function (entry) {
+            pushSystem('Function', entry.name + '()', entry.purpose, 'functions', 'function:' + entry.name);
+        });
         (system.flows || []).forEach(function (flow) {
             pushSystem('Flow', flow.title, flow.summary, 'flows', 'flow:' + flow.id);
         });
@@ -2698,7 +2772,7 @@
         function reloadFrame() {
             armHealth();
             try { frameWin().location.reload(); }
-            catch (e) { frame.src = appUrl('/landingpage.php').href; }
+            catch (e) { frame.src = appUrl('/public/landingpage.php').href; }
         }
         if (reload) { reload.addEventListener('click', reloadFrame); }
         if (frameReload) { frameReload.addEventListener('click', reloadFrame); }

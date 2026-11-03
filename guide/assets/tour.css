@@ -826,6 +826,20 @@ kbd {
 .security-card li { position: relative; padding-left: 11px; font-size: 10.5px; line-height: 1.45; color: var(--ink); }
 .security-card li::before { content: "·"; position: absolute; left: 2px; color: var(--gold); font-weight: 700; }
 
+/* functions reference */
+
+.function-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 9px; }
+.function-card {
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  text-align: left;
+}
+.function-card:hover { border-color: var(--lime); box-shadow: var(--shadow-1); }
+.function-card h3 { margin: 0 0 4px; font-size: 12px; font-family: var(--mono); }
+.function-card p { margin: 0; font-size: 11.2px; line-height: 1.5; color: var(--muted); }
+
 .quality-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 11px; }
 .quality-card { padding: 14px 15px; }
 .quality-card h3 { margin: 0 0 4px; font-family: var(--serif); font-size: 16px; }

@@ -151,9 +151,9 @@ $assetVer = max(
           <h1 id="stageTitle">Landing page</h1>
         </div>
         <div class="stage-actions">
-          <span class="route-pill" id="routePill">/landingpage.php</span>
+          <span class="route-pill" id="routePill">/public/landingpage.php</span>
           <button type="button" class="stage-btn" id="reloadFrame">Reload</button>
-          <a class="stage-btn" id="openFrame" href="../landingpage.php" target="_blank" rel="noopener">Open tab</a>
+          <a class="stage-btn" id="openFrame" href="../public/landingpage.php" target="_blank" rel="noopener">Open tab</a>
         </div>
       </div>
 
@@ -166,7 +166,7 @@ $assetVer = max(
           <div class="system-heading">
             <span class="eyebrow">System reference</span>
             <h2 id="systemTitle">How voting-app3 works</h2>
-            <p id="systemLead">Architecture, database, endpoints, security, and flows. Every entry opens its real source.</p>
+            <p id="systemLead">Architecture, database, endpoints, security, flows, and every helper function. Every entry opens its real source.</p>
           </div>
           <button type="button" class="system-print" id="systemPrint">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V4h10v5M7 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v6H7z"/></svg>
@@ -186,11 +186,11 @@ $assetVer = max(
             <span class="browser-dot is-red"></span>
             <span class="browser-dot is-amber"></span>
             <span class="browser-dot is-green"></span>
-            <div class="url-pill" id="urlPill">localhost/voting-app3/landingpage.php</div>
+            <div class="url-pill" id="urlPill">localhost/voting-app3/public/landingpage.php</div>
             <button type="button" class="browser-btn" id="frameReload">Reload</button>
           </div>
           <div class="frame-viewport" id="frameViewport">
-            <iframe id="app-frame" src="../landingpage.php" title="voting-app3 live application"></iframe>
+            <iframe id="app-frame" src="../public/landingpage.php" title="voting-app3 live application"></iframe>
             <div class="marker-layer" id="marker-layer"></div>
             <div class="frame-banner" id="frameBanner" hidden></div>
             <div class="fallback" id="fallback" hidden>
@@ -254,7 +254,7 @@ $assetVer = max(
     <div class="palette-card" role="dialog" aria-modal="true" aria-label="Search the guide">
       <div class="palette-input-wrap">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
-        <input id="paletteInput" type="search" placeholder="Search annotations, tables, endpoints, questions…" autocomplete="off">
+        <input id="paletteInput" type="search" placeholder="Search annotations, tables, endpoints, functions, questions…" autocomplete="off">
         <kbd>Esc</kbd>
       </div>
       <div class="palette-results" id="paletteResults"></div>

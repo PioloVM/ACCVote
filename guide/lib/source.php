@@ -85,7 +85,7 @@ function guide_source_path(string $file): string
 
     $count = count($segments);
     $first = $segments[0];
-    $topLevel = ['admin', 'assets', 'config', 'includes', 'student', 'docs', 'tests', 'tools'];
+    $topLevel = ['admin', 'assets', 'config', 'database', 'includes', 'public', 'student', 'docs', 'tests', 'tools'];
     $guideRoots = ['data', 'assets', 'lib', 'tools'];
 
     $allowed = false;

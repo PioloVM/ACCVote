@@ -47,13 +47,43 @@ return [
             'id' => 'start-here',
             'group' => 'start',
             'title' => 'Start Here',
-            'summary' => 'The public front door and the shape of the system.',
+            'summary' => 'What the system is, who uses it, and how one request travels — the whole application in six stops.',
             'steps' => [
                 [
                     'id' => 'start-landing-hero',
                     'title' => 'The public front door',
                     'annotation' => 'landing-hero',
                     'intro' => 'Start on the landing page. The hero is the first thing every voter sees, and it is rendered from live election data.',
+                ],
+                [
+                    'id' => 'start-who-uses-it',
+                    'title' => 'Who uses it',
+                    'annotation' => 'landing-nav',
+                    'intro' => 'Two roles share the system: students who register, vote, and read results, and administrators who run elections. The navbar renders different links for each, decided server-side from the session.',
+                ],
+                [
+                    'id' => 'start-server-counts',
+                    'title' => 'Numbers computed on the server',
+                    'annotation' => 'landing-ticker',
+                    'intro' => 'Before a single line of HTML is sent, the page counts registered students, live elections, and ballots cast. The scrolling strip is a view over real queries, not placeholder text.',
+                ],
+                [
+                    'id' => 'start-request-travel',
+                    'title' => 'How one request travels',
+                    'annotation' => 'login-submit',
+                    'intro' => 'Every page works this way: the browser posts a normal form or fetch, and the server re-validates the token, the rate limit, the credentials, and the lifecycle rules before it answers with a redirect or the same page plus an error.',
+                ],
+                [
+                    'id' => 'start-results-rule',
+                    'title' => 'The same rule on the way out',
+                    'annotation' => 'results-head',
+                    'intro' => 'Output is filtered server-side too: the public results page applies each election\'s visibility rule before rendering, so guessing an id gets you nothing.',
+                ],
+                [
+                    'id' => 'start-next',
+                    'title' => 'The flow, in six steps',
+                    'annotation' => 'landing-how',
+                    'intro' => 'This explainer is static copy, but it mirrors the real flow the code implements. From here, follow the Public Site chapter, then the Student Portal, the Admin Panel, and the System reference.',
                 ],
             ],
         ],
@@ -811,12 +841,104 @@ return [
                 ],
             ],
         ],
+        [
+            'id' => 'functions-reference',
+            'group' => 'system',
+            'title' => 'The shared function kit',
+            'summary' => 'All 28 helpers in includes/functions.php: sessions, access gates, escaping, CSRF, JSON, throttling, status sync, settings, logos, upload validation, passwords, and the school-year clock.',
+            'steps' => [
+                [
+                    'id' => 'fn-gates',
+                    'title' => 'Sessions and access gates',
+                    'annotation' => 'fn-gates',
+                    'intro' => 'One function starts the hardened session; two gates decide who gets in.',
+                ],
+                [
+                    'id' => 'fn-csrf',
+                    'title' => 'The CSRF token pair',
+                    'annotation' => 'fn-csrf',
+                    'intro' => 'A session-bound random token, compared in constant time on every POST.',
+                ],
+                [
+                    'id' => 'fn-throttle',
+                    'title' => 'Rate limiting by bucket and client',
+                    'annotation' => 'fn-throttle',
+                    'intro' => 'Login and registration share one table with separate buckets, keyed by bucket plus client IP.',
+                ],
+                [
+                    'id' => 'fn-password',
+                    'title' => 'Password policy and student-ID format',
+                    'annotation' => 'fn-password',
+                    'intro' => 'Two validators shared by the student form and the admin panel.',
+                ],
+                [
+                    'id' => 'fn-year-clock',
+                    'title' => 'The school-year clock',
+                    'annotation' => 'fn-year-clock',
+                    'intro' => 'June 1 flips the year in Asia/Manila time; nothing stores "now".',
+                ],
+                [
+                    'id' => 'fn-year-level',
+                    'title' => 'Year levels: computed, then declared',
+                    'annotation' => 'fn-year-level',
+                    'intro' => 'Arithmetic for normal students; a forced declaration past the four-year window.',
+                ],
+                [
+                    'id' => 'fn-escape',
+                    'title' => 'Escaping output and versioning assets',
+                    'annotation' => 'fn-escape',
+                    'intro' => 'h() wraps every interpolated string; assetV() busts caches with the file\'s own mtime.',
+                ],
+                [
+                    'id' => 'fn-banner',
+                    'title' => 'The prepared banner query',
+                    'annotation' => 'fn-banner',
+                    'intro' => 'getOngoingElectionsBanner() works and is not called yet - the landing page still builds its list inline.',
+                ],
+                [
+                    'id' => 'fn-status',
+                    'title' => 'Election statuses transition themselves',
+                    'annotation' => 'fn-status',
+                    'intro' => 'Two idempotent UPDATEs run on every render, in Manila wall-clock time.',
+                ],
+                [
+                    'id' => 'fn-year-rows',
+                    'title' => 'School-year rows create themselves',
+                    'annotation' => 'fn-year-rows',
+                    'intro' => 'Registration and login never wait on an admin to pre-create a year.',
+                ],
+                [
+                    'id' => 'fn-json',
+                    'title' => 'One shape for every AJAX answer',
+                    'annotation' => 'fn-json',
+                    'intro' => 'jsonResponse() sets the status, header, body, and exit - no endpoint hand-rolls it.',
+                ],
+                [
+                    'id' => 'fn-settings',
+                    'title' => 'Site settings are key-value rows',
+                    'annotation' => 'fn-settings',
+                    'intro' => 'getSiteSetting() returns null for unset keys, and callers treat null as "not configured".',
+                ],
+                [
+                    'id' => 'fn-image',
+                    'title' => 'Uploads validated as decoded bytes',
+                    'annotation' => 'fn-image',
+                    'intro' => 'A data:image prefix is not enough - the decoded bytes must parse as a raster image.',
+                ],
+                [
+                    'id' => 'fn-logos',
+                    'title' => 'Election logos with an honest fallback',
+                    'annotation' => 'fn-logos',
+                    'intro' => 'SSG seal, department mark, or inline SVG glyph - never a broken image.',
+                ],
+            ],
+        ],
     ],
 
     'annotations' => [
         'landing-hero' => [
             'id' => 'landing-hero',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => 'section.hero',
             'title' => 'Hero — "Your Voice, Your Choice"',
             'category' => 'ui',
@@ -825,14 +947,14 @@ return [
             'under_the_hood' => 'The section is server-rendered by landingpage.php. Before any HTML is sent, the page loads non-archived elections, the candidate marquee, and live counts. If the database fails, the page still renders with empty state blocks and zeroed stats instead of a 500.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<section class="hero">',
                     'before' => 3,
                     'after' => 18,
                     'label' => 'Hero markup',
                 ],
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '$elections = $pdo->query(',
                     'before' => 2,
                     'after' => 10,
@@ -854,7 +976,7 @@ return [
         ],
         'landing-nav' => [
             'id' => 'landing-nav',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => 'nav.nav',
             'title' => 'Public navigation',
             'category' => 'ui',
@@ -863,14 +985,14 @@ return [
             'under_the_hood' => 'The page checks the PHP session once near the top and stores the result in $isLoggedIn. The navigation is then rendered server-side from that boolean, so there is no flash of the wrong links.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<nav class="nav">',
                     'before' => 2,
                     'after' => 18,
                     'label' => 'Session-aware navigation',
                 ],
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '$isLoggedIn = !empty(',
                     'before' => 2,
                     'after' => 3,
@@ -891,7 +1013,7 @@ return [
         ],
         'landing-cta' => [
             'id' => 'landing-cta',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => '.hero-ctas',
             'title' => 'Vote Now action',
             'category' => 'logic',
@@ -900,7 +1022,7 @@ return [
             'under_the_hood' => 'The href is a PHP ternary evaluated during rendering. There is no client-side redirect and no hidden second button.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<div class="hero-ctas">',
                     'before' => 2,
                     'after' => 4,
@@ -908,7 +1030,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['login.php', 'dashboard.php'],
+            'endpoints' => ['student/login.php', 'student/dashboard.php'],
             'connections' => [
                 'Dashboard itself also calls requireLogin(), so the protection does not depend on this link.',
             ],
@@ -920,7 +1042,7 @@ return [
         ],
         'landing-ticker' => [
             'id' => 'landing-ticker',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => '.ticker-wrap',
             'title' => 'Live statistics ticker',
             'category' => 'data',
@@ -929,14 +1051,14 @@ return [
             'under_the_hood' => 'Five items are built in PHP. Student and voter totals come from COUNT queries against users and votes; the live-election count is computed from the already-loaded election list.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<div class="ticker-wrap">',
                     'before' => 2,
                     'after' => 16,
                     'label' => 'Ticker items',
                 ],
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '$totalStudents = ',
                     'before' => 1,
                     'after' => 3,
@@ -956,7 +1078,7 @@ return [
         ],
         'landing-elections' => [
             'id' => 'landing-elections',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => 'section.sec.elections',
             'title' => 'Current elections section',
             'category' => 'data',
@@ -965,14 +1087,14 @@ return [
             'under_the_hood' => 'A single SELECT joins school_years for the target-year label and filters with status NOT IN (draft, archived). The result is fetched once and reused by the cards and the live-count calculation.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<section class="sec elections" id="elections">',
                     'before' => 2,
                     'after' => 14,
                     'label' => 'Election list markup',
                 ],
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '$elections = $pdo->query(',
                     'before' => 1,
                     'after' => 12,
@@ -992,7 +1114,7 @@ return [
         ],
         'landing-election-card' => [
             'id' => 'landing-election-card',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => '.elec-grid .elec-card',
             'title' => 'One election card',
             'category' => 'logic',
@@ -1001,14 +1123,14 @@ return [
             'under_the_hood' => 'The badge is not read directly from the status column. The loop compares start_date and end_date with the current time and downgrades an ongoing election to Ended once the end date has passed.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<div class="elec-card reveal">',
                     'before' => 4,
                     'after' => 14,
                     'label' => 'Card markup',
                 ],
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '$isOpen = (',
                     'before' => 3,
                     'after' => 5,
@@ -1028,7 +1150,7 @@ return [
         ],
         'landing-how' => [
             'id' => 'landing-how',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => 'section.sec.how',
             'title' => 'How voting works',
             'category' => 'ui',
@@ -1037,7 +1159,7 @@ return [
             'under_the_hood' => 'This section is static HTML. It does not query the database; it exists to explain the flow that the rest of the code implements.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<section class="sec how">',
                     'before' => 2,
                     'after' => 20,
@@ -1058,7 +1180,7 @@ return [
         ],
         'landing-candidates' => [
             'id' => 'landing-candidates',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => 'section.sec.candidates',
             'title' => 'Candidate marquee',
             'category' => 'data',
@@ -1067,14 +1189,14 @@ return [
             'under_the_hood' => 'The query joins candidates to positions, election_positions, and elections, filters out draft and archived elections, and orders randomly using the database dialect (RAND() on MySQL, RANDOM() on PostgreSQL).',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<section class="sec candidates">',
                     'before' => 2,
                     'after' => 12,
                     'label' => 'Marquee markup',
                 ],
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '$candStmt = $pdo->prepare(',
                     'before' => 2,
                     'after' => 14,
@@ -1094,7 +1216,7 @@ return [
         ],
         'landing-final-cta' => [
             'id' => 'landing-final-cta',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => 'section.final-cta',
             'title' => 'Closing call to action',
             'category' => 'ui',
@@ -1103,7 +1225,7 @@ return [
             'under_the_hood' => 'The buttons reuse the same session boolean as the navbar. The register button is wrapped in a PHP condition and is not sent to signed-in students at all.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<section class="final-cta">',
                     'before' => 2,
                     'after' => 12,
@@ -1111,7 +1233,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['login.php', 'student/register.php', 'dashboard.php'],
+            'endpoints' => ['student/login.php', 'student/register.php', 'student/dashboard.php'],
             'connections' => [
                 'Links to the same destinations as the navbar, with the same session rule.',
             ],
@@ -1123,7 +1245,7 @@ return [
         ],
         'landing-footer' => [
             'id' => 'landing-footer',
-            'match' => ['path' => '/voting-app3/landingpage.php'],
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
             'selector' => 'footer',
             'title' => 'Public footer',
             'category' => 'ui',
@@ -1132,7 +1254,7 @@ return [
             'under_the_hood' => 'The year is generated with date("Y") during rendering; it is not typed into the HTML.',
             'code' => [
                 [
-                    'file' => 'landingpage.php',
+                    'file' => 'public/landingpage.php',
                     'anchor' => '<footer>',
                     'before' => 2,
                     'after' => 12,
@@ -1140,7 +1262,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['login.php', 'student/register.php'],
+            'endpoints' => ['student/login.php', 'student/register.php'],
             'connections' => [
                 'No session logic here; both links are public.',
             ],
@@ -1151,7 +1273,7 @@ return [
         ],
         'results-head' => [
             'id' => 'results-head',
-            'match' => ['path' => '/voting-app3/results.php'],
+            'match' => ['path' => '/voting-app3/public/results.php'],
             'selector' => '.page-head',
             'title' => 'Public results header',
             'category' => 'ui',
@@ -1160,14 +1282,14 @@ return [
             'under_the_hood' => 'The chip is plain HTML; a JavaScript interval updates its label every second. The results themselves are rendered server-side into #resultsRoot.',
             'code' => [
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => '<div class="page-head">',
                     'before' => 2,
                     'after' => 12,
                     'label' => 'Results header',
                 ],
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => 'function renderResultsMarkup',
                     'before' => 3,
                     'after' => 20,
@@ -1175,7 +1297,7 @@ return [
                 ],
             ],
             'tables' => ['elections', 'school_years'],
-            'endpoints' => ['results.php?partial=1'],
+            'endpoints' => ['public/results.php?partial=1'],
             'connections' => [
                 'The visibility filter uses elections.results_visibility: always, or only after the election closes.',
             ],
@@ -1187,7 +1309,7 @@ return [
         ],
         'results-election' => [
             'id' => 'results-election',
-            'match' => ['path' => '/voting-app3/results.php'],
+            'match' => ['path' => '/voting-app3/public/results.php'],
             'selector' => '#resultsRoot .elec',
             'title' => 'One election result block',
             'category' => 'data',
@@ -1196,14 +1318,14 @@ return [
             'under_the_hood' => 'The renderer batches queries: positions per election, turnout per election, and candidates per position. Percentages are computed per position, and leaders are candidates tied for the highest positive count.',
             'code' => [
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => "\$out .= '<section class=\"elec\">';",
                     'before' => 2,
                     'after' => 24,
                     'label' => 'Election result markup',
                 ],
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => '$ballotsCast = $turnoutByElection',
                     'before' => 2,
                     'after' => 8,
@@ -1223,7 +1345,7 @@ return [
         ],
         'results-refresh' => [
             'id' => 'results-refresh',
-            'match' => ['path' => '/voting-app3/results.php'],
+            'match' => ['path' => '/voting-app3/public/results.php'],
             'selector' => '.live-chip',
             'title' => 'Automatic refresh',
             'category' => 'logic',
@@ -1232,21 +1354,21 @@ return [
             'under_the_hood' => 'fetch() requests results.php?partial=1 and parses the response into a temporary element. Only the [data-root] inner HTML is copied, so scroll position and the rest of the page stay untouched.',
             'code' => [
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => '<span class="live-chip"',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Live indicator',
                 ],
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => 'setInterval(() => {',
                     'before' => 6,
                     'after' => 16,
                     'label' => 'Polling loop',
                 ],
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => '?partial=1',
                     'before' => 6,
                     'after' => 14,
@@ -1254,7 +1376,7 @@ return [
                 ],
             ],
             'tables' => ['ballot_submissions', 'votes'],
-            'endpoints' => ['results.php?partial=1'],
+            'endpoints' => ['public/results.php?partial=1'],
             'connections' => [
                 'A failed refresh is swallowed; the last good results stay on screen.',
                 'Polling pauses while document.hidden is true.',
@@ -1267,7 +1389,7 @@ return [
         ],
         'login-card' => [
             'id' => 'login-card',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#loginCard',
             'title' => 'The login card',
             'category' => 'ui',
@@ -1276,14 +1398,14 @@ return [
             'under_the_hood' => 'login.php starts the session, generates a CSRF token, and renders the full HTML. Authentication happens only when the same URL receives a POST.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '<div class="card<?= $error',
                     'before' => 2,
                     'after' => 16,
                     'label' => 'Login card shell',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'startSecureSession();',
                     'before' => 2,
                     'after' => 3,
@@ -1291,7 +1413,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['login.php'],
+            'endpoints' => ['student/login.php'],
             'connections' => [
                 'The registration CTA leaves this page but keeps the same visual language.',
             ],
@@ -1303,7 +1425,7 @@ return [
         ],
         'login-form' => [
             'id' => 'login-form',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#loginForm',
             'title' => 'Login form and CSRF check',
             'category' => 'security',
@@ -1312,14 +1434,14 @@ return [
             'under_the_hood' => 'verifyCsrfToken() compares the posted value with the token stored in the session. A failed check produces a friendly "Session expired" error rather than processing the credentials.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '<form method="POST" action="login.php"',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Form markup',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'verifyCsrfToken(',
                     'before' => 5,
                     'after' => 8,
@@ -1334,7 +1456,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['login.php (POST)'],
+            'endpoints' => ['student/login.php (POST)'],
             'connections' => [
                 'The token is created by csrfToken() and stored in the PHP session.',
                 'The same pattern protects registration and other POST endpoints.',
@@ -1347,7 +1469,7 @@ return [
         ],
         'login-id' => [
             'id' => 'login-id',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#student_id',
             'title' => 'Student ID field',
             'category' => 'ui',
@@ -1356,14 +1478,14 @@ return [
             'under_the_hood' => 'The server does not build SQL with the input. It prepares a statement with a :student_id placeholder and binds the value, which prevents SQL injection.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '<input type="text" id="student_id"',
                     'before' => 2,
                     'after' => 3,
                     'label' => 'ID input',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '$studentId = trim(',
                     'before' => 3,
                     'after' => 6,
@@ -1371,7 +1493,7 @@ return [
                 ],
             ],
             'tables' => ['users'],
-            'endpoints' => ['login.php (POST)'],
+            'endpoints' => ['student/login.php (POST)'],
             'connections' => [
                 'The account lookup is by student_id, not by the database primary key.',
             ],
@@ -1383,7 +1505,7 @@ return [
         ],
         'login-password' => [
             'id' => 'login-password',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#password',
             'title' => 'Password field',
             'category' => 'security',
@@ -1392,14 +1514,14 @@ return [
             'under_the_hood' => 'password_verify() compares the submitted string with the hash stored on the users row. The original password is never stored or decrypted; PHP checks the one-way hash directly.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '<input type="password" id="password"',
                     'before' => 2,
                     'after' => 5,
                     'label' => 'Password input',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'password_verify(',
                     'before' => 3,
                     'after' => 9,
@@ -1407,7 +1529,7 @@ return [
                 ],
             ],
             'tables' => ['users'],
-            'endpoints' => ['login.php (POST)'],
+            'endpoints' => ['student/login.php (POST)'],
             'connections' => [
                 'Registration hashes the password with password_hash() before INSERT or UPDATE.',
             ],
@@ -1419,7 +1541,7 @@ return [
         ],
         'login-toggle' => [
             'id' => 'login-toggle',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#togglePasswordBtn',
             'title' => 'Show / hide password',
             'category' => 'ui',
@@ -1428,14 +1550,14 @@ return [
             'under_the_hood' => 'The handler reads the current input type, flips it, and toggles a CSS class. The value stays in the same input, so nothing is sent to the server and the toggle state is not persisted.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'togglePasswordBtn.addEventListener',
                     'before' => 3,
                     'after' => 12,
                     'label' => 'Visibility toggle',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'passwordInput.type =',
                     'before' => 2,
                     'after' => 4,
@@ -1455,7 +1577,7 @@ return [
         ],
         'login-submit' => [
             'id' => 'login-submit',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#submitBtn',
             'title' => 'Submitting the login form',
             'category' => 'ui',
@@ -1464,14 +1586,14 @@ return [
             'under_the_hood' => 'The submit handler calls checkValidity() first, then disables the button. There is no preventDefault(), so the browser performs the POST and the server responds with a redirect or the same page plus an error.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '<button type="submit" class="btn btn-primary" id="submitBtn">',
                     'before' => 2,
                     'after' => 5,
                     'label' => 'Submit button',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => "loginForm.addEventListener('submit'",
                     'before' => 2,
                     'after' => 10,
@@ -1479,7 +1601,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['login.php (POST)'],
+            'endpoints' => ['student/login.php (POST)'],
             'connections' => [
                 'A successful POST ends in a 302 redirect to dashboard.php or update-account.php.',
             ],
@@ -1491,7 +1613,7 @@ return [
         ],
         'login-csrf' => [
             'id' => 'login-csrf',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => 'input[name="csrf_token"]',
             'title' => 'Hidden CSRF token',
             'category' => 'security',
@@ -1500,7 +1622,7 @@ return [
             'under_the_hood' => 'csrfToken() creates and stores a random token in the session. verifyCsrfToken() uses a timing-safe comparison and rejects missing or mismatched values.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '<input type="hidden" name="csrf_token"',
                     'before' => 2,
                     'after' => 2,
@@ -1528,7 +1650,7 @@ return [
         ],
         'login-errors' => [
             'id' => 'login-errors',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#loginCard .card-title',
             'title' => 'Errors and rate limiting',
             'category' => 'security',
@@ -1537,14 +1659,14 @@ return [
             'under_the_hood' => 'Every real login POST records an attempt keyed by bucket and client IP. isRateLimited() blocks once eight attempts have landed in the last five minutes, and it deletes entries older than one hour during the same check.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'if (isRateLimited(',
                     'before' => 4,
                     'after' => 8,
                     'label' => 'Rate limit branch',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '<div class="alert alert-error">',
                     'before' => 2,
                     'after' => 2,
@@ -1552,7 +1674,7 @@ return [
                 ],
             ],
             'tables' => ['login_attempts'],
-            'endpoints' => ['login.php (POST)'],
+            'endpoints' => ['student/login.php (POST)'],
             'connections' => [
                 'The tour demo bridge avoids this POST so it never adds login_attempts rows.',
             ],
@@ -1564,7 +1686,7 @@ return [
         ],
         'login-lifecycle' => [
             'id' => 'login-lifecycle',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#loginCard .subtitle',
             'title' => 'Year-level lifecycle gate',
             'category' => 'logic',
@@ -1573,21 +1695,21 @@ return [
             'under_the_hood' => 'computeYearLevel() compares the start year with the active school year and the configured year-level names. If the result is blocked but the account has no status declared, the session gets needs_account_update and the login redirects to the declaration form.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => '$needsDeclaration = false;',
                     'before' => 5,
                     'after' => 12,
                     'label' => 'Lifecycle gate begins',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'computeYearLevel(',
                     'before' => 3,
                     'after' => 10,
                     'label' => 'Computed year level',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => "header('Location: update-account.php');",
                     'before' => 6,
                     'after' => 5,
@@ -1595,7 +1717,7 @@ return [
                 ],
             ],
             'tables' => ['users', 'school_years', 'year_levels'],
-            'endpoints' => ['update-account.php'],
+            'endpoints' => ['student/update-account.php'],
             'connections' => [
                 'update-account.php writes the declaration once, after which the gate stops asking.',
             ],
@@ -1607,7 +1729,7 @@ return [
         ],
         'login-session' => [
             'id' => 'login-session',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '.register-cta',
             'title' => 'Successful login and redirect',
             'category' => 'security',
@@ -1616,14 +1738,14 @@ return [
             'under_the_hood' => 'session_regenerate_id(true) replaces the session ID to prevent session fixation, then user_id and name are stored. The redirect uses a Location header, so the browser performs a fresh GET request.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'session_regenerate_id(true);',
                     'before' => 3,
                     'after' => 8,
                     'label' => 'Session regeneration and identity',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => "header('Location: dashboard.php');",
                     'before' => 5,
                     'after' => 3,
@@ -1631,7 +1753,7 @@ return [
                 ],
             ],
             'tables' => ['users'],
-            'endpoints' => ['dashboard.php', 'update-account.php'],
+            'endpoints' => ['student/dashboard.php', 'student/update-account.php'],
             'connections' => [
                 'The tour Demo access button uses a local session bridge so it can show the real dashboard without writing login history.',
             ],
@@ -1667,7 +1789,7 @@ return [
                 ],
             ],
             'tables' => ['departments', 'year_levels', 'school_years'],
-            'endpoints' => ['student/register.php', 'login.php?registered=1'],
+            'endpoints' => ['student/register.php', 'student/login.php?registered=1'],
             'connections' => [
                 'A successful registration redirects to login with a confirmation flag.',
             ],
@@ -1960,7 +2082,7 @@ return [
         ],
         'update-card' => [
             'id' => 'update-card',
-            'match' => ['path' => '/voting-app3/update-account.php'],
+            'match' => ['path' => '/voting-app3/student/update-account.php'],
             'selector' => '.page-center .card',
             'title' => 'Enrollment details screen',
             'category' => 'ui',
@@ -1969,14 +2091,14 @@ return [
             'under_the_hood' => 'requireLogin() sends guests to login. The page loads the student row, computes the expected year level, and calls accountUpdateLockReason() to decide whether the form may be shown.',
             'code' => [
                 [
-                    'file' => 'update-account.php',
+                    'file' => 'student/update-account.php',
                     'anchor' => '<div class="notice-icon',
                     'before' => 2,
                     'after' => 14,
                     'label' => 'Enrollment card',
                 ],
                 [
-                    'file' => 'update-account.php',
+                    'file' => 'student/update-account.php',
                     'anchor' => 'accountUpdateLockReason(',
                     'before' => 3,
                     'after' => 12,
@@ -1984,7 +2106,7 @@ return [
                 ],
             ],
             'tables' => ['users', 'school_years'],
-            'endpoints' => ['update-account.php'],
+            'endpoints' => ['student/update-account.php'],
             'connections' => [
                 'Login redirects here when needs_account_update is set in the session.',
             ],
@@ -1996,7 +2118,7 @@ return [
         ],
         'update-summary' => [
             'id' => 'update-summary',
-            'match' => ['path' => '/voting-app3/update-account.php'],
+            'match' => ['path' => '/voting-app3/student/update-account.php'],
             'selector' => '.student-summary',
             'title' => 'Official record versus computed level',
             'category' => 'logic',
@@ -2005,14 +2127,14 @@ return [
             'under_the_hood' => 'The computed value comes from computeYearLevel() using the school year on file and the current school year. The stored value comes from users.year_level. The page does not silently overwrite one with the other.',
             'code' => [
                 [
-                    'file' => 'update-account.php',
+                    'file' => 'student/update-account.php',
                     'anchor' => '<div class="student-summary">',
                     'before' => 2,
                     'after' => 14,
                     'label' => 'Record summary',
                 ],
                 [
-                    'file' => 'update-account.php',
+                    'file' => 'student/update-account.php',
                     'anchor' => 'computeYearLevel(',
                     'before' => 4,
                     'after' => 9,
@@ -2032,7 +2154,7 @@ return [
         ],
         'update-form' => [
             'id' => 'update-form',
-            'match' => ['path' => '/voting-app3/update-account.php'],
+            'match' => ['path' => '/voting-app3/student/update-account.php'],
             'selector' => '#updateAccountForm',
             'title' => 'The declaration form',
             'category' => 'logic',
@@ -2041,21 +2163,21 @@ return [
             'under_the_hood' => 'The POST branch re-runs resolveYearDeclaration(), blocks no-op saves, and updates year_level and account_status. The lock checks open elections and the most recent "Year level update" log entry before allowing a voluntary change.',
             'code' => [
                 [
-                    'file' => 'update-account.php',
+                    'file' => 'student/update-account.php',
                     'anchor' => '<form method="POST" class="form" id="updateAccountForm">',
                     'before' => 2,
                     'after' => 16,
                     'label' => 'Declaration form',
                 ],
                 [
-                    'file' => 'update-account.php',
+                    'file' => 'student/update-account.php',
                     'anchor' => 'UPDATE users SET year_level',
                     'before' => 4,
                     'after' => 8,
                     'label' => 'The write',
                 ],
                 [
-                    'file' => 'update-account.php',
+                    'file' => 'student/update-account.php',
                     'anchor' => 'activity_logs',
                     'before' => 4,
                     'after' => 8,
@@ -2063,7 +2185,7 @@ return [
                 ],
             ],
             'tables' => ['users', 'activity_logs', 'elections'],
-            'endpoints' => ['update-account.php (POST)'],
+            'endpoints' => ['student/update-account.php (POST)'],
             'connections' => [
                 'The activity log row is how the page remembers the last voluntary change without adding a column.',
             ],
@@ -2075,7 +2197,7 @@ return [
         ],
         'student-sidebar' => [
             'id' => 'student-sidebar',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '.sidebar',
             'title' => 'Sidebar and panel switching',
             'category' => 'ui',
@@ -2084,21 +2206,21 @@ return [
             'under_the_hood' => 'showPanel(name) removes .active from every .panel, activates #panel-<name>, moves the highlight on the nav link, rewrites #pageHeaderTitle from panelTitles, closes the mobile sidebar, and scrolls to the top. The links call this function directly; there is no client-side router and no page reload.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function showPanel(name)',
                     'before' => 2,
                     'after' => 24,
                     'label' => 'Panel switch',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const panelTitles =',
                     'before' => 0,
                     'after' => 2,
                     'label' => 'Titles used by the switch',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<a data-panel="home"',
                     'before' => 0,
                     'after' => 5,
@@ -2119,7 +2241,7 @@ return [
         ],
         'student-profile' => [
             'id' => 'student-profile',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '.student-profile-top',
             'title' => 'The signed-in identity',
             'category' => 'data',
@@ -2128,14 +2250,14 @@ return [
             'under_the_hood' => 'After requireLogin(), dashboard.php resolves $_SESSION[\'user_id\'] to a users row. If the row no longer exists, it destroys the session and redirects. An admin preview without its own student account uses a synthetic viewer named Preview, with no department or year level.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '$stmt = $pdo->prepare(\'SELECT id, name, department, year_level, password_reset_pending FROM users',
                     'before' => 2,
                     'after' => 6,
                     'label' => 'Session user lookup',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<?= h($user[\'department\'] ?: \'Student\') ?>',
                     'before' => 5,
                     'after' => 5,
@@ -2155,7 +2277,7 @@ return [
         ],
         'student-theme' => [
             'id' => 'student-theme',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '.theme-switcher',
             'title' => 'Light and dark mode',
             'category' => 'ui',
@@ -2164,14 +2286,14 @@ return [
             'under_the_hood' => 'setTheme() writes data-theme on the html element, stores the value in localStorage under studentTheme, and updates the switch accessibility state and label. A small inline script in the head applies the saved value before the page paints.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function setTheme(theme)',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Theme switch',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function applyThemeUI(theme)',
                     'before' => 0,
                     'after' => 10,
@@ -2191,7 +2313,7 @@ return [
         ],
         'student-header' => [
             'id' => 'student-header',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '.page-header',
             'title' => 'Page header',
             'category' => 'ui',
@@ -2200,14 +2322,14 @@ return [
             'under_the_hood' => 'The first H1 is server-rendered with the student name. showPanel() replaces it with the panel title from panelTitles for Vote, Candidates, and Results. The date is PHP date() at render time, so it is the server date, not a live clock.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<div class="page-header">',
                     'before' => 2,
                     'after' => 12,
                     'label' => 'Header markup',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const panelTitles =',
                     'before' => 0,
                     'after' => 2,
@@ -2227,7 +2349,7 @@ return [
         ],
         'student-home-panel' => [
             'id' => 'student-home-panel',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '#panel-home',
             'title' => 'Home panel and its data source',
             'category' => 'data',
@@ -2236,28 +2358,28 @@ return [
             'under_the_hood' => 'renderHomePanel() writes a skeleton, then awaits loadDashboardData(). That function fetches dashboard-data.php once and caches the JSON. The endpoint answers with the user plus every non-draft, non-archived election the student may see, its allowed positions, candidates, and vote counts. Images are URLs, not base64. A failed fetch replaces the panel with an error block.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const DASHBOARD_DATA_API =',
                     'before' => 0,
                     'after' => 1,
                     'label' => 'Endpoint constant',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'async function loadDashboardData(force)',
                     'before' => 1,
                     'after' => 10,
                     'label' => 'One fetch, cached',
                 ],
                 [
-                    'file' => 'dashboard-data.php',
+                    'file' => 'student/dashboard-data.php',
                     'anchor' => '$subStmt = $pdo->prepare(\'SELECT election_id FROM ballot_submissions',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Submission locks',
                 ],
                 [
-                    'file' => 'dashboard-data.php',
+                    'file' => 'student/dashboard-data.php',
                     'anchor' => 'MAX(c.photo IS NOT NULL) AS has_photo',
                     'before' => 5,
                     'after' => 12,
@@ -2265,7 +2387,7 @@ return [
                 ],
             ],
             'tables' => ['users', 'elections', 'election_positions', 'positions', 'candidates', 'votes', 'ballot_submissions', 'school_years'],
-            'endpoints' => ['dashboard-data.php (GET JSON)'],
+            'endpoints' => ['student/dashboard-data.php (GET JSON)'],
             'connections' => [
                 'Home, the vote picker, Candidates, and Results all read the same cached payload.',
             ],
@@ -2278,7 +2400,7 @@ return [
         ],
         'student-progress' => [
             'id' => 'student-progress',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '.progress-strip',
             'title' => 'Voting progress',
             'category' => 'data',
@@ -2287,14 +2409,14 @@ return [
             'under_the_hood' => 'The count uses election.hasVoted, which dashboard-data.php derives from ballot_submissions for this user. A submitted ballot with zero picks still counts, because the submission row is the lock. The block renders only when at least one election is visible.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const progressHtml = totalEligible ?',
                     'before' => 2,
                     'after' => 20,
                     'label' => 'Progress markup',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function typeProgress(type){',
                     'before' => 0,
                     'after' => 5,
@@ -2302,7 +2424,7 @@ return [
                 ],
             ],
             'tables' => ['ballot_submissions', 'elections'],
-            'endpoints' => ['dashboard-data.php (GET JSON)'],
+            'endpoints' => ['student/dashboard-data.php (GET JSON)'],
             'connections' => [
                 'vote.php writes the same ballot_submissions row that this panel counts.',
             ],
@@ -2314,7 +2436,7 @@ return [
         ],
         'student-vote-hero' => [
             'id' => 'student-vote-hero',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '.vote-hero',
             'title' => 'The vote-all block',
             'category' => 'logic',
@@ -2323,7 +2445,7 @@ return [
             'under_the_hood' => 'remaining filters elections by hasVoted and by electionUiStatus(...).isOpen. Only then does it render the link dashboard.php?page=vote&combined=1. The page recomputes what is open when the ballot loads, and vote.php recomputes it again on submit.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'if (remaining.length > 0)',
                     'before' => 2,
                     'after' => 22,
@@ -2331,7 +2453,7 @@ return [
                 ],
             ],
             'tables' => ['elections', 'ballot_submissions'],
-            'endpoints' => ['dashboard.php?page=vote&combined=1'],
+            'endpoints' => ['student/dashboard.php?page=vote&combined=1'],
             'connections' => [
                 'The combined ballot groups every open, unvoted election into one form and one submission.',
             ],
@@ -2343,7 +2465,7 @@ return [
         ],
         'student-election-card' => [
             'id' => 'student-election-card',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
             'selector' => '.election-card',
             'title' => 'Reading an election card',
             'category' => 'logic',
@@ -2352,21 +2474,21 @@ return [
             'under_the_hood' => 'renderElectionCard() calls electionUiStatus() to compare stored start and end dates with the browser time. canVote combines isOpen, hasVoted, and totalPositions. startCountdowns() updates the remaining time every second. The card is one template used by both Home and the vote picker.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function renderElectionCard(election, now, countdownIdPrefix)',
                     'before' => 2,
                     'after' => 16,
                     'label' => 'Card builder',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const canVote = isOpen && !election.hasVoted',
                     'before' => 0,
                     'after' => 2,
                     'label' => 'Button gate',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function electionUiStatus(config, now)',
                     'before' => 2,
                     'after' => 16,
@@ -2386,7 +2508,7 @@ return [
         ],
         'cand-page' => [
             'id' => 'cand-page',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '#panel-candidates',
             'title' => 'The candidates panel',
             'category' => 'data',
@@ -2395,14 +2517,14 @@ return [
             'under_the_hood' => 'renderCandidatesPanel() clears window.__candMap, awaits the cached dashboard data, keeps elections matching the active tab, drops positions with no candidates, and renders sections. It does not fetch a separate candidate API.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function renderCandidatesPanel()',
                     'before' => 2,
                     'after' => 18,
                     'label' => 'Panel renderer',
                 ],
                 [
-                    'file' => 'dashboard-data.php',
+                    'file' => 'student/dashboard-data.php',
                     'anchor' => '$kept = array_values(array_filter($rows, function ($p) use ($user) {',
                     'before' => 2,
                     'after' => 8,
@@ -2410,7 +2532,7 @@ return [
                 ],
             ],
             'tables' => ['elections', 'election_positions', 'positions', 'candidates'],
-            'endpoints' => ['dashboard-data.php (GET JSON)'],
+            'endpoints' => ['student/dashboard-data.php (GET JSON)'],
             'connections' => [
                 'The panel is limited by the same eligibility filter used by the ballot.',
             ],
@@ -2422,7 +2544,7 @@ return [
         ],
         'cand-tabs' => [
             'id' => 'cand-tabs',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-tab-controller',
             'title' => 'SSG and DSG tabs',
             'category' => 'ui',
@@ -2431,14 +2553,14 @@ return [
             'under_the_hood' => 'switchCandTab(tab) stores the choice in window.__candTab and calls renderCandidatesPanel() again. The URL does not change; the choice lives only in memory for this page load.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function candTabControllerHtml(){',
                     'before' => 0,
                     'after' => 12,
                     'label' => 'Tab markup',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function switchCandTab(tab){',
                     'before' => 0,
                     'after' => 3,
@@ -2446,7 +2568,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['dashboard-data.php (GET JSON)'],
+            'endpoints' => ['student/dashboard-data.php (GET JSON)'],
             'connections' => [
                 'Both tabs read the same elections array; only the election type filter changes.',
             ],
@@ -2458,7 +2580,7 @@ return [
         ],
         'cand-search' => [
             'id' => 'cand-search',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-toolbar',
             'title' => 'Search as you type',
             'category' => 'logic',
@@ -2467,14 +2589,14 @@ return [
             'under_the_hood' => 'filterCandidates() reads the data-name, data-party, and data-meta attributes, hides non-matching cards, then hides empty position blocks and election sections. It never sends the query to the server.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'id="candSearch"',
                     'before' => 2,
                     'after' => 2,
                     'label' => 'Search input',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function filterCandidates()',
                     'before' => 2,
                     'after' => 20,
@@ -2494,7 +2616,7 @@ return [
         ],
         'cand-card' => [
             'id' => 'cand-card',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-card',
             'title' => 'One candidate card',
             'category' => 'ui',
@@ -2503,14 +2625,14 @@ return [
             'under_the_hood' => 'Each card is built from the JSON candidate object. The full object is stored in window.__candMap[c.id] for the modal. The photo URL is photo.php?c=<id> when a photo exists, otherwise a default avatar; the payload never carries base64 bytes.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<article class="cand-card"',
                     'before' => 2,
                     'after' => 10,
                     'label' => 'Card template',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'window.__candMap[c.id] =',
                     'before' => 2,
                     'after' => 8,
@@ -2518,7 +2640,7 @@ return [
                 ],
             ],
             'tables' => ['candidates'],
-            'endpoints' => ['photo.php (GET image)', 'dashboard-data.php (GET JSON)'],
+            'endpoints' => ['student/photo.php (GET image)', 'student/dashboard-data.php (GET JSON)'],
             'connections' => [
                 'The card and the modal read the same stored object, so they cannot disagree.',
             ],
@@ -2530,7 +2652,7 @@ return [
         ],
         'cand-profile' => [
             'id' => 'cand-profile',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-card-toggle',
             'title' => 'The full-profile overlay',
             'category' => 'ui',
@@ -2539,14 +2661,14 @@ return [
             'under_the_hood' => 'openCandidateModal() looks up the stored object, builds the overlay, focuses the close button, and locks body scrolling. closeCandidateModal() removes the overlay, restores scrolling, and removes the Escape listener. Nothing is fetched for the modal.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function openCandidateModal(candidateId)',
                     'before' => 2,
                     'after' => 14,
                     'label' => 'Overlay builder',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function closeCandidateModal()',
                     'before' => 1,
                     'after' => 9,
@@ -2554,7 +2676,7 @@ return [
                 ],
             ],
             'tables' => ['candidates'],
-            'endpoints' => ['photo.php (GET image)'],
+            'endpoints' => ['student/photo.php (GET image)'],
             'connections' => [
                 'The modal can only show candidates already in this student payload.',
             ],
@@ -2566,7 +2688,7 @@ return [
         ],
         'ballot-preview' => [
             'id' => 'ballot-preview',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.preview-banner',
             'title' => 'Preview mode',
             'category' => 'security',
@@ -2575,14 +2697,14 @@ return [
             'under_the_hood' => 'The preview flag is true only when preview=1, page=vote, and the session has admin_id. That bypasses requireLogin and substitutes a synthetic viewer with no department or year level, so every position is visible. The submit controls render disabled. vote.php still requires a student user_id, so an admin-only session cannot submit even with a hand-built POST.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '$isPreview = isset($_GET[\'preview\'])',
                     'before' => 2,
                     'after' => 10,
                     'label' => 'Preview gate',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'id="submitBtn"',
                     'before' => 1,
                     'after' => 1,
@@ -2590,7 +2712,7 @@ return [
                 ],
             ],
             'tables' => ['elections', 'election_positions', 'positions', 'candidates'],
-            'endpoints' => ['dashboard.php?preview=1 (admin-only)'],
+            'endpoints' => ['student/dashboard.php?preview=1 (admin-only)'],
             'connections' => [
                 'The preview uses the same ballot template and the same validation rules as a real student view.',
             ],
@@ -2602,7 +2724,7 @@ return [
         ],
         'ballot-header-view' => [
             'id' => 'ballot-header-view',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-header',
             'title' => 'Ballot header and progress',
             'category' => 'ui',
@@ -2611,21 +2733,21 @@ return [
             'under_the_hood' => 'PHP counts every position across the groups for the initial label. updateProgress() counts steps that contain at least one checked input. A skipped position is allowed, so zero answers is not an error. In combined mode the sticky label follows the election block in view.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<div class="ballot-header">',
                     'before' => 1,
                     'after' => 20,
                     'label' => 'Header and progress',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const positionSteps =',
                     'before' => 1,
                     'after' => 8,
                     'label' => 'Position steps',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function updateProgress()',
                     'before' => 2,
                     'after' => 24,
@@ -2645,7 +2767,7 @@ return [
         ],
         'ballot-group' => [
             'id' => 'ballot-group',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-election-block',
             'title' => 'One election block',
             'category' => 'logic',
@@ -2654,14 +2776,14 @@ return [
             'under_the_hood' => 'The PHP builds ballotGroups from open, unvoted elections with visible positions. Combined mode sorts SSG before DSG. Each group carries its election id, type, name, and position count as data attributes used by the progress bar.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<section class="ballot-election-block"',
                     'before' => 2,
                     'after' => 12,
                     'label' => 'Group wrapper',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'usort($ballotGroups, function ($a, $b) {',
                     'before' => 2,
                     'after' => 10,
@@ -2681,7 +2803,7 @@ return [
         ],
         'ballot-position' => [
             'id' => 'ballot-position',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-step',
             'title' => 'One position',
             'category' => 'logic',
@@ -2690,14 +2812,14 @@ return [
             'under_the_hood' => 'winner_count decides whether the position is single-choice (radio) or multi-choice (checkbox) and becomes data-max-select. Year-restricted positions were already removed for a student; preview shows all. updateDimming() dims and disables unchosen options once a multi-select position reaches its cap.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<div class="ballot-step"',
                     'before' => 2,
                     'after' => 14,
                     'label' => 'Position step',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'function updateDimming(fieldset, step)',
                     'before' => 2,
                     'after' => 28,
@@ -2717,7 +2839,7 @@ return [
         ],
         'ballot-candidates-fieldset' => [
             'id' => 'ballot-candidates-fieldset',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-candidates',
             'title' => 'The selection group',
             'category' => 'ui',
@@ -2726,14 +2848,14 @@ return [
             'under_the_hood' => 'PHP sets data-max-select from winner_count. Input names are position_<pid> for a single ballot or e_<eid>_p_<pid> for a combined ballot, with a [] suffix on multi-select positions so PHP receives an array.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<fieldset class="ballot-candidates"',
                     'before' => 1,
                     'after' => 10,
                     'label' => 'Fieldset',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '$inputName = $isCombined',
                     'before' => 0,
                     'after' => 8,
@@ -2753,7 +2875,7 @@ return [
         ],
         'ballot-candidate-option' => [
             'id' => 'ballot-candidate-option',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-candidate',
             'title' => 'Selecting a candidate',
             'category' => 'ui',
@@ -2762,14 +2884,14 @@ return [
             'under_the_hood' => 'A label wraps a real radio or checkbox input. Because a radio cannot be unchecked natively, the script remembers the last checked radio per group and clears it on a second click, firing a change event so dimming and progress update. Checkboxes uncheck natively.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<label class="ballot-candidate">',
                     'before' => 1,
                     'after' => 12,
                     'label' => 'Candidate option',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const prevCheckedByGroup = {};',
                     'before' => 1,
                     'after' => 20,
@@ -2789,7 +2911,7 @@ return [
         ],
         'ballot-submit-ui' => [
             'id' => 'ballot-submit-ui',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-submit-block',
             'title' => 'Submit and confirmation',
             'category' => 'logic',
@@ -2798,14 +2920,14 @@ return [
             'under_the_hood' => 'The form submit event is intercepted so the confirmation opens first. The confirm action calls performBallotSubmit(), which serializes the form with FormData, disables the buttons, POSTs to vote.php, and swaps in either the success modal or an error toast. Preview disables the submit and confirm buttons in the HTML.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<div class="ballot-submit-block">',
                     'before' => 1,
                     'after' => 16,
                     'label' => 'Submit block',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'async function performBallotSubmit()',
                     'before' => 1,
                     'after' => 28,
@@ -2813,7 +2935,7 @@ return [
                 ],
             ],
             'tables' => ['votes', 'ballot_submissions'],
-            'endpoints' => ['vote.php (POST)'],
+            'endpoints' => ['student/vote.php (POST)'],
             'connections' => [
                 'The confirmation modal and the fetch live in the same script block that manages progress and dimming.',
             ],
@@ -2825,7 +2947,7 @@ return [
         ],
         'ballot-confirm-modal' => [
             'id' => 'ballot-confirm-modal',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '#ballotConfirmModal',
             'title' => 'The confirmation modal',
             'category' => 'ui',
@@ -2834,21 +2956,21 @@ return [
             'under_the_hood' => 'The modal is an overlay whose active class controls visibility. The form submit handler prevents the default post and calls openBallotConfirm(). confirmBallotSubmit() starts the fetch. The confirm button is disabled in preview mode.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'id="ballotConfirmModal"',
                     'before' => 1,
                     'after' => 14,
                     'label' => 'Modal markup',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'voteForm.addEventListener(\'submit\'',
                     'before' => 1,
                     'after' => 8,
                     'label' => 'Submit interception',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'window.confirmBallotSubmit = function',
                     'before' => 0,
                     'after' => 2,
@@ -2856,7 +2978,7 @@ return [
                 ],
             ],
             'tables' => [],
-            'endpoints' => ['vote.php (POST)'],
+            'endpoints' => ['student/vote.php (POST)'],
             'connections' => [
                 'The modal does not contain a second form; it calls the same submit routine as the main button.',
             ],
@@ -2868,7 +2990,7 @@ return [
         ],
         'ballot-submit-transaction' => [
             'id' => 'ballot-submit-transaction',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '#voteForm',
             'title' => 'What the server re-checks',
             'category' => 'security',
@@ -2877,42 +2999,42 @@ return [
             'under_the_hood' => 'vote.php requires a student session, POST, a valid CSRF token, and the per-user rate limit. It opens a transaction, locks the user row with SELECT ... FOR UPDATE, rejects a pending password reset, rechecks every election open window, DSG department eligibility, and prior ballot_submissions. It validates candidate membership and winner_count, inserts votes, sets the legacy has_voted flag, deletes drafts, inserts one ballot_submissions row per election, and commits. Any failure rolls the whole transaction back.',
             'code' => [
                 [
-                    'file' => 'vote.php',
+                    'file' => 'student/vote.php',
                     'anchor' => 'if (!verifyCsrfToken($_POST[\'csrf_token\'] ?? null))',
                     'before' => 2,
                     'after' => 4,
                     'label' => 'CSRF gate',
                 ],
                 [
-                    'file' => 'vote.php',
+                    'file' => 'student/vote.php',
                     'anchor' => 'isRateLimitedKey($pdo, \'vote_submit:user:\'',
                     'before' => 2,
                     'after' => 6,
                     'label' => 'Per-user rate limit',
                 ],
                 [
-                    'file' => 'vote.php',
+                    'file' => 'student/vote.php',
                     'anchor' => 'SELECT id, department, year_level, password_reset_pending FROM users WHERE id = :id FOR UPDATE',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'User row lock',
                 ],
                 [
-                    'file' => 'vote.php',
+                    'file' => 'student/vote.php',
                     'anchor' => '$votedStmt->execute([\'uid\' => $userId, \'eid\' => $eid]);',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Already-voted check',
                 ],
                 [
-                    'file' => 'vote.php',
+                    'file' => 'student/vote.php',
                     'anchor' => 'INSERT INTO votes (user_id, candidate_id, position_id)',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Vote insert',
                 ],
                 [
-                    'file' => 'vote.php',
+                    'file' => 'student/vote.php',
                     'anchor' => 'INSERT INTO ballot_submissions',
                     'before' => 2,
                     'after' => 8,
@@ -2920,7 +3042,7 @@ return [
                 ],
             ],
             'tables' => ['users', 'elections', 'election_positions', 'positions', 'candidates', 'votes', 'ballot_submissions', 'vote_drafts'],
-            'endpoints' => ['vote.php (POST)'],
+            'endpoints' => ['student/vote.php (POST)'],
             'connections' => [
                 'The submission lock is what makes an empty ballot still count as voted.',
             ],
@@ -2933,7 +3055,7 @@ return [
         ],
         'ballot-success-modal' => [
             'id' => 'ballot-success-modal',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '#ballotSuccessModal',
             'title' => 'The success modal',
             'category' => 'ui',
@@ -2942,14 +3064,14 @@ return [
             'under_the_hood' => 'performBallotSubmit() reads the JSON response. On success it disables every input and button, closes the confirmation, replaces the modal message with data.message, and shows the success overlay. On failure it shows a toast and re-enables the controls.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'id="ballotSuccessModal"',
                     'before' => 2,
                     'after' => 14,
                     'label' => 'Success markup',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const response = await fetch(\'vote.php\'',
                     'before' => 2,
                     'after' => 26,
@@ -2957,7 +3079,7 @@ return [
                 ],
             ],
             'tables' => ['ballot_submissions'],
-            'endpoints' => ['vote.php (POST)'],
+            'endpoints' => ['student/vote.php (POST)'],
             'connections' => [
                 'The View Live Results button opens the student results panel, not the public results page.',
             ],
@@ -2969,7 +3091,7 @@ return [
         ],
         'dash-results-panel' => [
             'id' => 'dash-results-panel',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'results'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'results'],
             'selector' => '#panel-results',
             'title' => 'The results panel',
             'category' => 'data',
@@ -2978,21 +3100,21 @@ return [
             'under_the_hood' => 'renderResultsPanel() awaits the cached dashboard data, scopes to one election when a deep link asks for it, then keeps elections with results_visibility always, or with after and a closed or archived status. Candidate vote_count values come from COUNT(v.id) in dashboard-data.php. The dashboard filter happens before rendering; the public results.php also filters on the server before producing HTML.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'async function renderResultsPanel(filterElectionId)',
                     'before' => 2,
                     'after' => 12,
                     'label' => 'Panel renderer',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const visibleElections = [];',
                     'before' => 0,
                     'after' => 8,
                     'label' => 'Visibility rule',
                 ],
                 [
-                    'file' => 'dashboard-data.php',
+                    'file' => 'student/dashboard-data.php',
                     'anchor' => 'COUNT(v.id) AS vote_count',
                     'before' => 2,
                     'after' => 8,
@@ -3000,7 +3122,7 @@ return [
                 ],
             ],
             'tables' => ['elections', 'election_positions', 'positions', 'candidates', 'votes'],
-            'endpoints' => ['dashboard-data.php (GET JSON)'],
+            'endpoints' => ['student/dashboard-data.php (GET JSON)'],
             'connections' => [
                 'The Results panel and the public results page share visibility semantics but not code.',
             ],
@@ -3012,7 +3134,7 @@ return [
         ],
         'dash-results-row' => [
             'id' => 'dash-results-row',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'results'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'results'],
             'selector' => '.result-row',
             'title' => 'Reading one result row',
             'category' => 'data',
@@ -3021,14 +3143,14 @@ return [
             'under_the_hood' => 'The position total is the sum of its candidates vote_count values. The percentage is the candidate count divided by that total, rounded to one decimal. A position with zero votes renders zero-width bars instead of dividing by zero.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => '<div class="result-row">',
                     'before' => 1,
                     'after' => 12,
                     'label' => 'Row template',
                 ],
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'const pct = totalVotes > 0',
                     'before' => 0,
                     'after' => 2,
@@ -3048,7 +3170,7 @@ return [
         ],
         'dash-results-refresh' => [
             'id' => 'dash-results-refresh',
-            'match' => ['path' => '/voting-app3/dashboard.php', 'page' => 'results'],
+            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'results'],
             'selector' => '.results-block',
             'title' => 'Automatic refresh',
             'category' => 'logic',
@@ -3057,21 +3179,21 @@ return [
             'under_the_hood' => 'renderResultsPanel() clears the previous timer and sets a 15-second interval that calls renderResultsPanel() only when currentPanel is results. The public results page uses a different mechanism: it fetches ?partial=1, swaps the [data-root] innerHTML, and skips polling while document.hidden is true.',
             'code' => [
                 [
-                    'file' => 'dashboard.php',
+                    'file' => 'student/dashboard.php',
                     'anchor' => 'window.__resultsRefreshTimer = setInterval',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Dashboard timer',
                 ],
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => 'if (isset($_GET[\'partial\']))',
                     'before' => 2,
                     'after' => 8,
                     'label' => 'Partial endpoint',
                 ],
                 [
-                    'file' => 'results.php',
+                    'file' => 'public/results.php',
                     'anchor' => 'location.pathname + \'?partial=1\'',
                     'before' => 2,
                     'after' => 8,
@@ -3079,7 +3201,7 @@ return [
                 ],
             ],
             'tables' => ['votes', 'candidates', 'elections'],
-            'endpoints' => ['dashboard-data.php (GET JSON)', 'results.php?partial=1 (GET fragment)'],
+            'endpoints' => ['student/dashboard-data.php (GET JSON)', 'public/results.php?partial=1 (GET fragment)'],
             'connections' => [
                 'Both refresh paths are read-only; neither writes a vote or a submission.',
             ],
@@ -4815,7 +4937,7 @@ return [
         ],
         'sy-promotion' => [
             'id' => 'sy-promotion',
-            'match' => ['path' => '/voting-app3/login.php'],
+            'match' => ['path' => '/voting-app3/student/login.php'],
             'selector' => '#loginCard .logo-area',
             'title' => 'Students move up at first login',
             'category' => 'logic',
@@ -4824,14 +4946,14 @@ return [
             'under_the_hood' => 'login.php loads the active school year, computes the expected level with computeYearLevel(), and — only for account_status = normal and only while the index is 4 or lower — writes the label back to users.year_level. That opportunistic refresh is why there is no bulk "promote students" job: the update happens on the first login after the calendar rolls over. Index 5 or higher sets needs_account_update and redirects to update-account.php once.',
             'code' => [
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'Opportunistic refresh',
                     'before' => 8,
                     'after' => 14,
                     'label' => 'Refresh on login',
                 ],
                 [
-                    'file' => 'login.php',
+                    'file' => 'student/login.php',
                     'anchor' => 'UPDATE users SET year_level',
                     'before' => 4,
                     'after' => 6,
@@ -4846,7 +4968,7 @@ return [
                 ],
             ],
             'tables' => ['users', 'school_years', 'year_levels'],
-            'endpoints' => ['login.php (POST)'],
+            'endpoints' => ['student/login.php (POST)'],
             'connections' => [
                 'update-account.php is where a manual level or repeater status is written; the login refresh never overwrites a declared status.',
             ],
@@ -4940,6 +5062,685 @@ return [
             'questions' => [
                 'Why does an archived election still block a new one?',
                 'How does a year slot ever free up?',
+            ],
+        ],
+        'fn-gates' => [
+            'id' => 'fn-gates',
+            'match' => ['path' => '/voting-app3/student/login.php'],
+            'selector' => '.page-center',
+            'title' => 'Session start and the two login gates',
+            'category' => 'security',
+            'summary' => 'One function opens the hardened session; two gates guard the student and admin sides.',
+            'behavior' => 'The login page starts the session before it renders anything. Every student-facing page or JSON endpoint calls requireLogin() first, and every admin page calls requireAdminLogin().',
+            'under_the_hood' => 'startSecureSession() sets the session cookie params (httponly, SameSite=Lax, secure only when HTTPS is detected, including behind a proxy) and is safe to call twice. requireLogin() redirects to login.php when user_id is empty. requireAdminLogin() checks admin_id and answers /api/ paths with a 401 JSON body instead of a redirect, because a relative Location header sent from an API folder would land on a nonexistent login.php there.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function startSecureSession',
+                    'before' => 2,
+                    'after' => 10,
+                    'label' => 'Hardened session cookie',
+                ],
+                [
+                    'file' => 'student/login.php',
+                    'anchor' => 'startSecureSession();',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Called before anything renders',
+                ],
+                [
+                    'file' => 'student/dashboard-data.php',
+                    'anchor' => 'requireLogin();',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Student data gate',
+                ],
+                [
+                    'file' => 'admin/dashboard.php',
+                    'anchor' => 'requireAdminLogin();',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Admin gate',
+                ],
+            ],
+            'tables' => [],
+            'endpoints' => ['student/login.php', 'student/dashboard-data.php', 'admin/dashboard.php'],
+            'connections' => [
+                'The CSRF pair below protects every form these gates let through.',
+                'Throttling guards the login form the gates send visitors to.',
+            ],
+            'defense' => 'Sessions are cookie-only and hardened in one place; the gates are the only way in, and every page pays the same two-line cost.',
+            'questions' => [
+                'What does requireAdminLogin() answer inside an admin API endpoint?',
+                'Why is startSecureSession() safe to call on every page?',
+            ],
+        ],
+        'fn-csrf' => [
+            'id' => 'fn-csrf',
+            'match' => ['path' => '/voting-app3/student/login.php'],
+            'selector' => 'input[name="csrf_token"]',
+            'title' => 'The CSRF token pair',
+            'category' => 'security',
+            'summary' => 'A session-bound random token, generated once and compared with hash_equals on every POST.',
+            'behavior' => 'Each form carries a hidden token. The server rejects the request before touching credentials or the database when the token is missing or stale.',
+            'under_the_hood' => 'csrfToken() creates a 32-byte random hex string in the session on first use and reuses it. verifyCsrfToken() compares the submitted value with hash_equals, which compares in constant time.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function csrfToken',
+                    'before' => 2,
+                    'after' => 8,
+                    'label' => 'Token generation',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function verifyCsrfToken',
+                    'before' => 2,
+                    'after' => 8,
+                    'label' => 'Constant-time comparison',
+                ],
+                [
+                    'file' => 'student/login.php',
+                    'anchor' => 'verifyCsrfToken($_POST',
+                    'before' => 2,
+                    'after' => 3,
+                    'label' => 'Checked before any credential lookup',
+                ],
+                [
+                    'file' => 'student/login.php',
+                    'anchor' => '$csrfToken = csrfToken();',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Rendered into the form',
+                ],
+            ],
+            'tables' => [],
+            'endpoints' => ['student/login.php (POST)', 'student/register.php (POST)'],
+            'connections' => [
+                'startSecureSession() must run before csrfToken() can store anything.',
+                'The same pair guards registration, the ballot, drafts, and every admin write.',
+            ],
+            'defense' => 'hash_equals removes timing side-channels, and the token comes from random_bytes, so it cannot be guessed.',
+            'questions' => [
+                'Why does a failed CSRF check not count as a login attempt?',
+                'What does the user see when the session expires mid-form?',
+            ],
+        ],
+        'fn-throttle' => [
+            'id' => 'fn-throttle',
+            'match' => ['path' => '/voting-app3/student/register.php'],
+            'selector' => '#full_name',
+            'title' => 'Rate limiting by bucket and client',
+            'category' => 'security',
+            'summary' => 'Login and registration share one throttle table with separate buckets, keyed by bucket plus client IP.',
+            'behavior' => 'This form allows 5 attempts per 10 minutes; login allows 8 per 5 minutes. The counter is per IP and per endpoint, so hammering one form never locks the other.',
+            'under_the_hood' => 'isRateLimited() composes bucket + ":" + clientIp() and delegates to isRateLimitedKey(), which counts login_attempts rows inside the window and deletes rows older than an hour. recordAttempt() inserts a row for every real POST, success or failure. clientIp() accepts only public addresses from X-Forwarded-For, so a spoofed header cannot collide with a real shared-NAT visitor.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function isRateLimitedKey',
+                    'before' => 2,
+                    'after' => 12,
+                    'label' => 'Count inside the window',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function clientIp',
+                    'before' => 2,
+                    'after' => 12,
+                    'label' => 'Public IPs only',
+                ],
+                [
+                    'file' => 'student/login.php',
+                    'anchor' => 'isRateLimited($pdo, \'student_login\')',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Login bucket: 8 per 5 minutes',
+                ],
+                [
+                    'file' => 'student/register.php',
+                    'anchor' => 'isRateLimited($pdo, \'register\', 5, 600)',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Registration bucket: 5 per 10 minutes',
+                ],
+            ],
+            'tables' => ['login_attempts'],
+            'endpoints' => ['student/login.php (POST)', 'student/register.php (POST)'],
+            'connections' => [
+                'The gates above redirect here; this is what protects the form they land on.',
+                'Per-user endpoints call isRateLimitedKey() directly with a user-scoped identifier instead of the IP.',
+            ],
+            'defense' => 'It is a speed bump, not an identity system: shared NATs share a bucket, and the docblock says so.',
+            'questions' => [
+                'Why is X-Forwarded-For filtered to public ranges?',
+                'What removes old rows so the table stays small?',
+            ],
+        ],
+        'fn-password' => [
+            'id' => 'fn-password',
+            'match' => ['path' => '/voting-app3/student/register.php'],
+            'selector' => '#pwMeter',
+            'title' => 'Password policy and student-ID format',
+            'category' => 'security',
+            'summary' => 'Two shared validators: passwords need 8+ characters with a letter and a number; student IDs are exactly nine digits.',
+            'behavior' => 'The strength meter on this form is a preview. The server re-runs the same policy on submit and rejects the registration with the helper\'s own message. The ID format check is shared with the admin panel\'s student forms.',
+            'under_the_hood' => 'passwordPolicyError() returns an error message or null. validateStudentIdFormat() is a single regex, ^\d{9}$, so the one real rule lives in one place for self-registration and for admin create, edit, and import.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function passwordPolicyError',
+                    'before' => 2,
+                    'after' => 10,
+                    'label' => 'One policy, two surfaces',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function validateStudentIdFormat',
+                    'before' => 2,
+                    'after' => 6,
+                    'label' => 'Exactly nine digits',
+                ],
+                [
+                    'file' => 'student/register.php',
+                    'anchor' => 'passwordPolicyError($password)',
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Server-side re-check',
+                ],
+                [
+                    'file' => 'student/register.php',
+                    'anchor' => 'validateStudentIdFormat($studentId)',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'ID format gate',
+                ],
+            ],
+            'tables' => [],
+            'endpoints' => ['student/register.php (POST)', 'admin/api/students.php (POST)'],
+            'connections' => [
+                'The year-level helpers below consume the ID prefix this check validates.',
+                'Admin student create, edit, and import reuse both validators.',
+            ],
+            'defense' => 'The strength meter is UX; these functions are the authority, and registration re-runs them on every submit.',
+            'questions' => [
+                'Why does the ID rule live in one function?',
+                'What does the policy catch that a length check alone would miss?',
+            ],
+        ],
+        'fn-year-clock' => [
+            'id' => 'fn-year-clock',
+            'match' => ['path' => '/voting-app3/student/register.php'],
+            'selector' => '#autoYearStarted',
+            'title' => 'The school-year clock',
+            'category' => 'logic',
+            'summary' => 'June 1 flips the school year in Asia/Manila time; nothing stores "now".',
+            'behavior' => 'The Year Started block derives its value from the first digits of the Student ID, and the school year it lands in comes from this clock. Elections target the year after the current one.',
+            'under_the_hood' => 'currentSchoolYearStartYear() returns the calendar year on or after June 1, and the previous year before June. nextSchoolYearStartYear() adds one; the election wizard uses it to target the serving year, and a client-side twin mirrors it in the admin dashboard.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function currentSchoolYearStartYear',
+                    'before' => 2,
+                    'after' => 10,
+                    'label' => 'June 1 cutover',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function nextSchoolYearStartYear',
+                    'before' => 2,
+                    'after' => 6,
+                    'label' => 'Elections target next year',
+                ],
+                [
+                    'file' => 'admin/api/elections.php',
+                    'anchor' => "nextSchoolYearStartYear())['id']",
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Wizard targets the serving year',
+                ],
+                [
+                    'file' => 'admin/api/settings.php',
+                    'anchor' => 'getOrCreateSchoolYear($pdo, nextSchoolYearStartYear());',
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Settings pre-creates next year',
+                ],
+            ],
+            'tables' => ['school_years', 'elections'],
+            'endpoints' => ['admin/api/elections.php (POST)', 'admin/api/settings.php (POST)'],
+            'connections' => [
+                'computeYearLevel() below consumes the start year this clock defines.',
+                'Landing, login, and results call syncElectionStatuses() so statuses agree with the same clock.',
+            ],
+            'defense' => 'The clock is a pure function of the date: no cron job, no stored now, no admin button to forget.',
+            'questions' => [
+                'Why June 1 and not the first day of school?',
+                'Which timezone does the clock read?',
+            ],
+        ],
+        'fn-year-level' => [
+            'id' => 'fn-year-level',
+            'match' => ['path' => '/voting-app3/student/register.php'],
+            'selector' => '#yearLevelHint',
+            'title' => 'Year levels are computed, then declared',
+            'category' => 'logic',
+            'summary' => 'Normal students get their year level from arithmetic; over-window students declare a status instead.',
+            'behavior' => 'The hint under the picker says it plainly: the level fills in from the Student ID. When the arithmetic lands at index 5 or past it, the form reveals the repeating-fields block and the student must declare an enrollment status.',
+            'under_the_hood' => 'computeYearLevel() subtracts the start year from the active start year, adds one, and maps the index onto the year_levels table; index 5 and beyond is blocked. resolveYearDeclaration() accepts a claim equal to the computed level, rejects claims above it, and requires one of three repeater statuses when the claim differs or the student is blocked.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function computeYearLevel',
+                    'before' => 2,
+                    'after' => 12,
+                    'label' => 'Index, label, blocked',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function resolveYearDeclaration',
+                    'before' => 2,
+                    'after' => 12,
+                    'label' => 'Claim versus computed',
+                ],
+                [
+                    'file' => 'student/login.php',
+                    'anchor' => 'computeYearLevel((int)',
+                    'before' => 2,
+                    'after' => 4,
+                    'label' => 'Login recomputes at every sign-in',
+                ],
+                [
+                    'file' => 'student/register.php',
+                    'anchor' => 'resolveYearDeclaration(',
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Registration validates the declaration',
+                ],
+            ],
+            'tables' => ['year_levels', 'users'],
+            'endpoints' => ['student/register.php (POST)', 'student/login.php', 'student/update-account.php (POST)'],
+            'connections' => [
+                'The school-year rows below supply both years the subtraction needs.',
+                'update-account.php reuses resolveYearDeclaration() for voluntary corrections.',
+            ],
+            'defense' => 'A student can never claim a level above their start year; repeating students are the only exception, and they must declare it.',
+            'questions' => [
+                'Why is the fifth year blocked instead of labeled 5th Year?',
+                'What happens to the declaration on every later login?',
+            ],
+        ],
+        'fn-escape' => [
+            'id' => 'fn-escape',
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'selector' => '.ballot-demo',
+            'title' => 'Escaping every interpolated string',
+            'category' => 'ui',
+            'summary' => 'h() wraps htmlspecialchars; assetV() busts asset caches with the file\'s own mtime.',
+            'behavior' => 'Every name, label, and date this page prints passes through an escaper. The stylesheets and scripts it loads carry a version query that changes whenever the file changes.',
+            'under_the_hood' => 'h() is htmlspecialchars with ENT_QUOTES and UTF-8, and it is null-safe. assetV() stats the file from the repo root and appends ?v=<mtime>, falling back to the plain path when the file is missing; the prefix only affects the emitted URL, so pages one folder deep stay correct.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function h(',
+                    'before' => 2,
+                    'after' => 4,
+                    'label' => 'Null-safe escaper',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function assetV',
+                    'before' => 2,
+                    'after' => 12,
+                    'label' => 'mtime cache-buster',
+                ],
+                [
+                    'file' => 'public/landingpage.php',
+                    'anchor' => "h(\$oe['name'])",
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Banner names go through h()',
+                ],
+                [
+                    'file' => 'student/dashboard.php',
+                    'anchor' => "assetV('assets/style.css', '../')",
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Versioned stylesheet link',
+                ],
+            ],
+            'tables' => [],
+            'endpoints' => ['public/landingpage.php', 'student/dashboard.php'],
+            'connections' => [
+                'The election cards on this page render logos through the same escaping discipline.',
+                'Dark-mode CSS fixes once shipped stale because assetV() did not exist.',
+            ],
+            'defense' => 'The escaper is one character wide in the template, so there is no excuse to skip it.',
+            'questions' => [
+                'Why does assetV() stat from the repo root instead of the page URL?',
+                'What does h() return for null?',
+            ],
+        ],
+        'fn-banner' => [
+            'id' => 'fn-banner',
+            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'selector' => '.hero-voting-banner',
+            'title' => 'The prepared banner query',
+            'category' => 'logic',
+            'summary' => 'getOngoingElectionsBanner() is a ready query for open elections with their school-year labels - and nothing calls it yet.',
+            'behavior' => 'When an election is ongoing, the hero shows a banner listing open elections and their end times. Today the page builds that list inline; getOngoingElectionsBanner() is the shared version of the same query, intended for the landing, login, and registration pages.',
+            'under_the_hood' => 'The helper selects ongoing elections ordered by end date and joins school_years for the target label. Its docblock requires the caller to run syncElectionStatuses() first. A repo-wide search finds no call site: the landing page still computes its own ongoing list, and login and registration show no banner at all.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function getOngoingElectionsBanner',
+                    'before' => 2,
+                    'after' => 14,
+                    'label' => 'The prepared query',
+                ],
+                [
+                    'file' => 'public/landingpage.php',
+                    'anchor' => '$ongoingElections[] = $e;',
+                    'before' => 3,
+                    'after' => 3,
+                    'label' => 'Today: built inline on the page',
+                ],
+            ],
+            'tables' => ['elections', 'school_years'],
+            'endpoints' => ['public/landingpage.php'],
+            'connections' => [
+                'syncElectionStatuses() must run first so ongoing really means ongoing.',
+                'The same inline list feeds the elections section below the hero.',
+            ],
+            'defense' => 'If asked: the helper exists, works, and is not wired - consolidating the inline lists is the natural follow-up.',
+            'questions' => [
+                'Why must statuses be synced before this query is meaningful?',
+                'Which pages would call it once wired?',
+            ],
+        ],
+        'fn-status' => [
+            'id' => 'fn-status',
+            'match' => ['path' => '/voting-app3/public/results.php'],
+            'selector' => '.status',
+            'title' => 'Election statuses transition themselves',
+            'category' => 'logic',
+            'summary' => 'scheduled becomes ongoing when the window opens and closed when it ends - computed on every page render.',
+            'behavior' => 'The status pill on each card is read from the row, not re-derived here. Landing, login, and this page all run the transition query before rendering, so what the card shows is already current.',
+            'under_the_hood' => 'syncElectionStatuses() runs two UPDATEs with the Manila wall-clock now: CONVERT_TZ on MySQL, NOW() AT TIME ZONE on PostgreSQL, because the stored dates are literal Philippines wall-clock values. Draft, paused, and archived rows are deliberately untouched - a draft\'s placeholder dates must not auto-launch it, and pause and archive are manual admin actions.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function syncElectionStatuses',
+                    'before' => 2,
+                    'after' => 16,
+                    'label' => 'Two UPDATEs, Manila now',
+                ],
+                [
+                    'file' => 'public/landingpage.php',
+                    'anchor' => 'syncElectionStatuses($pdo);',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Landing syncs on render',
+                ],
+                [
+                    'file' => 'student/login.php',
+                    'anchor' => 'syncElectionStatuses($pdo);',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Login syncs too',
+                ],
+                [
+                    'file' => 'public/results.php',
+                    'anchor' => 'syncElectionStatuses($pdo);',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Results syncs as well',
+                ],
+            ],
+            'tables' => ['elections'],
+            'endpoints' => ['public/landingpage.php', 'student/login.php', 'public/results.php'],
+            'connections' => [
+                'The year clock above supplies the timezone discipline this query relies on.',
+                'Draft, paused, and archived rows are never touched by either UPDATE.',
+            ],
+            'defense' => 'No cron job, no daemon: the transition is idempotent and runs on every render, so it cannot be forgotten.',
+            'questions' => [
+                'Why are drafts excluded from auto-start?',
+                'Why does the PostgreSQL branch use AT TIME ZONE?',
+            ],
+        ],
+        'fn-year-rows' => [
+            'id' => 'fn-year-rows',
+            'match' => ['path' => '/voting-app3/public/results.php'],
+            'selector' => '.elec-dates',
+            'title' => 'School-year rows create themselves',
+            'category' => 'data',
+            'summary' => 'getOrCreateSchoolYear() inserts the YYYY-YYYY+1 row on demand; getActiveSchoolYear() keeps one is_active flag.',
+            'behavior' => 'The "For school year" label on each card reads a school_years row that was created automatically when the election was targeted - never pre-created by an admin.',
+            'under_the_hood' => 'getOrCreateSchoolYear() selects by start_year and inserts the label if the row is missing. getActiveSchoolYear() wraps it, then ensures exactly that row has is_active=true - the flag exists purely so the Settings list can label a row Current; nothing computes against it.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function getOrCreateSchoolYear',
+                    'before' => 2,
+                    'after' => 12,
+                    'label' => 'Find or insert',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function getActiveSchoolYear',
+                    'before' => 2,
+                    'after' => 12,
+                    'label' => 'One active row, display-only',
+                ],
+                [
+                    'file' => 'student/register.php',
+                    'anchor' => 'getOrCreateSchoolYear($pdo, $yearStarted)',
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Registration creates the row',
+                ],
+                [
+                    'file' => 'student/login.php',
+                    'anchor' => 'getActiveSchoolYear($pdo)',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Login reads the active row',
+                ],
+            ],
+            'tables' => ['school_years'],
+            'endpoints' => ['student/register.php (POST)', 'student/login.php', 'admin/api/settings.php (POST)'],
+            'connections' => [
+                'The clock above decides which start_year these functions look up.',
+                'Election targeting creates next year\'s row up front.',
+            ],
+            'defense' => 'Registration and login never wait on an admin: the row appears the first time the year is needed.',
+            'questions' => [
+                'What would break if two rows shared a start_year?',
+                'Why keep is_active at all?',
+            ],
+        ],
+        'fn-json' => [
+            'id' => 'fn-json',
+            'match' => ['path' => '/voting-app3/public/results.php'],
+            'selector' => '.turnout',
+            'title' => 'One shape for every AJAX answer',
+            'category' => 'logic',
+            'summary' => 'jsonResponse() sets the status code, the JSON header, the body, and exits - no endpoint hand-rolls a response.',
+            'behavior' => 'The ballot and draft endpoints answer every client action through this helper. This public page uses the same fetch discipline with an HTML partial (?partial=1) for its live refresh - the rule is identical: the server decides the payload, the client only renders.',
+            'under_the_hood' => 'jsonResponse() sends http_response_code, Content-Type: application/json, json_encode, and exit. The exception handler at the top of functions.php mirrors it: a JSON endpoint that fails mid-flight answers with a JSON 500 instead of an HTML stack trace. The dashboard data endpoint still encodes its own JSON - consolidating it here is an open cleanup.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function jsonResponse',
+                    'before' => 2,
+                    'after' => 8,
+                    'label' => 'Code, header, encode, exit',
+                ],
+                [
+                    'file' => 'student/vote.php',
+                    'anchor' => 'jsonResponse([',
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Ballot answers',
+                ],
+                [
+                    'file' => 'student/draft.php',
+                    'anchor' => "jsonResponse(['success' => false, 'message' => 'You must be logged in.'], 401);",
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Auth failures answer 401 JSON',
+                ],
+            ],
+            'tables' => [],
+            'endpoints' => ['student/vote.php (POST)', 'student/draft.php (POST)'],
+            'connections' => [
+                'The gates above send browsers to login.php but APIs to this JSON shape.',
+                'The results poller swaps refreshed content without a full page load.',
+            ],
+            'defense' => 'Consistency is the story: clients can always parse the error, and a crashed JSON endpoint never leaks a stack trace to the wire.',
+            'questions' => [
+                'Why does the exception handler check Content-Type before answering JSON?',
+                'Why exit instead of returning?',
+            ],
+        ],
+        'fn-settings' => [
+            'id' => 'fn-settings',
+            'match' => ['path' => '/voting-app3/public/results.php'],
+            'selector' => '.brand',
+            'title' => 'Site settings are key-value rows',
+            'category' => 'data',
+            'summary' => 'getSiteSetting() reads one value from site_settings and returns null when the key was never set.',
+            'behavior' => 'The dynamic seals on the public pages - the SSG mark on each election card - come from this table, so an admin can rebrand without touching a template. This page\'s own nav seal is the one static logo in the public pages.',
+            'under_the_hood' => 'getSiteSetting() returns setting_value or null when the key is unset or cleared; callers treat null as "not configured" and fall back. The admin Settings API writes these rows and pre-creates next year\'s school-year row as part of the same save story.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function getSiteSetting',
+                    'before' => 2,
+                    'after' => 8,
+                    'label' => 'Null means unset',
+                ],
+                [
+                    'file' => 'public/results.php',
+                    'anchor' => 'getSiteSetting($pdo, \'ssg_logo\')',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Seal for the election cards',
+                ],
+                [
+                    'file' => 'public/landingpage.php',
+                    'anchor' => 'getSiteSetting($pdo, \'ssg_logo\')',
+                    'before' => 1,
+                    'after' => 2,
+                    'label' => 'Seal for the public pages',
+                ],
+            ],
+            'tables' => ['site_settings'],
+            'endpoints' => ['admin/api/settings.php (GET)', 'admin/api/settings.php (POST)', 'public/landingpage.php', 'public/results.php'],
+            'connections' => [
+                'electionLogoHtml() below consumes the ssg_logo setting.',
+                'getActiveSchoolYear() keeps the is_active flag this panel labels.',
+            ],
+            'defense' => 'Hot pages fetch settings once per render and pass them down - no per-card queries.',
+            'questions' => [
+                'Why null instead of an empty string for unset keys?',
+                'Which setting feeds the SSG seal?',
+            ],
+        ],
+        'fn-image' => [
+            'id' => 'fn-image',
+            'match' => ['path' => '/voting-app3/public/results.php'],
+            'selector' => '.avatar',
+            'title' => 'Uploads validated as decoded bytes',
+            'category' => 'security',
+            'summary' => 'isValidImageDataUrl() decodes the base64 payload and parses it with getimagesize - a data:image prefix alone is not enough.',
+            'behavior' => 'The candidate photos shown here were accepted only after their decoded bytes parsed as a real raster image with sane dimensions.',
+            'under_the_hood' => 'The helper splits the data URL, base64-decodes the payload, and requires getimagesizefromstring to report jpeg, png, gif, or webp at 1 to 5000 pixels. SVG is deliberately rejected because it can carry script. It runs in the wizard validation path, again inside saveCandidatePhoto() as a final guard, and once more in the settings API for logos.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function isValidImageDataUrl',
+                    'before' => 2,
+                    'after' => 14,
+                    'label' => 'Decode, parse, whitelist',
+                ],
+                [
+                    'file' => 'admin/api/elections.php',
+                    'anchor' => 'isValidImageDataUrl($photo)',
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'Wizard validation rejects it',
+                ],
+                [
+                    'file' => 'admin/api/elections.php',
+                    'anchor' => 'isValidImageDataUrl($base64)',
+                    'before' => 2,
+                    'after' => 2,
+                    'label' => 'saveCandidatePhoto drops it as final guard',
+                ],
+            ],
+            'tables' => ['candidates', 'site_settings'],
+            'endpoints' => ['admin/api/elections.php (POST)', 'admin/api/settings.php (POST)'],
+            'connections' => [
+                'photo.php and icon.php stream the stored bytes back read-only.',
+                'The logos below are the other payload that passes this check.',
+            ],
+            'defense' => 'Trust the bytes, not the prefix: the old prefix-only check would have stored an SVG wearing a PNG label.',
+            'questions' => [
+                'Why is SVG rejected when it is an image format?',
+                'Where does the second validation inside saveCandidatePhoto happen?',
+            ],
+        ],
+        'fn-logos' => [
+            'id' => 'fn-logos',
+            'match' => ['path' => '/voting-app3/student/register.php'],
+            'selector' => '.logo',
+            'title' => 'Election logos: SSG seal, department mark, or generic glyph',
+            'category' => 'ui',
+            'summary' => 'electionLogoHtml() picks the right mark per election; getDepartmentLogos() loads them all in one query.',
+            'behavior' => 'The school seal on this card is a static file. Election cards work differently: SSG elections show the site seal, DSG elections show their department\'s mark, and anything missing falls back to a generic inline SVG - never a broken image.',
+            'under_the_hood' => 'electionLogoHtml() chooses ssg_logo or the department row, escapes the src with h(), and returns ready-to-echo markup. getDepartmentLogos() builds the code-to-logo map once per page, so a grid of cards costs one query. defaultElectionLogoSvg() is inline SVG using currentColor, so it follows the theme in both modes.',
+            'code' => [
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function electionLogoHtml',
+                    'before' => 2,
+                    'after' => 10,
+                    'label' => 'Pick, escape, render',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function getDepartmentLogos',
+                    'before' => 2,
+                    'after' => 8,
+                    'label' => 'One query for the whole grid',
+                ],
+                [
+                    'file' => 'includes/functions.php',
+                    'anchor' => 'function defaultElectionLogoSvg',
+                    'before' => 2,
+                    'after' => 6,
+                    'label' => 'Inline SVG fallback',
+                ],
+                [
+                    'file' => 'public/landingpage.php',
+                    'anchor' => "electionLogoHtml(\$e['type']",
+                    'before' => 1,
+                    'after' => 1,
+                    'label' => 'Called per card',
+                ],
+            ],
+            'tables' => ['site_settings', 'departments'],
+            'endpoints' => ['public/landingpage.php', 'public/results.php'],
+            'connections' => [
+                'getSiteSetting() supplies the SSG seal this function falls back to.',
+                'The upload validation above is what let department logos into the map.',
+            ],
+            'defense' => 'The fallback is inline SVG using currentColor, so a school with no uploads still gets a themed mark. This card\'s seal is the one static file; election cards are fully dynamic.',
+            'questions' => [
+                'Why is the fallback inline SVG instead of an image file?',
+                'Why one query for all departments instead of one per card?',
             ],
         ],
     ],

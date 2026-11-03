@@ -222,7 +222,7 @@ async function main() {
 
         console.log('== live frame ==');
         const path = await page.waitFor(framePathExpression());
-        check('guide iframe reaches landingpage.php', path === '/voting-app3/landingpage.php', path);
+        check('guide iframe reaches landingpage.php', path === '/voting-app3/public/landingpage.php', path);
 
         const markerCount = await page.waitFor(
             `document.querySelectorAll('#marker-layer .marker').length > 0
@@ -287,7 +287,7 @@ async function main() {
         await page.shot(join(OUT, 'desktop-1440.png'));
 
         console.log('== chapters: start, public, login, register ==');
-        for (const chapterId of ['start-here', 'public-site', 'student-login', 'student-register']) {
+        for (const chapterId of ['start-here', 'public-site', 'student-login', 'student-register', 'functions-reference']) {
             await walkChapter(page, chapterId);
         }
 
@@ -297,7 +297,7 @@ async function main() {
             if (drawer && drawer.getAttribute('aria-hidden') === 'false') {
                 document.getElementById('drawerClose').click();
             }
-            return window.Guide.navigate({ path: '/landingpage.php' });
+            return window.Guide.navigate({ path: '/public/landingpage.php' });
         })()`);
         await page.waitFor(framePathExpression());
         await page.waitFor(`document.getElementById('drawer').getAttribute('aria-hidden') === 'true'`);
@@ -330,7 +330,7 @@ async function main() {
                 return path.endsWith('dashboard.php') ? path : '';
             } catch (error) { return ''; }
         })()`));
-        check('demo student reaches the dashboard', studentPath === '/voting-app3/dashboard.php', studentPath);
+        check('demo student reaches the dashboard', studentPath === '/voting-app3/student/dashboard.php', studentPath);
         await page.waitFor(`document.querySelector('#rolePill').dataset.role === 'student'`);
         check('role pill reports the student session', true);
 
@@ -448,7 +448,7 @@ async function main() {
         })()`);
         check('system overview renders content', true);
 
-        for (const view of ['overview', 'architecture', 'flows', 'database', 'api', 'security', 'defense', 'quality', 'glossary']) {
+        for (const view of ['overview', 'architecture', 'flows', 'database', 'api', 'security', 'functions', 'defense', 'quality', 'glossary']) {
             const rendered = await page.evalJs(`(() => {
                 window.Guide.renderSystem(${JSON.stringify(view)});
                 const body = document.getElementById('systemBody');
@@ -502,6 +502,26 @@ async function main() {
             })()`, 15000);
         } catch (error) { /* reported below */ }
         check('endpoint opens its handler source', /\.php/i.test(endpointChip), endpointChip || 'no file chip');
+
+        const fnName = await page.evalJs(`(() => {
+            window.Guide.renderSystem('functions');
+            const button = document.querySelector('#systemBody [data-system-entry^="function:"]');
+            if (!button) { return ''; }
+            const name = button.getAttribute('data-system-entry').slice(9);
+            button.click();
+            return name;
+        })()`);
+        check('functions view lists a helper', !!fnName, fnName);
+        let fnChip = '';
+        try {
+            fnChip = await page.waitFor(`(() => {
+                const drawer = document.getElementById('drawer');
+                const chip = document.getElementById('drawerFile');
+                if (!drawer || drawer.getAttribute('aria-hidden') !== 'false' || !chip) { return ''; }
+                return /functions\\.php/i.test(chip.textContent) ? chip.textContent.trim() : '';
+            })()`, 15000);
+        } catch (error) { /* reported below */ }
+        check('function entry opens its source', /functions\.php/i.test(fnChip), fnChip || 'no file chip');
 
         await page.evalJs(`(() => {
             const drawer = document.getElementById('drawer');
@@ -626,7 +646,7 @@ async function main() {
         })()`);
 
         console.log('== fallback ==');
-        await page.evalJs(`window.Guide.navigate({ path: '/404.php' })`);
+        await page.evalJs(`window.Guide.navigate({ path: '/public/404.php' })`);
         let fallbackShown = '';
         try {
             fallbackShown = await page.waitFor(`(() => {
@@ -636,7 +656,7 @@ async function main() {
             })()`, 12000);
         } catch (error) { /* reported below */ }
         check('404 in the frame shows the recorded view', fallbackShown === 'ok', fallbackShown || 'no fallback');
-        await page.evalJs(`window.Guide.navigate({ path: '/landingpage.php' })`);
+        await page.evalJs(`window.Guide.navigate({ path: '/public/landingpage.php' })`);
         await page.waitFor(framePathExpression());
         await page.waitFor(`document.getElementById('fallback').hidden === true`);
         check('live view recovers after the fallback', true);

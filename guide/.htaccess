@@ -1,0 +1,5 @@
+# The root .htaccess sets "DirectoryIndex public/index.php" for the app's
+# new layout. DirectoryIndex is inherited by subdirectories, so /guide/ would
+# look for guide/public/index.php, miss, and answer 403 (indexes are off).
+# Restore the guide's own directory index.
+DirectoryIndex index.php

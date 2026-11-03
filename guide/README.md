@@ -112,7 +112,7 @@ print (`out/print-defense.png`) captures.
 - **403 from the guide** — the request did not come from loopback. Open
   `http://localhost/...`, not a LAN IP.
 - **The frame says it cannot load** — confirm Apache and MySQL are running in
-  XAMPP and that `http://localhost/voting-app3/landingpage.php` works alone.
+  XAMPP and that `http://localhost/voting-app3/public/landingpage.php` works alone.
 - **Blank admin charts** — Chart.js is loaded from a CDN by the app itself. The
   guide shows a banner and offers the recorded screen; the rest of the panel works.
 - **A snippet says the anchor was not found** — the app changed that line. Update

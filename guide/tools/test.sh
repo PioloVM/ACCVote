@@ -24,14 +24,14 @@ done
 grep -q "window.GUIDE_DATA" /tmp/guide-index.html && ok "shell injects GUIDE_DATA" || bad "shell missing GUIDE_DATA"
 
 echo "== snippet API =="
-SNIP=$(curl -s "$BASE/guide/api/snippet.php?file=login.php&anchor=password_verify&before=4&after=8")
+SNIP=$(curl -s "$BASE/guide/api/snippet.php?file=student/login.php&anchor=password_verify&before=4&after=8")
 echo "$SNIP" | python -c "import json,sys;d=json.load(sys.stdin);assert d['ok'] and 'password_verify' in d['code'] and d['start'] <= d['anchor_line'] <= d['end']" 2>/dev/null \
   && ok "valid anchor resolves with real code" || bad "valid anchor failed: $SNIP"
 TRAV=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=../.env&anchor=x")
 [ "$TRAV" = "400" ] && ok "path traversal rejected" || bad "traversal returned $TRAV"
 BIN=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=assets/logo.png&anchor=x")
 [ "$BIN" = "400" ] && ok "non-text extension rejected" || bad "binary returned $BIN"
-MISS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=login.php&anchor=__nope__")
+MISS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=student/login.php&anchor=__nope__")
 [ "$MISS" = "404" ] && ok "missing anchor returns 404" || bad "missing anchor returned $MISS"
 DENIED_ROOT=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=guide/api/snippet.php&anchor=guide_require_local")
 [ "$DENIED_ROOT" = "400" ] && ok "guide/api is not readable" || bad "guide/api returned $DENIED_ROOT"
@@ -39,9 +39,9 @@ DOTFILE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?fi
 [ "$DOTFILE" = "400" ] && ok "dotfiles rejected" || bad "dotfile returned $DOTFILE"
 ABS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=C:/Windows/win.ini&anchor=x")
 [ "$ABS" = "400" ] && ok "absolute path rejected" || bad "absolute path returned $ABS"
-NOANCHOR=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=login.php")
+NOANCHOR=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/guide/api/snippet.php?file=student/login.php")
 [ "$NOANCHOR" = "400" ] && ok "missing anchor parameter rejected" || bad "no anchor returned $NOANCHOR"
-CLAMP=$(curl -s "$BASE/guide/api/snippet.php?file=login.php&anchor=password_verify&before=999&after=999")
+CLAMP=$(curl -s "$BASE/guide/api/snippet.php?file=student/login.php&anchor=password_verify&before=999&after=999")
 echo "$CLAMP" | python -c "import json,sys;d=json.load(sys.stdin);assert d['ok'] and d['end']-d['start']<=400 and d['start']<=d['anchor_line']<=d['end']" 2>/dev/null \
   && ok "context window clamped" || bad "context clamp failed: $CLAMP"
 head -c 524289 /dev/zero | tr '\0' 'a' > guide/tools/oversized.php
