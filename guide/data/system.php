@@ -41,6 +41,7 @@ return [
             ['path' => 'includes/functions.php', 'purpose' => 'Shared session, CSRF, throttling, password, year-level, status, and image helpers.'],
             ['path' => 'config/db.php', 'purpose' => 'PDO factory: driver detection, DATABASE_URL parsing, and connection options.'],
             ['path' => 'database/schema.sql · database/schema.mysql.sql', 'purpose' => 'Fresh-install schemas for PostgreSQL and MariaDB; CI keeps them in parity.'],
+            ['path' => 'database/migration_*.sql · database/migration_*.mysql.sql', 'purpose' => 'Versioned schema changes, one pair per driver, applied by hand with psql or the MySQL client. migration_neon.sql is the production bootstrap: full schema plus the single admin seed row.'],
         ],
         'run' => [
             'Copy the folder into XAMPP htdocs so the URL is http://localhost/voting-app3/.',
@@ -791,6 +792,8 @@ return [
             'refs' => [
                 ['file' => 'admin/api/students.php', 'anchor' => 'password_reset_pending = 1'],
                 ['file' => 'student/vote.php', 'anchor' => 'password_reset_pending'],
+                ['file' => 'student/change-password.php', 'anchor' => 'empty($gateUser[\'password_reset_pending\'])'],
+                ['file' => 'student/change-password.php', 'anchor' => 'password_reset_pending = 0'],
             ],
             'defense' => 'A temporary password is not enough to vote. The reset flag is checked again at the ballot transaction, not only at the UI.',
         ],
@@ -1041,6 +1044,12 @@ return [
                 'notes' => ['database/schema.sql is the PostgreSQL source.', 'database/schema.mysql.sql is the MariaDB source.', 'Partial indexes are emulated on MariaDB rather than dropped.'],
                 'ref' => ['file' => 'database/schema.mysql.sql', 'anchor' => 'CREATE TABLE'],
             ],
+            [
+                'name' => 'Migrations and backups',
+                'summary' => 'Schema changes ship as versioned SQL pairs in database/; backups stay with the operator because no server endpoint writes dumps.',
+                'notes' => ['One pair per change: school years, election targeting, ballot submissions, faculty full names, the password-reset flag, and the Neon bootstrap (migration_neon.sql).', 'Apply with psql or the MySQL client before the new code serves traffic; the app never runs migrations itself.', 'In-app exports are client-side only (SheetJS/XLSX and CSV). A real backup is pg_dump or mysqldump, which is why the guards below forbid committing dumps.'],
+                'ref' => ['file' => 'database/migration_schoolyear.sql', 'anchor' => 'CREATE TABLE'],
+            ],
         ],
         'steps' => [
             'Create the database and load the matching schema file.',
@@ -1054,6 +1063,7 @@ return [
             'The guide itself is loopback-only. Do not expose guide/ publicly with demo credentials.',
             'Production traffic must be HTTPS so the Secure cookie flag and HSTS take effect.',
             'Keep the guide and README statements about Next School Year aligned with the code: it archives elections, it does not promote students.',
+            'No server endpoint writes database dumps; backups are pg_dump/mysqldump by the operator, and the in-app exports are client-side only.',
         ],
     ],
 
@@ -1318,5 +1328,7 @@ return [
         ['term' => 'PDO', 'definition' => 'PHP Data Objects. The database abstraction used for both MariaDB and PostgreSQL.'],
         ['term' => 'Panel', 'definition' => 'A section of the admin or student dashboard. Panels are switched by JavaScript, not by a new URL.'],
         ['term' => 'Anchor', 'definition' => 'A short, stable line of source code used by this guide to locate a snippet at request time instead of hard-coding line numbers.'],
+        ['term' => 'Migration file', 'definition' => 'A hand-applied SQL change in database/, shipped as a .sql/.mysql.sql pair per driver. The app never runs migrations; the operator applies them before the new code serves traffic.'],
+        ['term' => 'Schema parity', 'definition' => 'The CI check (tests/schema_parity.php) proving schema.sql and schema.mysql.sql describe the same tables, columns, and indexes.'],
     ],
 ];

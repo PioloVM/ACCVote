@@ -287,7 +287,7 @@ async function main() {
         await page.shot(join(OUT, 'desktop-1440.png'));
 
         console.log('== chapters: start, public, login, register ==');
-        for (const chapterId of ['start-here', 'public-site', 'student-login', 'student-register', 'functions-reference']) {
+        for (const chapterId of ['start-here', 'public-site', 'student-login', 'student-register', 'functions-reference', 'admin-login']) {
             await walkChapter(page, chapterId);
         }
 
@@ -338,7 +338,7 @@ async function main() {
         await walkChapter(page, 'student-update-account');
 
         console.log('== chapters: student portal (student session) ==');
-        for (const chapterId of ['student-dashboard', 'student-candidates', 'student-results']) {
+        for (const chapterId of ['student-dashboard', 'student-candidates', 'student-results', 'frontend-architecture']) {
             await walkChapter(page, chapterId);
         }
 
