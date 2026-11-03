@@ -86,11 +86,14 @@ DirectoryIndex public/index.php
 # 302, not 301: browsers cache 301s aggressively; the smoke suite hits
 # new URLs directly. No "?" in the substitutions, so query strings pass
 # through automatically. Anchored full filenames never match student/...
-# or admin/... paths. Keep in sync with config/router.php.
+# or admin/... paths. Substitutions are root-absolute (like ErrorDocument
+# above): a relative one resolves against the filesystem prefix on
+# Windows Apache and leaks "C:/..." into the Location header. Keep in
+# sync with config/router.php.
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(login|logout|dashboard|dashboard-data|vote|draft|update-account|change-password|photo|icon)\.php$ student/$1.php [R=302,L]
-    RewriteRule ^(index|landingpage|results|404|health)\.php$ public/$1.php [R=302,L]
+    RewriteRule ^(login|logout|dashboard|dashboard-data|vote|draft|update-account|change-password|photo|icon)\.php$ /voting-app3/student/$1.php [R=302,L]
+    RewriteRule ^(index|landingpage|results|404|health)\.php$ /voting-app3/public/$1.php [R=302,L]
 </IfModule>
 
 # Sensible defaults for a PHP app with no uploaded file serving.
