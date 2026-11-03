@@ -17,7 +17,7 @@
 --
 -- Includes DEMO SEED DATA so a fresh install is immediately explorable:
 --   4 faculties, 4 year levels, 5 school years
---   20 students - test login: 987654321 / password123
+--   20 students - guided-tour demo login: 987654321 / password123 (Demo Account)
 --   1 admin     - admin panel: admin / admin123
 --   1 SSG election (ongoing), 1 DSG election (upcoming),
 --   1 DSG election (ended, with tallies so Results has data)
@@ -409,7 +409,7 @@ INSERT INTO school_years (label, start_year, is_active, sort_order) VALUES
 INSERT INTO users (student_id, name, password, department, year_level, has_voted, registration_status, email) VALUES
 ('20260001', 'Liza Bautista',   NULL, 'College of Information and Communications Technology', '1st Year', 0, 'unregistered', NULL),
 ('20260002', 'Miguel Torres',   NULL, 'College of Business Management and Accountancy',       '1st Year', 0, 'unregistered', NULL),
-('987654321', 'Juan Dela Cruz', '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '2nd Year', 0, 'active', 'juan.delacruz@acc.edu.ph'),
+('987654321', 'Demo Account',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '2nd Year', 0, 'active', 'demo.account@acc.edu.ph'),
 ('20230101', 'Maria Santos',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '3rd Year', 0, 'active', NULL),
 ('20230102', 'Julian Reyes',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '4th Year', 0, 'active', NULL),
 ('20230103', 'Anna Cruz',       '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '2nd Year', 0, 'active', NULL),

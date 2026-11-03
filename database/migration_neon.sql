@@ -1,9 +1,12 @@
-﻿-- ============================================================
+-- ============================================================
 -- NEON (PostgreSQL) MIGRATION - voting-app3
 -- ============================================================
 -- Fresh install for a Neon Postgres database. Creates the FULL
 -- schema (all 16 tables, indexes, and constraints) with NO data,
--- then seeds exactly one row: the admin account (admin / admin123).
+-- then seeds only what the app needs to boot: the lookup rows
+-- (departments, year levels, the active school year), the admin
+-- account (admin / admin123), and the guided-tour demo student
+-- (987654321 / Demo Account / password123).
 --
 -- Apply with (psql):
 --   psql $DATABASE_URL -f migration_neon.sql
@@ -329,14 +332,53 @@ COMMIT;
 --                                                              -- 2 rows, not 4
 -- ============================================================
 -- ============================================================
--- SEED: single admin account (admin / admin123)
+-- SEED: lookup rows, admin account, demo student
 -- ============================================================
--- Everything above is pure DDL - no other data is inserted.
--- Delete this block for a strictly empty production database.
+-- Everything above is pure DDL - these rows are the minimum a fresh
+-- install needs to boot: the department/year-level lists the
+-- registration and admin forms render, the one active school year,
+-- the admin login, and the public demo student the guided tour
+-- (/guide/) signs in as. Delete this block for a strictly empty
+-- production database.
+
+-- departments shown in registration, filters, and the admin forms
+INSERT INTO departments (code, name, sort_order) VALUES
+    ('College of Information and Communications Technology', 'College of Information and Communications Technology', 1),
+    ('College of Business Management and Accountancy',       'College of Business Management and Accountancy',       2),
+    ('College of Arts, Sciences and Education',              'College of Arts, Sciences and Education',              3),
+    ('College of Nursing',                                   'College of Nursing',                                   4)
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO year_levels (name, sort_order) VALUES
+    ('1st Year', 1), ('2nd Year', 2), ('3rd Year', 3), ('4th Year', 4)
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO school_years (label, start_year, is_active, sort_order) VALUES
+    ('2026-2027', 2026, TRUE, 2026)
+ON CONFLICT (label) DO NOTHING;
+
+-- Admin (login: admin / admin123)
 INSERT INTO admins (username, password_hash, email, role) VALUES
     ('admin',
      '$2y$10$MTX5RHnN2DmiKXfWfb.v2OTx1d2tUyOvmow2wJ/HHqXf2H9VjSLFm',
      'admin@acc.edu.ph',
      'superadmin')
 ON CONFLICT (username) DO NOTHING;
+
+-- Guided-tour demo student (login: 987654321 / password123).
+-- Same hash and details as the local MariaDB demo seed in
+-- schema.mysql.sql, so local and hosted installs match.
+INSERT INTO users (student_id, name, password, department, year_level, has_voted, registration_status, email) VALUES
+    ('987654321',
+     'Demo Account',
+     '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC',
+     'College of Information and Communications Technology',
+     '2nd Year',
+     0,
+     'active',
+     'demo.account@acc.edu.ph')
+ON CONFLICT (student_id) DO UPDATE SET
+    name = EXCLUDED.name,
+    email = EXCLUDED.email,
+    registration_status = 'active';
 
