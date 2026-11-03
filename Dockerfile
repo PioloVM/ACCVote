@@ -16,4 +16,7 @@ COPY . /app
 # Render sends traffic to port 10000 by default
 EXPOSE 10000
 
-CMD ["php", "-d", "zlib.output_compression=1", "-S", "0.0.0.0:10000", "-t", "/app", "/app/config/router.php"]
+# No zlib.output_compression: on PHP 8.3 php -S gzips static-file bodies
+# after Content-Length is already set, so the proxy sees a length mismatch
+# and returns 502 for every CSS/JS/image. Cloudflare compresses at the edge.
+CMD ["php", "-S", "0.0.0.0:10000", "-t", "/app", "/app/config/router.php"]
