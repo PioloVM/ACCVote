@@ -1044,7 +1044,7 @@ return [
     'annotations' => [
         'landing-hero' => [
             'id' => 'landing-hero',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => 'section.hero',
             'title' => 'Hero — "Your Voice, Your Choice"',
             'category' => 'ui',
@@ -1082,7 +1082,7 @@ return [
         ],
         'landing-nav' => [
             'id' => 'landing-nav',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => 'nav.nav',
             'title' => 'Public navigation',
             'category' => 'ui',
@@ -1119,7 +1119,7 @@ return [
         ],
         'landing-cta' => [
             'id' => 'landing-cta',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => '.hero-ctas',
             'title' => 'Vote Now action',
             'category' => 'logic',
@@ -1148,7 +1148,7 @@ return [
         ],
         'landing-ticker' => [
             'id' => 'landing-ticker',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => '.ticker-wrap',
             'title' => 'Live statistics ticker',
             'category' => 'data',
@@ -1184,7 +1184,7 @@ return [
         ],
         'landing-elections' => [
             'id' => 'landing-elections',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => 'section.sec.elections',
             'title' => 'Current elections section',
             'category' => 'data',
@@ -1220,7 +1220,7 @@ return [
         ],
         'landing-election-card' => [
             'id' => 'landing-election-card',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => '.elec-grid .elec-card',
             'title' => 'One election card',
             'category' => 'logic',
@@ -1256,7 +1256,7 @@ return [
         ],
         'landing-how' => [
             'id' => 'landing-how',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => 'section.sec.how',
             'title' => 'How voting works',
             'category' => 'ui',
@@ -1286,7 +1286,7 @@ return [
         ],
         'landing-candidates' => [
             'id' => 'landing-candidates',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => 'section.sec.candidates',
             'title' => 'Candidate marquee',
             'category' => 'data',
@@ -1322,7 +1322,7 @@ return [
         ],
         'landing-final-cta' => [
             'id' => 'landing-final-cta',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => 'section.final-cta',
             'title' => 'Closing call to action',
             'category' => 'ui',
@@ -1351,7 +1351,7 @@ return [
         ],
         'landing-footer' => [
             'id' => 'landing-footer',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => 'footer',
             'title' => 'Public footer',
             'category' => 'ui',
@@ -1379,7 +1379,7 @@ return [
         ],
         'results-head' => [
             'id' => 'results-head',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.page-head',
             'title' => 'Public results header',
             'category' => 'ui',
@@ -1415,7 +1415,7 @@ return [
         ],
         'results-election' => [
             'id' => 'results-election',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '#resultsRoot .elec',
             'title' => 'One election result block',
             'category' => 'data',
@@ -1451,7 +1451,7 @@ return [
         ],
         'results-refresh' => [
             'id' => 'results-refresh',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.live-chip',
             'title' => 'Automatic refresh',
             'category' => 'logic',
@@ -1495,7 +1495,7 @@ return [
         ],
         'login-card' => [
             'id' => 'login-card',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#loginCard',
             'title' => 'The login card',
             'category' => 'ui',
@@ -1531,7 +1531,7 @@ return [
         ],
         'login-form' => [
             'id' => 'login-form',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#loginForm',
             'title' => 'Login form and CSRF check',
             'category' => 'security',
@@ -1575,7 +1575,7 @@ return [
         ],
         'login-id' => [
             'id' => 'login-id',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#student_id',
             'title' => 'Student ID field',
             'category' => 'ui',
@@ -1611,7 +1611,7 @@ return [
         ],
         'login-password' => [
             'id' => 'login-password',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#password',
             'title' => 'Password field',
             'category' => 'security',
@@ -1647,7 +1647,7 @@ return [
         ],
         'login-toggle' => [
             'id' => 'login-toggle',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#togglePasswordBtn',
             'title' => 'Show / hide password',
             'category' => 'ui',
@@ -1683,7 +1683,7 @@ return [
         ],
         'login-submit' => [
             'id' => 'login-submit',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#submitBtn',
             'title' => 'Submitting the login form',
             'category' => 'ui',
@@ -1719,7 +1719,7 @@ return [
         ],
         'login-csrf' => [
             'id' => 'login-csrf',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => 'input[name="csrf_token"]',
             'title' => 'Hidden CSRF token',
             'category' => 'security',
@@ -1756,7 +1756,7 @@ return [
         ],
         'login-errors' => [
             'id' => 'login-errors',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#loginCard .card-title',
             'title' => 'Errors and rate limiting',
             'category' => 'security',
@@ -1792,7 +1792,7 @@ return [
         ],
         'login-lifecycle' => [
             'id' => 'login-lifecycle',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#loginCard .subtitle',
             'title' => 'Year-level lifecycle gate',
             'category' => 'logic',
@@ -1835,7 +1835,7 @@ return [
         ],
         'login-session' => [
             'id' => 'login-session',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '.register-cta',
             'title' => 'Successful login and redirect',
             'category' => 'security',
@@ -1871,7 +1871,7 @@ return [
         ],
         'register-card' => [
             'id' => 'register-card',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '.page-center .card',
             'title' => 'Registration screen',
             'category' => 'ui',
@@ -1907,7 +1907,7 @@ return [
         ],
         'register-form' => [
             'id' => 'register-form',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => 'form[method="POST"]',
             'title' => 'The registration form',
             'category' => 'security',
@@ -1944,7 +1944,7 @@ return [
         ],
         'register-identity' => [
             'id' => 'register-identity',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#student_id',
             'title' => 'Student ID and derived start year',
             'category' => 'logic',
@@ -1987,7 +1987,7 @@ return [
         ],
         'register-faculty' => [
             'id' => 'register-faculty',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#department',
             'title' => 'Faculty selection',
             'category' => 'logic',
@@ -2023,7 +2023,7 @@ return [
         ],
         'register-year' => [
             'id' => 'register-year',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#year_level',
             'title' => 'Year level and repeaters',
             'category' => 'logic',
@@ -2066,7 +2066,7 @@ return [
         ],
         'register-password' => [
             'id' => 'register-password',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#password',
             'title' => 'Password policy',
             'category' => 'security',
@@ -2109,7 +2109,7 @@ return [
         ],
         'register-lifecycle' => [
             'id' => 'register-lifecycle',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#lifecycle_status',
             'title' => 'Repeating and lifecycle status',
             'category' => 'logic',
@@ -2145,7 +2145,7 @@ return [
         ],
         'register-submit' => [
             'id' => 'register-submit',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => 'form[method="POST"] button[type="submit"]',
             'title' => 'Activation or new record',
             'category' => 'data',
@@ -2188,7 +2188,7 @@ return [
         ],
         'update-card' => [
             'id' => 'update-card',
-            'match' => ['path' => '/voting-app3/student/update-account.php'],
+            'match' => ['path' => '/student/update-account.php'],
             'selector' => '.page-center .card',
             'title' => 'Enrollment details screen',
             'category' => 'ui',
@@ -2224,7 +2224,7 @@ return [
         ],
         'update-summary' => [
             'id' => 'update-summary',
-            'match' => ['path' => '/voting-app3/student/update-account.php'],
+            'match' => ['path' => '/student/update-account.php'],
             'selector' => '.student-summary',
             'title' => 'Official record versus computed level',
             'category' => 'logic',
@@ -2260,7 +2260,7 @@ return [
         ],
         'update-form' => [
             'id' => 'update-form',
-            'match' => ['path' => '/voting-app3/student/update-account.php'],
+            'match' => ['path' => '/student/update-account.php'],
             'selector' => '#updateAccountForm',
             'title' => 'The declaration form',
             'category' => 'logic',
@@ -2303,7 +2303,7 @@ return [
         ],
         'student-sidebar' => [
             'id' => 'student-sidebar',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '.sidebar',
             'title' => 'Sidebar and panel switching',
             'category' => 'ui',
@@ -2347,7 +2347,7 @@ return [
         ],
         'student-profile' => [
             'id' => 'student-profile',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '.student-profile-top',
             'title' => 'The signed-in identity',
             'category' => 'data',
@@ -2383,7 +2383,7 @@ return [
         ],
         'student-theme' => [
             'id' => 'student-theme',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '.theme-switcher',
             'title' => 'Light and dark mode',
             'category' => 'ui',
@@ -2419,7 +2419,7 @@ return [
         ],
         'student-header' => [
             'id' => 'student-header',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '.page-header',
             'title' => 'Page header',
             'category' => 'ui',
@@ -2455,7 +2455,7 @@ return [
         ],
         'student-home-panel' => [
             'id' => 'student-home-panel',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '#panel-home',
             'title' => 'Home panel and its data source',
             'category' => 'data',
@@ -2506,7 +2506,7 @@ return [
         ],
         'student-progress' => [
             'id' => 'student-progress',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '.progress-strip',
             'title' => 'Voting progress',
             'category' => 'data',
@@ -2542,7 +2542,7 @@ return [
         ],
         'student-vote-hero' => [
             'id' => 'student-vote-hero',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '.vote-hero',
             'title' => 'The vote-all block',
             'category' => 'logic',
@@ -2571,7 +2571,7 @@ return [
         ],
         'student-election-card' => [
             'id' => 'student-election-card',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'home'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'home'],
             'selector' => '.election-card',
             'title' => 'Reading an election card',
             'category' => 'logic',
@@ -2614,7 +2614,7 @@ return [
         ],
         'cand-page' => [
             'id' => 'cand-page',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '#panel-candidates',
             'title' => 'The candidates panel',
             'category' => 'data',
@@ -2650,7 +2650,7 @@ return [
         ],
         'cand-tabs' => [
             'id' => 'cand-tabs',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-tab-controller',
             'title' => 'SSG and DSG tabs',
             'category' => 'ui',
@@ -2686,7 +2686,7 @@ return [
         ],
         'cand-search' => [
             'id' => 'cand-search',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-toolbar',
             'title' => 'Search as you type',
             'category' => 'logic',
@@ -2722,7 +2722,7 @@ return [
         ],
         'cand-card' => [
             'id' => 'cand-card',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-card',
             'title' => 'One candidate card',
             'category' => 'ui',
@@ -2758,7 +2758,7 @@ return [
         ],
         'cand-profile' => [
             'id' => 'cand-profile',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'candidates'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'candidates'],
             'selector' => '.cand-card-toggle',
             'title' => 'The full-profile overlay',
             'category' => 'ui',
@@ -2794,7 +2794,7 @@ return [
         ],
         'ballot-preview' => [
             'id' => 'ballot-preview',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.preview-banner',
             'title' => 'Preview mode',
             'category' => 'security',
@@ -2830,7 +2830,7 @@ return [
         ],
         'ballot-header-view' => [
             'id' => 'ballot-header-view',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-header',
             'title' => 'Ballot header and progress',
             'category' => 'ui',
@@ -2873,7 +2873,7 @@ return [
         ],
         'ballot-group' => [
             'id' => 'ballot-group',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-election-block',
             'title' => 'One election block',
             'category' => 'logic',
@@ -2909,7 +2909,7 @@ return [
         ],
         'ballot-position' => [
             'id' => 'ballot-position',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-step',
             'title' => 'One position',
             'category' => 'logic',
@@ -2945,7 +2945,7 @@ return [
         ],
         'ballot-candidates-fieldset' => [
             'id' => 'ballot-candidates-fieldset',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-candidates',
             'title' => 'The selection group',
             'category' => 'ui',
@@ -2981,7 +2981,7 @@ return [
         ],
         'ballot-candidate-option' => [
             'id' => 'ballot-candidate-option',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-candidate',
             'title' => 'Selecting a candidate',
             'category' => 'ui',
@@ -3017,7 +3017,7 @@ return [
         ],
         'ballot-submit-ui' => [
             'id' => 'ballot-submit-ui',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '.ballot-submit-block',
             'title' => 'Submit and confirmation',
             'category' => 'logic',
@@ -3053,7 +3053,7 @@ return [
         ],
         'ballot-confirm-modal' => [
             'id' => 'ballot-confirm-modal',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '#ballotConfirmModal',
             'title' => 'The confirmation modal',
             'category' => 'ui',
@@ -3096,7 +3096,7 @@ return [
         ],
         'ballot-submit-transaction' => [
             'id' => 'ballot-submit-transaction',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '#voteForm',
             'title' => 'What the server re-checks',
             'category' => 'security',
@@ -3161,7 +3161,7 @@ return [
         ],
         'ballot-success-modal' => [
             'id' => 'ballot-success-modal',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'vote', 'preview' => true],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'vote', 'preview' => true],
             'selector' => '#ballotSuccessModal',
             'title' => 'The success modal',
             'category' => 'ui',
@@ -3197,7 +3197,7 @@ return [
         ],
         'dash-results-panel' => [
             'id' => 'dash-results-panel',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'results'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'results'],
             'selector' => '#panel-results',
             'title' => 'The results panel',
             'category' => 'data',
@@ -3240,7 +3240,7 @@ return [
         ],
         'dash-results-row' => [
             'id' => 'dash-results-row',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'results'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'results'],
             'selector' => '.result-row',
             'title' => 'Reading one result row',
             'category' => 'data',
@@ -3276,7 +3276,7 @@ return [
         ],
         'dash-results-refresh' => [
             'id' => 'dash-results-refresh',
-            'match' => ['path' => '/voting-app3/student/dashboard.php', 'page' => 'results'],
+            'match' => ['path' => '/student/dashboard.php', 'page' => 'results'],
             'selector' => '.results-block',
             'title' => 'Automatic refresh',
             'category' => 'logic',
@@ -3319,7 +3319,7 @@ return [
         ],
         'admin-shell' => [
             'id' => 'admin-shell',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.sidebar',
             'title' => 'The admin shell',
             'category' => 'ui',
@@ -3356,7 +3356,7 @@ return [
         ],
         'admin-nav' => [
             'id' => 'admin-nav',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.sidebar nav',
             'title' => 'Panel navigation',
             'category' => 'logic',
@@ -3393,7 +3393,7 @@ return [
         ],
         'admin-theme' => [
             'id' => 'admin-theme',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.theme-switcher',
             'title' => 'Theme switcher',
             'category' => 'ui',
@@ -3429,7 +3429,7 @@ return [
         ],
         'admin-profile' => [
             'id' => 'admin-profile',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.profile-section',
             'title' => 'Signed-in administrator',
             'category' => 'security',
@@ -3465,7 +3465,7 @@ return [
         ],
         'admin-header' => [
             'id' => 'admin-header',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.page-header',
             'title' => 'Panel header',
             'category' => 'ui',
@@ -3494,7 +3494,7 @@ return [
         ],
         'admin-stats' => [
             'id' => 'admin-stats',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.stats-bar',
             'title' => 'Voter and election totals',
             'category' => 'data',
@@ -3538,7 +3538,7 @@ return [
         ],
         'admin-turnout' => [
             'id' => 'admin-turnout',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.donut-wrap',
             'title' => 'Turnout breakdown',
             'category' => 'data',
@@ -3575,7 +3575,7 @@ return [
         ],
         'admin-activity' => [
             'id' => 'admin-activity',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.log-item',
             'title' => 'Recent admin activity',
             'category' => 'data',
@@ -3611,7 +3611,7 @@ return [
         ],
         'admin-recent-elections' => [
             'id' => 'admin-recent-elections',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'dashboard'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'dashboard'],
             'selector' => '.results-mini',
             'title' => 'Recent elections preview',
             'category' => 'ui',
@@ -3640,7 +3640,7 @@ return [
         ],
         'admin-election-list' => [
             'id' => 'admin-election-list',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '#electionListView',
             'title' => 'Election list',
             'category' => 'ui',
@@ -3676,7 +3676,7 @@ return [
         ],
         'admin-election-card' => [
             'id' => 'admin-election-card',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '.election-card',
             'title' => 'One election card',
             'category' => 'ui',
@@ -3719,7 +3719,7 @@ return [
         ],
         'admin-election-schedule' => [
             'id' => 'admin-election-schedule',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '.schedule-box',
             'title' => 'Scheduling an election',
             'category' => 'logic',
@@ -3762,7 +3762,7 @@ return [
         ],
         'admin-election-actions' => [
             'id' => 'admin-election-actions',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '.card-actions',
             'title' => 'Lifecycle actions',
             'category' => 'logic',
@@ -3809,7 +3809,7 @@ return [
         ],
         'admin-next-year' => [
             'id' => 'admin-next-year',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => 'button[onclick="openNextSchoolYearModal()"]',
             'title' => 'Next School Year Election',
             'category' => 'logic',
@@ -3853,7 +3853,7 @@ return [
         ],
         'admin-create-election' => [
             'id' => 'admin-create-election',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => 'button[onclick="openCreateElection()"]',
             'title' => 'Starting the election wizard',
             'category' => 'ui',
@@ -3896,7 +3896,7 @@ return [
         ],
         'admin-wizard-type' => [
             'id' => 'admin-wizard-type',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '.type-choice-row',
             'title' => 'Step 1 — type and identity',
             'category' => 'ui',
@@ -3945,7 +3945,7 @@ return [
         ],
         'admin-wizard-positions' => [
             'id' => 'admin-wizard-positions',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '#positionsTable',
             'title' => 'Positions table',
             'category' => 'logic',
@@ -3987,7 +3987,7 @@ return [
         ],
         'admin-wizard-candidates' => [
             'id' => 'admin-wizard-candidates',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '.candidate-block',
             'title' => 'Step 2 — candidates',
             'category' => 'ui',
@@ -4029,7 +4029,7 @@ return [
         ],
         'admin-wizard-save' => [
             'id' => 'admin-wizard-save',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '.wizard-footer',
             'title' => 'Saving the election',
             'category' => 'logic',
@@ -4079,7 +4079,7 @@ return [
         ],
         'admin-students-toolbar' => [
             'id' => 'admin-students-toolbar',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => '.students-toolbar',
             'title' => 'Student search and filters',
             'category' => 'logic',
@@ -4115,7 +4115,7 @@ return [
         ],
         'admin-students-stats' => [
             'id' => 'admin-students-stats',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => '.stats-bar',
             'title' => 'Roster totals',
             'category' => 'data',
@@ -4157,7 +4157,7 @@ return [
         ],
         'admin-students-table' => [
             'id' => 'admin-students-table',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => '.students-table',
             'title' => 'The student table',
             'category' => 'data',
@@ -4200,7 +4200,7 @@ return [
         ],
         'admin-students-voter-status' => [
             'id' => 'admin-students-voter-status',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => '.students-table tbody .status-pill',
             'title' => 'Voted or not voted',
             'category' => 'logic',
@@ -4235,7 +4235,7 @@ return [
         ],
         'admin-students-export' => [
             'id' => 'admin-students-export',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => 'button[onclick="exportStudentsCSV(lastFilteredStudents)"]',
             'title' => 'Exporting the roster',
             'category' => 'data',
@@ -4270,7 +4270,7 @@ return [
         ],
         'admin-students-register' => [
             'id' => 'admin-students-register',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => 'button[onclick="openRegisterStudent()"]',
             'title' => 'Registering a student',
             'category' => 'logic',
@@ -4306,7 +4306,7 @@ return [
         ],
         'admin-students-form' => [
             'id' => 'admin-students-form',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => '#studentFormView .wizard-topbar',
             'title' => 'The student form',
             'category' => 'ui',
@@ -4348,7 +4348,7 @@ return [
         ],
         'admin-students-password' => [
             'id' => 'admin-students-password',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'students'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'students'],
             'selector' => '#studentFormView .pw-field',
             'title' => 'Passwords and resets',
             'category' => 'security',
@@ -4390,7 +4390,7 @@ return [
         ],
         'admin-results-tabs' => [
             'id' => 'admin-results-tabs',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'results'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'results'],
             'selector' => '.results-tab-row',
             'title' => 'Three ways to read results',
             'category' => 'ui',
@@ -4433,7 +4433,7 @@ return [
         ],
         'admin-results-overview' => [
             'id' => 'admin-results-overview',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'results'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'results'],
             'selector' => '#panel-results > .stat-strip',
             'title' => 'Overview totals',
             'category' => 'data',
@@ -4469,7 +4469,7 @@ return [
         ],
         'admin-results-table' => [
             'id' => 'admin-results-table',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'results'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'results'],
             'selector' => '.ov-table',
             'title' => 'Election-at-a-glance table',
             'category' => 'data',
@@ -4504,7 +4504,7 @@ return [
         ],
         'admin-results-detail' => [
             'id' => 'admin-results-detail',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'results'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'results'],
             'selector' => '.results-block',
             'title' => 'Candidate tallies',
             'category' => 'data',
@@ -4540,7 +4540,7 @@ return [
         ],
         'admin-results-visibility' => [
             'id' => 'admin-results-visibility',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'results'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'results'],
             'selector' => '.results-visibility-row',
             'title' => 'Student visibility',
             'category' => 'security',
@@ -4576,7 +4576,7 @@ return [
         ],
         'admin-results-reports' => [
             'id' => 'admin-results-reports',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'results'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'results'],
             'selector' => 'select[onchange*="reportTargetSchoolYearId"]',
             'title' => 'Printable reports',
             'category' => 'logic',
@@ -4627,7 +4627,7 @@ return [
         ],
         'admin-results-export' => [
             'id' => 'admin-results-export',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'results'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'results'],
             'selector' => 'button[onclick^="exportResultsCSV"]',
             'title' => 'Exporting detailed results',
             'category' => 'data',
@@ -4655,7 +4655,7 @@ return [
         ],
         'admin-archive' => [
             'id' => 'admin-archive',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'archive'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'archive'],
             'selector' => '.students-toolbar',
             'title' => 'The archive',
             'category' => 'ui',
@@ -4691,7 +4691,7 @@ return [
         ],
         'admin-archive-restore' => [
             'id' => 'admin-archive-restore',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'archive'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'archive'],
             'selector' => '#panel-archive .election-card',
             'title' => 'View results or restore',
             'category' => 'logic',
@@ -4727,7 +4727,7 @@ return [
         ],
         'admin-logs' => [
             'id' => 'admin-logs',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'logs'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'logs'],
             'selector' => '.logs-full',
             'title' => 'Activity logs',
             'category' => 'security',
@@ -4763,7 +4763,7 @@ return [
         ],
         'admin-throttle' => [
             'id' => 'admin-throttle',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'logs'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'logs'],
             'selector' => '.throttle-card',
             'title' => 'Login throttle',
             'category' => 'security',
@@ -4806,7 +4806,7 @@ return [
         ],
         'admin-settings' => [
             'id' => 'admin-settings',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'settings'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'settings'],
             'selector' => '.logo-upload-row',
             'title' => 'Branding settings',
             'category' => 'ui',
@@ -4842,7 +4842,7 @@ return [
         ],
         'admin-settings-faculties' => [
             'id' => 'admin-settings-faculties',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'settings'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'settings'],
             'selector' => '.settings-row',
             'title' => 'Faculties',
             'category' => 'logic',
@@ -4878,7 +4878,7 @@ return [
         ],
         'admin-settings-maintenance' => [
             'id' => 'admin-settings-maintenance',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'settings'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'settings'],
             'selector' => '.maintenance-row',
             'title' => 'Maintenance cleanups',
             'category' => 'data',
@@ -4914,7 +4914,7 @@ return [
         ],
         'admin-settings-admins' => [
             'id' => 'admin-settings-admins',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'settings'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'settings'],
             'selector' => '#adminAcctList',
             'title' => 'Admin accounts',
             'category' => 'security',
@@ -4957,7 +4957,7 @@ return [
         ],
         'sy-clock' => [
             'id' => 'sy-clock',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'settings'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'settings'],
             'selector' => '#panel-settings .card:nth-of-type(3)',
             'title' => 'The school-year clock',
             'category' => 'logic',
@@ -5000,7 +5000,7 @@ return [
         ],
         'sy-year-levels' => [
             'id' => 'sy-year-levels',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'settings'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'settings'],
             'selector' => '#panel-settings .card:nth-of-type(4)',
             'title' => 'Year levels are computed',
             'category' => 'logic',
@@ -5043,7 +5043,7 @@ return [
         ],
         'sy-promotion' => [
             'id' => 'sy-promotion',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '#loginCard .logo-area',
             'title' => 'Students move up at first login',
             'category' => 'logic',
@@ -5086,7 +5086,7 @@ return [
         ],
         'sy-wizard-target' => [
             'id' => 'sy-wizard-target',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'election'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'election'],
             'selector' => '.auto-sy-display',
             'title' => 'Elections target the next school year',
             'category' => 'logic',
@@ -5129,7 +5129,7 @@ return [
         ],
         'sy-one-per-year' => [
             'id' => 'sy-one-per-year',
-            'match' => ['path' => '/voting-app3/admin/dashboard.php', 'panel' => 'archive'],
+            'match' => ['path' => '/admin/dashboard.php', 'panel' => 'archive'],
             'selector' => '#panel-archive .sy-badge',
             'title' => 'One election per school year',
             'category' => 'logic',
@@ -5172,7 +5172,7 @@ return [
         ],
         'fn-gates' => [
             'id' => 'fn-gates',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => '.page-center',
             'title' => 'Session start and the two login gates',
             'category' => 'security',
@@ -5223,7 +5223,7 @@ return [
         ],
         'fn-csrf' => [
             'id' => 'fn-csrf',
-            'match' => ['path' => '/voting-app3/student/login.php'],
+            'match' => ['path' => '/student/login.php'],
             'selector' => 'input[name="csrf_token"]',
             'title' => 'The CSRF token pair',
             'category' => 'security',
@@ -5274,7 +5274,7 @@ return [
         ],
         'fn-throttle' => [
             'id' => 'fn-throttle',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#full_name',
             'title' => 'Rate limiting by bucket and client',
             'category' => 'security',
@@ -5325,7 +5325,7 @@ return [
         ],
         'fn-password' => [
             'id' => 'fn-password',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#pwMeter',
             'title' => 'Password policy and student-ID format',
             'category' => 'security',
@@ -5376,7 +5376,7 @@ return [
         ],
         'fn-year-clock' => [
             'id' => 'fn-year-clock',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#autoYearStarted',
             'title' => 'The school-year clock',
             'category' => 'logic',
@@ -5427,7 +5427,7 @@ return [
         ],
         'fn-year-level' => [
             'id' => 'fn-year-level',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '#yearLevelHint',
             'title' => 'Year levels are computed, then declared',
             'category' => 'logic',
@@ -5478,7 +5478,7 @@ return [
         ],
         'fn-escape' => [
             'id' => 'fn-escape',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => '.ballot-demo',
             'title' => 'Escaping every interpolated string',
             'category' => 'ui',
@@ -5529,7 +5529,7 @@ return [
         ],
         'fn-banner' => [
             'id' => 'fn-banner',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => '.hero-voting-banner',
             'title' => 'The prepared banner query',
             'category' => 'logic',
@@ -5566,7 +5566,7 @@ return [
         ],
         'fn-status' => [
             'id' => 'fn-status',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.status',
             'title' => 'Election statuses transition themselves',
             'category' => 'logic',
@@ -5617,7 +5617,7 @@ return [
         ],
         'fn-year-rows' => [
             'id' => 'fn-year-rows',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.elec-dates',
             'title' => 'School-year rows create themselves',
             'category' => 'data',
@@ -5668,7 +5668,7 @@ return [
         ],
         'fn-json' => [
             'id' => 'fn-json',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.turnout',
             'title' => 'One shape for every AJAX answer',
             'category' => 'logic',
@@ -5712,7 +5712,7 @@ return [
         ],
         'fn-settings' => [
             'id' => 'fn-settings',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.brand',
             'title' => 'Site settings are key-value rows',
             'category' => 'data',
@@ -5756,7 +5756,7 @@ return [
         ],
         'fn-image' => [
             'id' => 'fn-image',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.avatar',
             'title' => 'Uploads validated as decoded bytes',
             'category' => 'security',
@@ -5800,7 +5800,7 @@ return [
         ],
         'fn-logos' => [
             'id' => 'fn-logos',
-            'match' => ['path' => '/voting-app3/student/register.php'],
+            'match' => ['path' => '/student/register.php'],
             'selector' => '.logo',
             'title' => 'Election logos: SSG seal, department mark, or generic glyph',
             'category' => 'ui',
@@ -5851,7 +5851,7 @@ return [
         ],
         'al-badge' => [
             'id' => 'al-badge',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '.admin-badge',
             'title' => 'The ACC admin badge',
             'category' => 'ui',
@@ -5887,7 +5887,7 @@ return [
         ],
         'al-card' => [
             'id' => 'al-card',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '#loginCard',
             'title' => 'A minimal card with two jobs',
             'category' => 'ui',
@@ -5923,7 +5923,7 @@ return [
         ],
         'al-form' => [
             'id' => 'al-form',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '#adminLoginForm',
             'title' => 'Username and password, nothing else',
             'category' => 'ui',
@@ -5959,7 +5959,7 @@ return [
         ],
         'al-csrf' => [
             'id' => 'al-csrf',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => 'input[name="csrf_token"]',
             'title' => 'CSRF gate before credentials',
             'category' => 'security',
@@ -6002,7 +6002,7 @@ return [
         ],
         'al-throttle' => [
             'id' => 'al-throttle',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '#username',
             'title' => 'Shared throttle, separate bucket',
             'category' => 'security',
@@ -6053,7 +6053,7 @@ return [
         ],
         'al-verify' => [
             'id' => 'al-verify',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '#password',
             'title' => 'password_verify, with transparent rehash',
             'category' => 'security',
@@ -6097,7 +6097,7 @@ return [
         ],
         'al-session' => [
             'id' => 'al-session',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '#submitBtn',
             'title' => 'Session hardening on the way in',
             'category' => 'security',
@@ -6148,7 +6148,7 @@ return [
         ],
         'al-redirect' => [
             'id' => 'al-redirect',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '.card-subtitle',
             'title' => 'Success redirects, failure stays',
             'category' => 'logic',
@@ -6185,7 +6185,7 @@ return [
         ],
         'fe-tokens' => [
             'id' => 'fe-tokens',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => '.nav-links',
             'title' => 'One identity, three token sources',
             'category' => 'ui',
@@ -6236,7 +6236,7 @@ return [
         ],
         'fe-public-inline' => [
             'id' => 'fe-public-inline',
-            'match' => ['path' => '/voting-app3/public/landingpage.php'],
+            'match' => ['path' => '/public/landingpage.php'],
             'selector' => '.how-card',
             'title' => 'Public pages ship their CSS inline',
             'category' => 'ui',
@@ -6287,7 +6287,7 @@ return [
         ],
         'fe-auth-base' => [
             'id' => 'fe-auth-base',
-            'match' => ['path' => '/voting-app3/student/dashboard.php'],
+            'match' => ['path' => '/student/dashboard.php'],
             'selector' => '.sidebar nav',
             'title' => 'Two sheets, cache-busted, on every dashboard branch',
             'category' => 'logic',
@@ -6339,7 +6339,7 @@ return [
         ],
         'fe-dark' => [
             'id' => 'fe-dark',
-            'match' => ['path' => '/voting-app3/student/dashboard.php'],
+            'match' => ['path' => '/student/dashboard.php'],
             'selector' => '.sidebar-bottom',
             'title' => 'Dark mode is a variable flip',
             'category' => 'logic',
@@ -6390,7 +6390,7 @@ return [
         ],
         'fe-admin-inline' => [
             'id' => 'fe-admin-inline',
-            'match' => ['path' => '/voting-app3/admin/login.php'],
+            'match' => ['path' => '/admin/login.php'],
             'selector' => '.footer-links',
             'title' => 'The admin panel inlines its whole stylesheet',
             'category' => 'logic',
@@ -6441,7 +6441,7 @@ return [
         ],
         'fe-responsive' => [
             'id' => 'fe-responsive',
-            'match' => ['path' => '/voting-app3/public/results.php'],
+            'match' => ['path' => '/public/results.php'],
             'selector' => '.pos-block',
             'title' => 'Media queries, no build step, no framework',
             'category' => 'ui',
@@ -6492,7 +6492,7 @@ return [
         ],
         'fe-cdn' => [
             'id' => 'fe-cdn',
-            'match' => ['path' => '/voting-app3/student/dashboard.php'],
+            'match' => ['path' => '/student/dashboard.php'],
             'selector' => '.donut-wrap',
             'title' => 'CDN libraries, SRI-pinned, admin-only',
             'category' => 'security',
