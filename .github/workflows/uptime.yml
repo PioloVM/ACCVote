@@ -1,6 +1,6 @@
 # Uptime monitor (Batch D2).
 #
-# Probes {SITE_URL}/health.php every 15 minutes and files a GitHub issue
+# Probes {SITE_URL}/public/health.php every 15 minutes and files a GitHub issue
 # when it stops answering 200 (or the site is unreachable at all). While
 # the outage continues the SAME open issue gets a comment each run
 # instead of a new duplicate.
@@ -25,16 +25,16 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ vars.SITE_URL != '' }}
     steps:
-      - name: Probe /health.php
+      - name: Probe /public/health.php
         id: probe
         env:
           SITE_URL: ${{ vars.SITE_URL }}
         run: |
           # curl writes %{http_code} even on failure (000 when unreachable);
           # `|| true` keeps the step green so the issue step can react.
-          code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 "$SITE_URL/health.php" || true)
+          code=$(curl -sS -o body.txt -w '%{http_code}' --max-time 30 "$SITE_URL/public/health.php" || true)
           [ -n "$code" ] || code=000
-          echo "health.php returned $code"
+          echo "/public/health.php returned $code"
           cat body.txt || true
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
@@ -54,12 +54,12 @@ jobs:
             if (existing) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: existing.number,
-                body: `Still failing: \`/health.php\` returned HTTP ${code} at ${when}.`,
+                body: `Still failing: \`/public/health.php\` returned HTTP ${code} at ${when}.`,
               });
             } else {
               await github.rest.issues.create({
                 owner, repo, title,
-                body: `Scheduled uptime check failed: \`/health.php\` returned HTTP ${code} at ${when}.\n\nThe check runs every 15 minutes; this issue is updated rather than duplicated while the outage continues, and a recovery comment is added below once the endpoint returns 200.`,
+                body: `Scheduled uptime check failed: \`/public/health.php\` returned HTTP ${code} at ${when}.\n\nThe check runs every 15 minutes; this issue is updated rather than duplicated while the outage continues, and a recovery comment is added below once the endpoint returns 200.`,
               });
               core.notice(`Health check failed with HTTP ${code} - incident issue created`);
             }
@@ -77,7 +77,7 @@ jobs:
               const when = new Date().toISOString();
               await github.rest.issues.createComment({
                 owner, repo, issue_number: existing.number,
-                body: `Recovered: \`/health.php\` returned 200 at ${when}. Closing.`,
+                body: `Recovered: \`/public/health.php\` returned 200 at ${when}. Closing.`,
               });
               await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: 'closed' });
             }

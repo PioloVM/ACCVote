@@ -2,7 +2,7 @@
 # LOCAL XAMPP CONFIGURATION
 #
 # DB_DRIVER=mysql forces this machine to use XAMPP's local MariaDB
-# (database "voting_app", see schema.mysql.sql). Without it, the
+# (database "voting_app", see database/schema.mysql.sql). Without it, the
 # DATABASE_URL line below would silently send local traffic to the
 # LIVE Neon production database.
 #
@@ -77,7 +77,21 @@ Options -Indexes
 # the other app's branding AND its $base (computed from SCRIPT_NAME) resolves
 # to the other app's folder - which silently sends "Back to login" / "Go
 # home" links to the wrong app.
-ErrorDocument 404 /voting-app3/404.php
+ErrorDocument 404 /voting-app3/public/404.php
+
+# Default document for the folder root (root index.php moved to public/).
+DirectoryIndex public/index.php
+
+# Old root URLs -> new locations (pages moved into student/ and public/).
+# 302, not 301: browsers cache 301s aggressively; the smoke suite hits
+# new URLs directly. No "?" in the substitutions, so query strings pass
+# through automatically. Anchored full filenames never match student/...
+# or admin/... paths. Keep in sync with config/router.php.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(login|logout|dashboard|dashboard-data|vote|draft|update-account|change-password|photo|icon)\.php$ student/$1.php [R=302,L]
+    RewriteRule ^(index|landingpage|results|404|health)\.php$ public/$1.php [R=302,L]
+</IfModule>
 
 # Sensible defaults for a PHP app with no uploaded file serving.
 <IfModule mod_headers.c>

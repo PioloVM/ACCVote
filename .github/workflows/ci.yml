@@ -36,7 +36,7 @@ jobs:
       - name: Parse-check inline JS on both dashboards
         run: |
           set -e
-          for page in dashboard.php admin/dashboard.php; do
+          for page in student/dashboard.php admin/dashboard.php; do
             jsfile="$(php tests/extract_admin_js.php "$page")"
             node --check "$jsfile"
             echo "$page: inline JS parses clean"

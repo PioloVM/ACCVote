@@ -16,4 +16,4 @@ COPY . /app
 # Render sends traffic to port 10000 by default
 EXPOSE 10000
 
-CMD ["php", "-d", "zlib.output_compression=1", "-S", "0.0.0.0:10000", "-t", "/app", "/app/router.php"]
+CMD ["php", "-d", "zlib.output_compression=1", "-S", "0.0.0.0:10000", "-t", "/app", "/app/config/router.php"]
