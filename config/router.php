@@ -62,6 +62,14 @@ $root = realpath($appRoot);
 if ($file && $root && str_starts_with($file, $root . DIRECTORY_SEPARATOR) && is_file($file)) {
     return false;
 }
+// Directory URLs (e.g. /guide/) resolve to their index.php, the way
+// Apache's mod_dir does locally. Requiring the file keeps the request
+// URI (and therefore relative asset URLs) pointing at the directory.
+if ($file && $root && str_starts_with($file, $root . DIRECTORY_SEPARATOR)
+    && is_dir($file) && is_file($file . DIRECTORY_SEPARATOR . 'index.php')) {
+    require $file . DIRECTORY_SEPARATOR . 'index.php';
+    return true;
+}
 
 http_response_code(404);
 require __DIR__ . '/../public/404.php';
