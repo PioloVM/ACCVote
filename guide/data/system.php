@@ -228,7 +228,7 @@ return [
             'steps' => [
                 ['title' => 'Store the start year, not the current label', 'detail' => 'users.school_year_id points at a school_years row. The start_year value is the durable fact; the displayed label is recomputed.', 'ref' => ['file' => 'database/schema.sql', 'anchor' => 'CREATE TABLE school_years']],
                 ['title' => 'Difference plus one', 'detail' => 'computeYearLevel returns an index from the start year and the active start year, then picks the label at that position in year_levels. Index 1 is 1st Year, index 4 is 4th Year.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
-                ['title' => 'Over-window students declare their status', 'detail' => 'resolveYearDeclaration validates a claimed label or status for a student past the four-year window and returns the value the server will store.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function resolveYearDeclaration']],
+                ['title' => 'Over-window claims are validated', 'detail' => 'resolveYearDeclaration validates a claimed label or status past the four-year window — used at registration and on voluntary corrections — and returns the value the server will store. Login itself no longer asks; it graduates.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function resolveYearDeclaration']],
                 ['title' => 'One declaration per school year', 'detail' => 'update-account.php reads activity_logs for a student:<id> record in the current school year. A second attempt inside the same year is refused.', 'ref' => ['file' => 'student/update-account.php', 'anchor' => 'FROM activity_logs']],
                 ['title' => 'The admin flag is the override', 'detail' => 'account_status repeating, undergrad_repeating, and suspended_repeating let a student keep a self-managed year level. dropped and graduated block login.', 'ref' => ['file' => 'student/update-account.php', 'anchor' => 'UPDATE users SET']],
             ],
@@ -260,7 +260,7 @@ return [
                 ['title' => 'Normal students promote at their next login', 'detail' => 'login.php recomputes year_level from the start year against the active year and stores it for normal-status accounts — so the update lands on the first login after June 1 with no bulk job.', 'ref' => ['file' => 'student/login.php', 'anchor' => 'UPDATE users SET year_level']],
                 ['title' => 'The fifth year is never assumed', 'detail' => 'computeYearLevel returns blocked at index 5 or higher; login then graduates and suspends the account instead of guessing repeating, dropped, or graduated.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
             ],
-            'defense' => 'Nothing stores "the current school year": it is recomputed from the date in Asia/Manila on every request, so there is no rollover job to miss. The only decision a human must make is what happened to a student who passes four years.',
+            'defense' => 'Nothing stores "the current school year": it is recomputed from the date in Asia/Manila on every request, so there is no rollover job to miss. Passing four years needs no decision either — the account graduates automatically; the human decision is restoring a student who was graduated by mistake.',
         ],
         [
             'id' => 'results-visibility',
@@ -550,7 +550,7 @@ return [
             'group' => 'Authentication',
             'method' => 'POST',
             'path' => 'student/update-account.php',
-            'purpose' => 'Student self-service year-level declaration after the four-year window. One declaration per school year.',
+            'purpose' => 'Voluntary year-level and lifecycle corrections for repeaters and self-managed students. One declaration per school year.',
             'auth' => 'Student session',
             'ref' => ['file' => 'student/update-account.php', 'anchor' => 'requireLogin();'],
         ],

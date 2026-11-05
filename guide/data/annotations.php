@@ -1709,7 +1709,7 @@ return [
             'tables' => [],
             'endpoints' => ['student/login.php (POST)'],
             'connections' => [
-                'A successful POST ends in a 302 redirect to dashboard.php or update-account.php.',
+                'A successful POST ends in a 302 redirect to dashboard.php; a refused account (suspended, dropped, or auto-graduated) stays on the form with an error.',
             ],
             'defense' => 'Disabling the button is a convenience, not a security measure. The server is responsible for rejecting duplicate or invalid attempts.',
             'questions' => [
@@ -2193,7 +2193,7 @@ return [
             'title' => 'Enrollment details screen',
             'category' => 'ui',
             'summary' => 'A guarded correction form, only for signed-in students.',
-            'behavior' => 'Shows the official record and either the editable declaration form or a lock reason. Forced mode explains that the system needs a declaration before continuing.',
+            'behavior' => 'Shows the official record and either the editable declaration form or a lock reason. Forced mode — triggered by a needs_account_update session flag that login.php no longer sets — would explain that the system needs a declaration before continuing; today only voluntary declarations reach this page.',
             'under_the_hood' => 'requireLogin() sends guests to login. The page loads the student row, computes the expected year level, and calls accountUpdateLockReason() to decide whether the form may be shown.',
             'code' => [
                 [
