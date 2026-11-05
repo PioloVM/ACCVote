@@ -32,7 +32,7 @@ $pdo = getDbConnection();
 // repeat "confirm your status" prompt on every future login.
 //
 // Students who already have an account never register again — they just
-// log in. See SCHOOL_YEAR_OVERHAUL_PLAN.md.
+// log in.
 $departments = $pdo->query('SELECT code, name FROM departments ORDER BY sort_order, code')->fetchAll();
 $yearLevelNames = $pdo->query('SELECT name FROM year_levels ORDER BY sort_order, name')->fetchAll(PDO::FETCH_COLUMN);
 syncElectionStatuses($pdo);

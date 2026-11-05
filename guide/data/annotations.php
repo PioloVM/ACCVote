@@ -6191,7 +6191,7 @@ return [
             'category' => 'ui',
             'summary' => 'Navy, lime, and gold are defined three times - in style.css, inline on the public pages, and in dashboard-app.css - with different naming each time.',
             'behavior' => 'This nav and the whole landing page are styled from a :root token block inside the page itself. The auth pages read theirs from assets/style.css; the dashboards read assets/dashboard-app.css. The values agree across the three sources, and the design spec documents them as one palette.',
-            'under_the_hood' => 'landingpage.php and results.php each inline their own :root block - the results comment says "Same civic-ballot identity as landingpage.php". style.css uses plain names (--navy, --gold); dashboard-app.css uses semantic surface names (--bg, --card, --border). docs/design/INSPIRATION.md is the design spec, and its palette table reads its values from these three sources.',
+            'under_the_hood' => 'landingpage.php and results.php each inline their own :root block - the results comment says "Same civic-ballot identity as landingpage.php". style.css uses plain names (--navy, --gold); dashboard-app.css uses semantic surface names (--bg, --card, --border). The three blocks agree on values; only the naming differs.',
             'code' => [
                 [
                     'file' => 'public/landingpage.php',
@@ -6213,13 +6213,6 @@ return [
                     'before' => 2,
                     'after' => 12,
                     'label' => 'Dashboard tokens',
-                ],
-                [
-                    'file' => 'docs/design/INSPIRATION.md',
-                    'anchor' => '## 3. Palette',
-                    'before' => 1,
-                    'after' => 8,
-                    'label' => 'The spec palette table',
                 ],
             ],
             'tables' => [],

@@ -460,8 +460,7 @@ function passwordPolicyError(string $password): ?string
  * ================================================================
  * A student's year level is no longer hand-picked — it's derived from
  * which school year they STARTED in (users.school_year_id) compared to
- * whichever school year is currently active. See
- * SCHOOL_YEAR_OVERHAUL_PLAN.md for the full spec.
+ * whichever school year is currently active.
  */
 
 /**
@@ -545,8 +544,8 @@ function getActiveSchoolYear(PDO $pdo): array
  *   'label'   -> the matching year_levels name, or null if the index runs
  *                past the configured list (index >= 5 with the standard
  *                4-entry list) or a list entry is missing
- *   'blocked' -> true once index >= 5 (see SCHOOL_YEAR_OVERHAUL_PLAN.md:
- *                "more than 4 years" = the 5th school year onward)
+ *   'blocked' -> true once index >= 5 ("more than 4 years" = the 5th
+ *                school year onward)
  */
 function computeYearLevel(int $studentStartYear, int $activeStartYear, array $yearLevelNames): array
 {
