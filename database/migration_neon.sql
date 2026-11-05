@@ -341,12 +341,14 @@ COMMIT;
 -- (/guide/) signs in as. Delete this block for a strictly empty
 -- production database.
 
--- departments shown in registration, filters, and the admin forms
+-- departments ("Faculty" in the UI) shown in registration, filters,
+-- and the admin forms — the school's actual degree programs
 INSERT INTO departments (code, name, sort_order) VALUES
-    ('College of Information and Communications Technology', 'College of Information and Communications Technology', 1),
-    ('College of Business Management and Accountancy',       'College of Business Management and Accountancy',       2),
-    ('College of Arts, Sciences and Education',              'College of Arts, Sciences and Education',              3),
-    ('College of Nursing',                                   'College of Nursing',                                   4)
+    ('BS Information Technology', 'BS Information Technology', 1),
+    ('BS Nursing',                'BS Nursing',                2),
+    ('BS Teacher Education',      'BS Teacher Education',      3),
+    ('BS Criminology',            'BS Criminology',            4),
+    ('BS Liberal Arts',           'BS Liberal Arts',           5)
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO year_levels (name, sort_order) VALUES
@@ -372,7 +374,7 @@ INSERT INTO users (student_id, name, password, department, year_level, has_voted
     ('987654321',
      'Demo Account',
      '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC',
-     'College of Information and Communications Technology',
+     'BS Information Technology',
      '2nd Year',
      0,
      'active',
@@ -380,5 +382,6 @@ INSERT INTO users (student_id, name, password, department, year_level, has_voted
 ON CONFLICT (student_id) DO UPDATE SET
     name = EXCLUDED.name,
     email = EXCLUDED.email,
+    department = EXCLUDED.department,
     registration_status = 'active';
 

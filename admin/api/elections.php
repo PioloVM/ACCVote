@@ -802,11 +802,20 @@ if ($method === 'DELETE') {
     try {
         $pdo->beginTransaction();
 
-        $lockStmt = $pdo->prepare('SELECT id FROM elections WHERE id = :id FOR UPDATE');
+        $lockStmt = $pdo->prepare('SELECT id, status FROM elections WHERE id = :id FOR UPDATE');
         $lockStmt->execute(['id' => $id]);
-        if (!$lockStmt->fetch()) {
+        $election = $lockStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$election) {
             $pdo->rollBack();
             respond(['error' => 'Election not found.'], 404);
+        }
+
+        // An ongoing election still belongs to live students — it must
+        // be ended (or paused) first. Enforced here, not just by hiding
+        // the button in the dashboard.
+        if ($election['status'] === 'ongoing') {
+            $pdo->rollBack();
+            respond(['error' => 'Refusing to delete: this election is ongoing. End it first, then delete.'], 409);
         }
 
         $voteCount = electionVoteCount($pdo, $id);

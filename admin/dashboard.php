@@ -1577,7 +1577,7 @@ function renderElectionCard(e){
         : `
             ${e.status !== 'ongoing' ? `<button class="btn btn-secondary" onclick="editElection(${e.id})">Edit</button>` : ''}
             <button class="btn btn-secondary" onclick="duplicateElection(${e.id})" title="Copy this election into a new draft">Duplicate</button>
-            <button class="btn btn-danger" onclick="deleteElection(${e.id})">Delete</button>
+            ${e.status !== 'ongoing' ? `<button class="btn btn-danger" onclick="deleteElection(${e.id})">Delete</button>` : ''}
         `;
 
     return `

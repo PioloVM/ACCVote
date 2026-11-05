@@ -3768,7 +3768,7 @@ return [
             'category' => 'logic',
             'summary' => 'Start, pause, end, duplicate, archive, delete, and view results.',
             'behavior' => 'Only the actions valid for the current status are shown. Destructive actions ask for confirmation first.',
-            'under_the_hood' => 'Each action calls electionPatch() with a minimal body: the election id, the CSRF token, and the field being changed. The API locks the row, verifies the transition, writes the change, and logs it. Delete requires an explicit confirm_delete value. Duplicate creates a brand-new draft with fresh positions and candidates and no votes. Starting or scheduling any election re-runs the duplicate check, so a duplicated draft cannot be activated into a second live election.',
+            'under_the_hood' => 'Each action calls electionPatch() with a minimal body: the election id, the CSRF token, and the field being changed. The API locks the row, verifies the transition, writes the change, and logs it. Delete requires an explicit confirm_delete value, and ongoing elections cannot be deleted at all — the dashboard hides the button and the API refuses the request, so the election must be ended first. Duplicate creates a brand-new draft with fresh positions and candidates and no votes. Starting or scheduling any election re-runs the duplicate check, so a duplicated draft cannot be activated into a second live election.',
             'code' => [
                 [
                     'file' => 'admin/dashboard.php',

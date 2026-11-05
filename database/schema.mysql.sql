@@ -368,11 +368,13 @@ INSERT INTO admins (username, password_hash, email, role) VALUES
 -- Single-field model: the admin types the full name once and it is
 -- stored in BOTH `code` and `name`. The code is what users.department,
 -- elections.department and candidates.department reference.
+-- Seeded with the school's actual degree programs.
 INSERT INTO departments (code, name, sort_order) VALUES
-('College of Information and Communications Technology', 'College of Information and Communications Technology', 1),
-('College of Business Management and Accountancy',       'College of Business Management and Accountancy',       2),
-('College of Arts, Sciences and Education',              'College of Arts, Sciences and Education',              3),
-('College of Nursing',                                   'College of Nursing',                                   4);
+('BS Information Technology', 'BS Information Technology', 1),
+('BS Nursing',                'BS Nursing',                2),
+('BS Teacher Education',      'BS Teacher Education',      3),
+('BS Criminology',            'BS Criminology',            4),
+('BS Liberal Arts',           'BS Liberal Arts',           5);
 
 -- `majors` is retired and intentionally left empty.
 
@@ -407,26 +409,26 @@ INSERT INTO school_years (label, start_year, is_active, sort_order) VALUES
 -- rather than hand-written, so the demo data can never drift out of
 -- step with the year_levels table.
 INSERT INTO users (student_id, name, password, department, year_level, has_voted, registration_status, email) VALUES
-('20260001', 'Liza Bautista',   NULL, 'College of Information and Communications Technology', '1st Year', 0, 'unregistered', NULL),
-('20260002', 'Miguel Torres',   NULL, 'College of Business Management and Accountancy',       '1st Year', 0, 'unregistered', NULL),
-('987654321', 'Demo Account',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '2nd Year', 0, 'active', 'demo.account@acc.edu.ph'),
-('20230101', 'Maria Santos',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '3rd Year', 0, 'active', NULL),
-('20230102', 'Julian Reyes',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '4th Year', 0, 'active', NULL),
-('20230103', 'Anna Cruz',       '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '2nd Year', 0, 'active', NULL),
-('20230104', 'Carlo Mendoza',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '1st Year', 0, 'active', NULL),
-('20230105', 'Sophia Garcia',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Information and Communications Technology', '3rd Year', 0, 'active', NULL),
-('20230201', 'Rafael Lim',      '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Business Management and Accountancy',       '2nd Year', 0, 'active', NULL),
-('20230202', 'Bea Villanueva',  '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Business Management and Accountancy',       '3rd Year', 0, 'active', NULL),
-('20230203', 'Diego Ramos',     '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Business Management and Accountancy',       '1st Year', 0, 'active', NULL),
-('20230204', 'Karla Navarro',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Business Management and Accountancy',       '4th Year', 0, 'active', NULL),
-('20230301', 'Ella Domingo',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Arts, Sciences and Education',              '1st Year', 0, 'active', NULL),
-('20230302', 'Paolo Salazar',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Arts, Sciences and Education',              '2nd Year', 0, 'active', NULL),
-('20230303', 'Rizza Fernandez', '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Arts, Sciences and Education',              '3rd Year', 0, 'active', NULL),
-('20230304', 'Marco Aquino',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Arts, Sciences and Education',              '4th Year', 0, 'active', NULL),
-('20230305', 'Trina Alvarado',  '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Arts, Sciences and Education',              '1st Year', 0, 'active', NULL),
-('20230401', 'Gabriel Ureta',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Nursing', '2nd Year', 0, 'active', NULL),
-('20230402', 'Hannah Sibayan',  '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Nursing', '3rd Year', 0, 'active', NULL),
-('20230403', 'Ivo Beltran',     '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'College of Nursing', '1st Year', 0, 'active', NULL);
+('20260001', 'Liza Bautista',   NULL, 'BS Information Technology', '1st Year', 0, 'unregistered', NULL),
+('20260002', 'Miguel Torres',   NULL, 'BS Nursing',                '1st Year', 0, 'unregistered', NULL),
+('987654321', 'Demo Account',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Information Technology', '2nd Year', 0, 'active', 'demo.account@acc.edu.ph'),
+('20230101', 'Maria Santos',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Information Technology', '3rd Year', 0, 'active', NULL),
+('20230102', 'Julian Reyes',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Information Technology', '4th Year', 0, 'active', NULL),
+('20230103', 'Anna Cruz',       '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Information Technology', '2nd Year', 0, 'active', NULL),
+('20230104', 'Carlo Mendoza',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Teacher Education',      '1st Year', 0, 'active', NULL),
+('20230105', 'Sophia Garcia',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Information Technology', '3rd Year', 0, 'active', NULL),
+('20230201', 'Rafael Lim',      '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Nursing',                '2nd Year', 0, 'active', NULL),
+('20230202', 'Bea Villanueva',  '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Nursing',                '3rd Year', 0, 'active', NULL),
+('20230203', 'Diego Ramos',     '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Teacher Education',      '1st Year', 0, 'active', NULL),
+('20230204', 'Karla Navarro',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Nursing',                '4th Year', 0, 'active', NULL),
+('20230301', 'Ella Domingo',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Liberal Arts',           '1st Year', 0, 'active', NULL),
+('20230302', 'Paolo Salazar',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Criminology',            '2nd Year', 0, 'active', NULL),
+('20230303', 'Rizza Fernandez', '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Teacher Education',      '3rd Year', 0, 'active', NULL),
+('20230304', 'Marco Aquino',    '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Criminology',            '4th Year', 0, 'active', NULL),
+('20230305', 'Trina Alvarado',  '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Liberal Arts',           '1st Year', 0, 'active', NULL),
+('20230401', 'Gabriel Ureta',   '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Nursing',     '2nd Year', 0, 'active', NULL),
+('20230402', 'Hannah Sibayan',  '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Nursing',     '3rd Year', 0, 'active', NULL),
+('20230403', 'Ivo Beltran',     '$2y$10$xWhLKxNXXmf.r.gJcS5JLOVMrLzipDcH2DV999/koNPFhFz2q2vNC', 'BS Criminology', '1st Year', 0, 'active', NULL);
 
 -- Backfill each student's start year from their year level, using the
 -- RANK of that level in year_levels (not the raw sort_order value, which

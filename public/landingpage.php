@@ -594,7 +594,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
                             <span class="bs-candidate-body">
                                 <span class="bs-candidate-name">Julian Reyes</span>
                                 <span class="bs-candidate-party">Independent</span>
-                                <span class="bs-candidate-meta"><span>BS Business Administration</span><span>3rd Year</span></span>
+                                <span class="bs-candidate-meta"><span>BS Nursing</span><span>3rd Year</span></span>
                                 <span class="bs-candidate-platform"><strong>Platform:</strong> Cheaper photocopy rates and more student lounges.</span>
                             </span>
                             <img class="bs-avatar" src="../assets/default-avatar.svg" alt="">
@@ -604,7 +604,7 @@ a:focus-visible,button:focus-visible{outline:2px solid var(--lime);outline-offse
                             <span class="bs-candidate-body">
                                 <span class="bs-candidate-name">Anna Cruz</span>
                                 <span class="bs-candidate-party">ACC Youth List</span>
-                                <span class="bs-candidate-meta"><span>AB Communication</span><span>4th Year</span></span>
+                                <span class="bs-candidate-meta"><span>BS Criminology</span><span>4th Year</span></span>
                                 <span class="bs-candidate-platform"><strong>Platform:</strong> Mental-health days and a student feedback hotline.</span>
                             </span>
                             <img class="bs-avatar" src="../assets/default-avatar.svg" alt="">
