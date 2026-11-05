@@ -225,7 +225,7 @@ return [
                     'id' => 'login-lifecycle',
                     'title' => 'Year-level lifecycle gate',
                     'annotation' => 'login-lifecycle',
-                    'intro' => 'After a correct password, the app recomputes the student\'s year level and may ask for a one-time declaration.',
+                    'intro' => 'After a correct password, the app recomputes the student\'s year level and auto-graduates anyone past the four-year window.',
                 ],
                 [
                     'id' => 'login-session',
@@ -869,7 +869,7 @@ return [
                     'id' => 'sy-year-levels',
                     'title' => 'Year levels are computed',
                     'annotation' => 'sy-year-levels',
-                    'intro' => 'A year level is arithmetic: the active school year minus the year the student started. Past four years the app stops and asks.',
+                    'intro' => 'A year level is arithmetic: the active school year minus the year the student started. Past four years the account is auto-graduated and suspended.',
                 ],
                 [
                     'id' => 'sy-promotion',
@@ -937,7 +937,7 @@ return [
                     'id' => 'fn-year-level',
                     'title' => 'Year levels: computed, then declared',
                     'annotation' => 'fn-year-level',
-                    'intro' => 'Arithmetic for normal students; a forced declaration past the four-year window.',
+                    'intro' => 'Arithmetic for normal students; automatic graduation past the four-year window.',
                 ],
                 [
                     'id' => 'fn-escape',
@@ -1796,13 +1796,13 @@ return [
             'selector' => '#loginCard .subtitle',
             'title' => 'Year-level lifecycle gate',
             'category' => 'logic',
-            'summary' => 'A one-time declaration when the computed year level no longer fits.',
-            'behavior' => 'After a valid password, the app recomputes the student\'s year level from the school year they started. A normal student proceeds; a student past the four-year window without a declaration is sent to update-account.php.',
-            'under_the_hood' => 'computeYearLevel() compares the start year with the active school year and the configured year-level names. If the result is blocked but the account has no status declared, the session gets needs_account_update and the login redirects to the declaration form.',
+            'summary' => 'Automatic graduation once the four-year window is passed.',
+            'behavior' => 'After a valid password, the app recomputes the student\'s year level from the school year they started. A normal student within the window proceeds; a normal student past the four-year window is auto-graduated (account_status = graduated, registration_status = suspended) and refused with a contact-the-administrator message.',
+            'under_the_hood' => 'computeYearLevel() compares the start year with the active school year and the configured year-level names. Index 5 or higher triggers a single UPDATE that graduates and suspends the account, writes an activity_logs row as "system", and refuses the login. Repeater statuses never reach this branch — they are student-managed and exempt.',
             'code' => [
                 [
                     'file' => 'student/login.php',
-                    'anchor' => '$needsDeclaration = false;',
+                    'anchor' => 'LIFECYCLE GATE',
                     'before' => 5,
                     'after' => 12,
                     'label' => 'Lifecycle gate begins',
@@ -1816,21 +1816,21 @@ return [
                 ],
                 [
                     'file' => 'student/login.php',
-                    'anchor' => "header('Location: update-account.php');",
+                    'anchor' => "registration_status = 'suspended',",
                     'before' => 6,
                     'after' => 5,
-                    'label' => 'Forced declaration redirect',
+                    'label' => 'Auto-graduate and suspend',
                 ],
             ],
             'tables' => ['users', 'school_years', 'year_levels'],
             'endpoints' => ['student/update-account.php'],
             'connections' => [
-                'update-account.php writes the declaration once, after which the gate stops asking.',
+                'The admin Students panel restores a wrongly graduated student: a repeater Lifecycle Status plus Active registration puts them back, exempt from this gate.',
             ],
-            'defense' => 'The gate is based on computed dates, not on trusting the student\'s claim. It asks only once and only when the record would otherwise be ambiguous.',
+            'defense' => 'The gate is based on computed dates, not on trusting the student\'s claim. Graduation is automatic and audited in activity_logs; a human restores the account when the record was wrong.',
             'questions' => [
-                'Why can a student be asked for a declaration at login?',
-                'Where is the declaration stored?',
+                'What happens when a student passes the four-year window?',
+                'How does a wrongly graduated student get restored?',
             ],
         ],
         'login-session' => [
@@ -1840,7 +1840,7 @@ return [
             'title' => 'Successful login and redirect',
             'category' => 'security',
             'summary' => 'Regenerate the session, store identity, then redirect.',
-            'behavior' => 'On success the user is sent to the dashboard, or to the declaration form when required. The registration link is the alternative path for a student without an account.',
+            'behavior' => 'On success the user is sent to the dashboard. A refused account (suspended, dropped, graduated, or just auto-graduated past the four-year window) sees an error instead. The registration link is the alternative path for a student without an account.',
             'under_the_hood' => 'session_regenerate_id(true) replaces the session ID to prevent session fixation, then user_id and name are stored. The redirect uses a Location header, so the browser performs a fresh GET request.',
             'code' => [
                 [
@@ -2214,7 +2214,7 @@ return [
             'tables' => ['users', 'school_years'],
             'endpoints' => ['student/update-account.php'],
             'connections' => [
-                'Login redirects here when needs_account_update is set in the session.',
+                'Login no longer redirects here — past-window students are auto-graduated instead. The page remains for voluntary repeater declarations from the dashboard.',
             ],
             'defense' => 'The form is not merely hidden when locked. The server re-checks the lock on POST, so bypassing the markup does not bypass the rule.',
             'questions' => [
@@ -5006,7 +5006,7 @@ return [
             'category' => 'logic',
             'summary' => 'A year level is active school year minus start year, with a hard four-year window.',
             'behavior' => 'The card lists the configured levels (1st Year … 4th Year) and states that each student\'s level is computed from the year they started. Nobody assigns a level to a normal student by hand.',
-            'under_the_hood' => 'computeYearLevel() subtracts the student\'s school_year_id start_year from the active start year, adds 1, and uses that index against year_levels ordered by sort_order. Index 5 or higher returns blocked=true — the app never invents a fifth year, it stops and asks. resolveYearDeclaration() checks what a student or admin claims against that same computation before anything is stored.',
+            'under_the_hood' => 'computeYearLevel() subtracts the student\'s school_year_id start_year from the active start year, adds 1, and uses that index against year_levels ordered by sort_order. Index 5 or higher returns blocked=true — the app never invents a fifth year; login graduates and suspends the account instead. resolveYearDeclaration() checks what a student or admin claims against that same computation before anything is stored.',
             'code' => [
                 [
                     'file' => 'includes/functions.php',
@@ -5035,7 +5035,7 @@ return [
             'connections' => [
                 'The same computation runs at registration, at login, and on the enrollment screen, so the three always agree.',
             ],
-            'defense' => 'A student cannot claim a level above what their start year allows, and past four years nothing is assumed — a human must declare what actually happened.',
+            'defense' => 'A student cannot claim a level above what their start year allows, and past four years the system graduates the account rather than trusting any claim.',
             'questions' => [
                 'How does the app know someone is a 2nd year?',
                 'What stops a student from claiming 4th year early?',
@@ -5048,8 +5048,8 @@ return [
             'title' => 'Students move up at first login',
             'category' => 'logic',
             'summary' => 'Normal-status students advance one year automatically on their first login after June 1.',
-            'behavior' => 'Every successful login recomputes the student\'s year level from the school year they started and stores the result. Declared statuses (repeating, dropped, suspended, graduated) are left exactly where the admin put them. Past the four-year window the login stops and asks for a declaration instead of guessing.',
-            'under_the_hood' => 'login.php loads the active school year, computes the expected level with computeYearLevel(), and — only for account_status = normal and only while the index is 4 or lower — writes the label back to users.year_level. That opportunistic refresh is why there is no bulk "promote students" job: the update happens on the first login after the calendar rolls over. Index 5 or higher sets needs_account_update and redirects to update-account.php once.',
+            'behavior' => 'Every successful login recomputes the student\'s year level from the school year they started and stores the result. Declared statuses (repeating, dropped, suspended, graduated) are left exactly where the admin put them. Past the four-year window the account is auto-graduated and suspended instead of guessing.',
+            'under_the_hood' => 'login.php loads the active school year, computes the expected level with computeYearLevel(), and — only for account_status = normal and only while the index is 4 or lower — writes the label back to users.year_level. That opportunistic refresh is why there is no bulk "promote students" job: the update happens on the first login after the calendar rolls over. Index 5 or higher graduates and suspends the account in one UPDATE, logs it to activity_logs as "system", and refuses the login.',
             'code' => [
                 [
                     'file' => 'student/login.php',

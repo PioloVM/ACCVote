@@ -50,8 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif (password_verify($password, $user['password'])) {
                     // ------------------------------------------------------
                     // LIFECYCLE GATE — "more than 4 years" = the 5th school
-                    // year onward since the student started (see
-                    // SCHOOL_YEAR_OVERHAUL_PLAN.md).
+                    // year onward since the student started.
                     //
                     // account_status = 'normal' is the ONLY status where
                     // year_level is auto-computed from school_year_id on
@@ -59,12 +58,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // (repeating/undergrad_repeating/suspended_repeating),
                     // the student has taken manual control of their own
                     // year_level (see update-account.php) — this gate never
-                    // recomputes or overwrites it again, and never forces
-                    // them through a confirmation screen on every future
-                    // login. That's a deliberate, one-time declaration, not
-                    // a recurring check-in.
+                    // recomputes or overwrites it again.
+                    //
+                    // Past the 4-year window a 'normal' student is now
+                    // AUTO-GRADUATED on the spot: account_status set to
+                    // 'graduated', registration_status set to 'suspended',
+                    // the final year level written to the record, and an
+                    // activity_logs row added — then login is refused.
+                    // (Earlier versions forced a declaration screen here
+                    // instead; the school wants graduation automatic on the
+                    // June 1 rollover. A wrongly-graduated student is
+                    // restored from the admin Students panel by picking a
+                    // repeater Lifecycle Status + Active registration, which
+                    // is exempt from this gate — or by correcting the start
+                    // school year so the student is no longer past 4 years.)
                     // ------------------------------------------------------
-                    $needsDeclaration = false;
                     $activeSchoolYear = getActiveSchoolYear($pdo);
                     $accountStatus = $user['account_status'] ?: 'normal';
 
@@ -82,19 +90,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 // in sync on every login rather than requiring a
                                 // yearly bulk admin action — cheap, and always
                                 // correct the moment the calendar rolls over.
+                                // (This is what makes year levels go up by 1 on
+                                // June 1 — the active school year flips on the
+                                // calendar, so the recomputation bumps the level.)
                                 if ($computed['label'] !== null) {
                                     $pdo->prepare('UPDATE users SET year_level = :yl WHERE id = :id')
                                         ->execute(['yl' => $computed['label'], 'id' => $user['id']]);
                                 }
                             } else {
-                                // Just crossed into year 5+ with no status ever
-                                // declared. This is exactly the "repeating student
-                                // who was never asked" case (including anyone
-                                // whose account predates this whole system) — ASK
-                                // them rather than assuming graduated. One-time:
-                                // once they declare a status here, this branch
-                                // never fires again for them.
-                                $needsDeclaration = true;
+                                // Past the 4-year window with no status declared:
+                                // auto-graduate + suspend in one write. The final
+                                // level (last year_levels entry, e.g. "4th Year")
+                                // is stored so the record reads as a graduate of
+                                // the full program rather than a stale value.
+                                $finalLevel = $yearLevelNames[count($yearLevelNames) - 1] ?? null;
+                                $pdo->prepare("
+                                    UPDATE users
+                                    SET account_status = 'graduated',
+                                        registration_status = 'suspended',
+                                        year_level = :yl
+                                    WHERE id = :id
+                                ")->execute(['yl' => $finalLevel, 'id' => $user['id']]);
+
+                                $pdo->prepare('INSERT INTO activity_logs (admin_username, action) VALUES (:u, :a)')
+                                    ->execute([
+                                        'u' => 'system',
+                                        'a' => 'Auto-graduated student ' . $studentId . ' (past 4-year window); account suspended',
+                                    ]);
+
+                                $error = 'This account has graduated and can no longer log in to vote. '
+                                    . 'If this is incorrect, please contact the election administrator.';
                             }
                         }
                     } elseif (in_array($accountStatus, ['dropped', 'graduated'], true)) {
@@ -110,11 +135,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         session_regenerate_id(true);
                         $_SESSION['user_id'] = $user['id'];
                         $_SESSION['name'] = $user['name'];
-                        if ($needsDeclaration) {
-                            $_SESSION['needs_account_update'] = true;
-                            header('Location: update-account.php');
-                            exit;
-                        }
 
                         // Always land on the dashboard, never straight to
                         // results.php. has_voted is a legacy "voted in at least

@@ -2949,6 +2949,7 @@ function renderStudentForm(){
                     ${Object.keys(ACCOUNT_STATUS_LABEL).map(k => `<option value="${k}" ${studentDraft.accountStatus===k?'selected':''}>${ACCOUNT_STATUS_LABEL[k]}</option>`).join('')}
                 </select>
                 <p class="pw-hint">Set this when a student repeats a year, drops, is suspended-but-still-enrolled, or graduates — it controls what happens at the June 1 school-year rollover.</p>
+                ${studentDraft.accountStatus === 'graduated' ? `<p class="pw-hint" style="color:#b45309;">Auto-graduated accounts are also Suspended and cannot log in. Restoring a student who is actually still enrolled: pick a "still completing requirements" Lifecycle Status <em>and</em> set Registration Status to Active.</p>` : ''}
             </div>
         </div>
     </div>

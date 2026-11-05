@@ -190,8 +190,8 @@ return [
                 ['title' => 'Reject a request without a CSRF token', 'detail' => 'The POST body must carry the token minted for this session. A mismatch returns the form with an error and writes nothing.', 'ref' => ['file' => 'student/login.php', 'anchor' => "if (!verifyCsrfToken(\$_POST['csrf_token'] ?? null)) {"]],
                 ['title' => 'Throttle by identifier and client IP', 'detail' => 'The key combines the submitted identifier with the client address, so one student id cannot be sprayed from many addresses without the window filling up.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function isRateLimitedKey']],
                 ['title' => 'Verify the stored hash', 'detail' => 'password_verify compares the submitted password with users.password. Failed attempts are recorded and counted against the same window.', 'ref' => ['file' => 'student/login.php', 'anchor' => 'password_verify']],
-                ['title' => 'Apply the lifecycle gate', 'detail' => 'The student year level is derived from the school year they started. Normal students proceed; an over-window student without a declaration is sent to update-account.php; dropped or graduated accounts are refused.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
-                ['title' => 'Regenerate the session and redirect', 'detail' => 'A successful login rotates the session id before storing user_id, which closes session fixation. The response is a 302 to the dashboard or the declaration screen.', 'ref' => ['file' => 'student/login.php', 'anchor' => 'session_regenerate_id(true);']],
+                ['title' => 'Apply the lifecycle gate', 'detail' => 'The student year level is derived from the school year they started. Normal students within the window proceed; a normal student past it is auto-graduated and suspended on the spot; dropped or graduated accounts are refused.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
+                ['title' => 'Regenerate the session and redirect', 'detail' => 'A successful login rotates the session id before storing user_id, which closes session fixation. The response is a 302 to the dashboard; a refused account gets an error instead.', 'ref' => ['file' => 'student/login.php', 'anchor' => 'session_regenerate_id(true);']],
             ],
             'defense' => 'Three independent checks decide a login: the CSRF token, the password hash, and the school-year lifecycle. None of them is enforced by JavaScript.',
         ],
@@ -258,7 +258,7 @@ return [
                 ['title' => 'One election per year, archived included', 'detail' => 'assertNotDuplicateElection matches type, department, and target year with no status filter, so archiving never frees a slot for a second election in the same year.', 'ref' => ['file' => 'admin/api/elections.php', 'anchor' => 'function assertNotDuplicateElection']],
                 ['title' => 'June 1 is the only rollover', 'detail' => 'Next School Year Election archives rows and writes one audit line. It does not advance the calendar, does not change any target year, and does not touch student year levels.', 'ref' => ['file' => 'admin/api/next-school-year.php', 'anchor' => "UPDATE elections SET status = 'archived'"]],
                 ['title' => 'Normal students promote at their next login', 'detail' => 'login.php recomputes year_level from the start year against the active year and stores it for normal-status accounts — so the update lands on the first login after June 1 with no bulk job.', 'ref' => ['file' => 'student/login.php', 'anchor' => 'UPDATE users SET year_level']],
-                ['title' => 'The fifth year is never assumed', 'detail' => 'computeYearLevel returns blocked at index 5 or higher; login then asks for a declaration instead of guessing repeating, dropped, or graduated.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
+                ['title' => 'The fifth year is never assumed', 'detail' => 'computeYearLevel returns blocked at index 5 or higher; login then graduates and suspends the account instead of guessing repeating, dropped, or graduated.', 'ref' => ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel']],
             ],
             'defense' => 'Nothing stores "the current school year": it is recomputed from the date in Asia/Manila on every request, so there is no rollover job to miss. The only decision a human must make is what happened to a student who passes four years.',
         ],
@@ -1163,10 +1163,10 @@ return [
             [
                 'q' => 'What happens when a student is past the four-year window?',
                 'a' => [
-                    'Login computes the level first. A repeating, undergrad-repeating, or suspended-repeating account must complete the Update Account declaration before continuing. A dropped or graduated account is refused, and an unflagged account past four years is refused with a contact-the-administrator message.',
+                    'Login computes the level first. A normal account past four years is auto-graduated (account_status = graduated) and suspended (registration_status = suspended) in one write, logged to activity_logs as "system", and refused with a contact-the-administrator message. A repeating, undergrad-repeating, or suspended-repeating account is exempt — those are student-managed and fall straight through. A dropped or graduated account is refused.',
                 ],
                 'refs' => [
-                    ['file' => 'student/login.php', 'anchor' => 'needs_account_update'],
+                    ['file' => 'student/login.php', 'anchor' => 'Auto-graduated student'],
                     ['file' => 'includes/functions.php', 'anchor' => 'function computeYearLevel'],
                 ],
             ],
